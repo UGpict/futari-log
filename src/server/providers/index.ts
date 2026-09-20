@@ -307,6 +307,22 @@ async function liveOrMockWeather(args: { lat: number; lng: number; at: string })
   }
 }
 
+export function travelCacheKey(args: {
+  from: { lat: number; lng: number; spotId?: string | null };
+  to: { lat: number; lng: number; spotId?: string | null };
+  mode: TravelMode;
+  departureAt: string;
+}): string {
+  const fromId = args.from.spotId ?? `${args.from.lat},${args.from.lng}`;
+  const toId = args.to.spotId ?? `${args.to.lat},${args.to.lng}`;
+  const when = toTokyoParts(args.departureAt);
+  if (args.mode === "TRANSIT") {
+    const bucket = Math.floor(new Date(args.departureAt).getTime() / 300_000);
+    return `travel:${fromId}:${toId}:${args.mode}:${Number.isFinite(bucket) ? bucket : "na"}`;
+  }
+  return `travel:${fromId}:${toId}:${args.mode}:${when.date}T${String(when.hour).padStart(2, "0")}`;
+}
+
 export async function estimateTravel(
   ctx: ProviderCtx,
   args: {
@@ -331,8 +347,7 @@ export async function estimateTravel(
   );
   const delayMinutes = delayOverlay ? Number(delayOverlay.overlay.delayMinutes ?? 25) : 0;
   const env = getEnv();
-  const day = toTokyoParts(args.departureAt).date;
-  const key = `travel:${args.from.lat}:${args.from.lng}:${args.to.lat}:${args.to.lng}:${args.mode}:${day}`;
+  const key = travelCacheKey(args);
   const cached = cacheGet<{
     durationMinutes: number | null;
     distanceMeters: number | null;
