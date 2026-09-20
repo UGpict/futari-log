@@ -89,7 +89,8 @@ export function getEnv() {
   const orcaConfigured = Boolean(read("ORCAROUTER_API_KEY"));
   const mapsConfigured = Boolean(read("GOOGLE_MAPS_API_KEY"));
   const geminiApiKey = read("GEMINI_API_KEY");
-  const geminiConfigured = Boolean(geminiApiKey);
+  const geminiVia = geminiApiKey ? ("google" as const) : orcaConfigured ? ("orcarouter" as const) : null;
+  const geminiConfigured = geminiVia != null;
   const requested = (read("APP_RUNTIME") ?? "MOCK").toUpperCase();
   const uiFixtures = readBool("NEXT_PUBLIC_USE_API_FIXTURES", false);
   const liveReady =
@@ -117,6 +118,7 @@ export function getEnv() {
     orcaConfigured,
     mapsConfigured,
     geminiConfigured,
+    geminiVia,
     emulator,
     authEmulatorHost,
     firestoreEmulatorHost,
@@ -128,7 +130,7 @@ export function getEnv() {
     orcaHardModel: read("ORCAROUTER_HARD_MODEL") ?? "orcarouter/hard",
     googleMapsApiKey: read("GOOGLE_MAPS_API_KEY"),
     geminiApiKey,
-    geminiModel: read("GEMINI_MODEL") ?? "gemini-3.5-flash",
+    geminiModel: read("GEMINI_MODEL") ?? "google/gemini-3.5-flash",
     firebaseProjectId,
     firebaseApiKey,
     firebaseAuthDomain,

@@ -18,7 +18,7 @@ export type SpotImageResult = {
   searchEntryPointHtml: string | null;
 };
 
-const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
+const GOOGLE_GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 
 export function groundingToolForModel(model: string): Record<string, unknown> {
   return /1\.5/.test(model)
@@ -27,7 +27,16 @@ export function groundingToolForModel(model: string): Record<string, unknown> {
           dynamic_retrieval_config: { mode: "MODE_DYNAMIC", dynamic_threshold: 0.3 },
         },
       }
-    : { google_search: {} };
+    : { googleSearch: {} };
+}
+
+export function orcaGeminiOrigin(baseUrl: string): string {
+  return baseUrl.replace(/\/$/, "").replace(/\/v1$/, "");
+}
+
+export function resolveGeminiModelId(model: string, via: "google" | "orcarouter"): string {
+  if (via === "orcarouter") return model.includes("/") ? model : `google/${model}`;
+  return model.replace(/^google\//, "");
 }
 
 export function parseModelJson(text: string): { spots?: { id?: string; name?: string; imageUrl?: string; pageUrl?: string }[] } {
@@ -95,12 +104,15 @@ export async function attachSpotImages(args: {
 
   const env = getEnv();
   const targets = Object.values(spots).slice(0, 4);
-  if (env.geminiApiKey && targets.length) {
+  if (env.geminiVia && targets.length) {
     const grounded = await groundedFromGemini({
       ctx: args.ctx,
       spots: targets,
       areaName: args.areaName,
-      apiKey: env.geminiApiKey,
+      via: env.geminiVia,
+      orcaBaseUrl: env.orcaBaseUrl,
+      orcaApiKey: env.orcaApiKey,
+      googleApiKey: env.geminiApiKey,
       model: env.geminiModel,
       signal: args.signal,
     });
@@ -117,6 +129,20 @@ export async function attachSpotImages(args: {
         imageProvider: img.provider,
       };
     }
+  }
+
+  for (const spot of Object.values(spots)) {
+    if (spot.imageUrl || !spot.officialUrl) continue;
+    args.ctx.httpAttempts += 1;
+    await args.ctx.onHttp({ provider: "official-og-image", cacheHit: false, attempt: args.ctx.httpAttempts });
+    const og = await fetchOgImage(spot.officialUrl, args.signal);
+    if (!og) continue;
+    spots[spot.id] = {
+      ...spot,
+      imageUrl: og,
+      imageSourceUrl: spot.officialUrl,
+      imageProvider: "official-og",
+    };
   }
 
   if (env.googleMapsApiKey) {
@@ -150,7 +176,10 @@ async function groundedFromGemini(args: {
   ctx: ProviderCtx;
   spots: Spot[];
   areaName: string;
-  apiKey: string;
+  via: "google" | "orcarouter";
+  orcaBaseUrl: string;
+  orcaApiKey: string | null;
+  googleApiKey: string | null;
   model: string;
   signal?: AbortSignal;
 }): Promise<{
@@ -170,19 +199,58 @@ async function groundedFromGemini(args: {
   args.ctx.httpAttempts += 1;
   await args.ctx.onHttp({ provider: "gemini-grounding", cacheHit: false, attempt: args.ctx.httpAttempts });
 
-  const res = await fetch(`${GEMINI_ENDPOINT}/${encodeURIComponent(args.model)}:generateContent`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": args.apiKey,
-    },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      tools: [groundingToolForModel(args.model)],
-      generationConfig: { temperature: 0.1 },
-    }),
-    signal: args.signal ?? AbortSignal.timeout(20000),
-  });
+  const modelId = resolveGeminiModelId(args.model, args.via);
+  const tool = groundingToolForModel(modelId);
+  const body = {
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    tools: [tool],
+    generationConfig: { temperature: 0.1 },
+  };
+
+  let res: Response;
+  try {
+    res =
+      args.via === "orcarouter"
+        ? await fetch(
+            `${orcaGeminiOrigin(args.orcaBaseUrl)}/v1beta/models/${modelId}:generateContent`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${args.orcaApiKey}`,
+                "Content-Type": "application/json",
+                "X-OrcaRouter-Include-Cost": "true",
+              },
+              body: JSON.stringify(body),
+              signal: args.signal ?? AbortSignal.timeout(20000),
+            },
+          )
+        : await fetch(`${GOOGLE_GEMINI_ENDPOINT}/${encodeURIComponent(modelId)}:generateContent`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": args.googleApiKey ?? "",
+            },
+            body: JSON.stringify(body),
+            signal: args.signal ?? AbortSignal.timeout(35000),
+          });
+  } catch (error) {
+    return {
+      images: [],
+      queries: [],
+      searchEntryPointHtml: null,
+      evidence: [
+        evidenceOf({
+          kind: "API",
+          provider: "gemini-grounding",
+          sourceRef: modelId,
+          sourceField: "generateContent",
+          fetchedAt: realNowIso(),
+          validFor: null,
+          note: `Gemini grounding failed via ${args.via}: ${error instanceof Error ? error.name : "error"}`,
+        }),
+      ],
+    };
+  }
 
   const fetchedAt = realNowIso();
   if (!res.ok) {
@@ -194,11 +262,11 @@ async function groundedFromGemini(args: {
         evidenceOf({
           kind: "API",
           provider: "gemini-grounding",
-          sourceRef: args.model,
+          sourceRef: modelId,
           sourceField: "generateContent",
           fetchedAt,
           validFor: null,
-          note: `Gemini grounding HTTP ${res.status}。gemini-1.5-flash は 2025-09 廃止。GEMINI_MODEL 既定は後継 Flash`,
+          note: `Gemini grounding HTTP ${res.status} via ${args.via} model=${modelId}`,
         }),
       ],
     };

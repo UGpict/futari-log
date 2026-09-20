@@ -15,8 +15,15 @@
 - Named Router: [named-routers](https://docs.orcarouter.ai/routing/named-routers)
   - 呼び出しは `model: "orcarouter/{name}"`
   - ダッシュボード未作成の名前を想像して送らない。未作成なら BLOCKED
+- Gemini Grounding: [Web search](https://docs.orcarouter.ai/advanced/web-search.md)
+  - Chat: `tools: [{ type: "function", function: { name: "googleSearch" } }]`
+  - Native: `POST {origin}/v1beta/models/google/gemini-3.5-flash:generateContent` + `tools: [{ googleSearch: {} }]`
+  - 認証は既存の `ORCAROUTER_API_KEY`。Google の `GEMINI_API_KEY` は不要
+  - カタログ確認済み: `google/gemini-2.5-flash`, `google/gemini-3.5-flash`（1.5 は無し）
+  - Native 応答に `groundingMetadata.webSearchQueries` / `searchEntryPoint` が載る。Chat Completions 側は本文だけ
+  - 画像はモデル生成ではなく、引用ページの `og:image`
 
-実装: `src/server/llm/index.ts`。キーが無ければモック推論（課金 0、actualModel=`mock/planner-v0.5`）。
+実装: `src/server/llm/index.ts`（計画）と `src/server/providers/geminiGrounding.ts`（画像）。キーが無ければモック推論（課金 0、actualModel=`mock/planner-v0.5`）。
 
 ## Google Places API (New)
 

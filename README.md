@@ -43,9 +43,9 @@ npm run replay:export -- <runId>
 | `USE_FIREBASE_EMULATOR` | `true` で Auth / Firestore Emulator。Cloud Agent の既定 |
 | `DATA_BACKEND` | `firestore`（既定、Emulator または本番） / `file` |
 | `APP_RUNTIME` | `MOCK`（既定）または `LIVE`（実キーが揃い Emulator ではないときだけ有効） |
-| `ORCAROUTER_*` | [OrcaRouter](https://docs.orcarouter.ai/getting-started/quickstart) 実推論 |
+| `ORCAROUTER_*` | [OrcaRouter](https://docs.orcarouter.ai/getting-started/quickstart) 実推論と Gemini Web Grounding |
 | `GOOGLE_MAPS_API_KEY` | Places New / Routes |
-| `GEMINI_API_KEY` / `GEMINI_MODEL` | Web Grounding でスポット写真（og:image）。1.5 Flash は廃止。未設定時は Places 写真 |
+| `GEMINI_MODEL` | 既定 `google/gemini-3.5-flash`。Orca 経由。`GEMINI_API_KEY` は直結したいときだけ |
 | Firebase `NEXT_PUBLIC_*` | 本番の匿名 Auth。Emulator 時はプレースホルダでよい |
 | `ENABLE_DEMO_CONTROLS` | シナリオ注入。LIVE では `DEMO_ALLOWED_UIDS` に限定 |
 | `DEMO_AREA_NAME` / `DEMO_LAT` / `DEMO_LNG` / `DEMO_DATE` | 開発デモの集合エリア |

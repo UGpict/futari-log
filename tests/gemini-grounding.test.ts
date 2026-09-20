@@ -3,7 +3,9 @@ import { describe, it } from "node:test";
 import {
   extractOgImage,
   groundingToolForModel,
+  orcaGeminiOrigin,
   parseModelJson,
+  resolveGeminiModelId,
   resolveHttpUrl,
 } from "../src/server/providers/geminiGrounding";
 
@@ -14,7 +16,13 @@ describe("gemini grounding helpers", () => {
         dynamic_retrieval_config: { mode: "MODE_DYNAMIC", dynamic_threshold: 0.3 },
       },
     });
-    assert.deepEqual(groundingToolForModel("gemini-3.5-flash"), { google_search: {} });
+    assert.deepEqual(groundingToolForModel("google/gemini-3.5-flash"), { googleSearch: {} });
+  });
+
+  it("routes Gemini ids through OrcaRouter", () => {
+    assert.equal(orcaGeminiOrigin("https://api.orcarouter.ai/v1"), "https://api.orcarouter.ai");
+    assert.equal(resolveGeminiModelId("gemini-3.5-flash", "orcarouter"), "google/gemini-3.5-flash");
+    assert.equal(resolveGeminiModelId("google/gemini-3.5-flash", "google"), "gemini-3.5-flash");
   });
 
   it("parses fenced JSON from the model", () => {

@@ -130,8 +130,8 @@ async function main() {
     await check("env:gemini", async () => ({
       status: env.geminiConfigured ? "PASS" : "BLOCKED",
       detail: env.geminiConfigured
-        ? `key present model=${env.geminiModel}`
-        : "GEMINI_API_KEY missing; spot images stay empty unless Places photo fallback",
+        ? `via=${env.geminiVia} model=${env.geminiModel}`
+        : "ORCAROUTER_API_KEY missing; spot images stay empty unless Places photo fallback",
     })),
   );
 

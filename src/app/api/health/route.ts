@@ -10,6 +10,7 @@ export async function GET() {
     dataBackend: env.dataBackend,
     emulator: env.emulator,
     gemini: env.geminiConfigured,
+    geminiVia: env.geminiVia,
     geminiModel: env.geminiModel,
   });
 }
