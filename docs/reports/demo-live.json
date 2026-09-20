@@ -1,0 +1,37 @@
+{
+  "at": "2026-09-20T03:35:59.461Z",
+  "reports": [
+    {
+      "ok": true,
+      "git": "7d89974",
+      "runIds": [
+        "run_bd379d24a31269fe",
+        "run_c66e11d6390942d7",
+        "run_9e6fdbd5271f312e",
+        "run_13e7e399171558c6",
+        "run_f7159c216a90612f"
+      ],
+      "durationsMs": [
+        3764,
+        3044,
+        2151,
+        2930
+      ],
+      "costs": [
+        {
+          "llmJpy": 1,
+          "apiJpy": null,
+          "mundaneCalls": 0,
+          "hardCalls": 1,
+          "unaccountedCalls": 0
+        }
+      ],
+      "notes": [
+        "first status=SUCCEEDED validation=CONDITIONAL items=4 runs=INITIAL_PLAN:SUCCEEDED",
+        "rain APPROVAL",
+        "memory influence DURATION,NONE"
+      ],
+      "failures": []
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-paper: #f7f1ea;
+  --color-paper-deep: #efe4d8;
+  --color-card: #fffdf9;
+  --color-ink: #2a2420;
+  --color-ink-soft: #6a5e55;
+  --color-rose: #b44a5a;
+  --color-rose-hover: #933e4c;
+  --color-rose-soft: #f8e4e7;
+  --color-line: #e2d5c8;
+  --color-moss: #3f6b58;
+  --color-moss-soft: #e4f0ea;
+  --color-amber: #8a5a18;
+  --color-amber-soft: #f6ead3;
+  --font-sans: var(--font-noto-sans-jp);
+}
+
+html {
+  background: var(--color-paper);
+}
+
+body {
+  background:
+    radial-gradient(1200px 500px at 10% -10%, #fde8dc 0%, transparent 50%),
+    radial-gradient(900px 400px at 100% 0%, #f3e6ef 0%, transparent 45%),
+    var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-noto-sans-jp), "Hiragino Sans", "Yu Gothic", sans-serif;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+* {
+  box-sizing: border-box;
+}
