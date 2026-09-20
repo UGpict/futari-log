@@ -35,6 +35,7 @@ function baseSpot(
     imageUrl: extra.imageUrl ?? null,
     imageSourceUrl: extra.imageUrl ? "https://example.com/source" : null,
     imageProvider: extra.imageUrl ? "fixture" : null,
+    imageAttributions: extra.imageUrl ? [{ displayName: "fixture photographer", uri: null }] : [],
   };
 }
 

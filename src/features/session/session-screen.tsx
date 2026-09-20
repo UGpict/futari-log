@@ -163,12 +163,31 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
                   <p className="text-sm text-ink-soft">料金不明。予算内とは断定しません</p>
                 )}
                 {spot?.imageUrl ? (
-                  <img
-                    src={spot.imageUrl}
-                    alt={spot.name}
-                    className="mt-3 h-36 w-full rounded-xl object-cover"
-                    referrerPolicy="no-referrer"
-                  />
+                  <figure className="mt-3">
+                    <img
+                      src={spot.imageUrl}
+                      alt={spot.name}
+                      className="h-36 w-full rounded-xl object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                    {spot.imageAttributions?.length ? (
+                      <figcaption className="mt-1 text-xs text-ink-soft">
+                        写真:{" "}
+                        {spot.imageAttributions.map((a, i) => (
+                          <span key={`${a.displayName}-${i}`}>
+                            {i > 0 ? " · " : null}
+                            {a.uri ? (
+                              <a className="underline" href={a.uri} target="_blank" rel="noreferrer">
+                                {a.displayName}
+                              </a>
+                            ) : (
+                              a.displayName
+                            )}
+                          </span>
+                        ))}
+                      </figcaption>
+                    ) : null}
+                  </figure>
                 ) : null}
                 {spot?.officialUrl ? (
                   <a className="text-sm text-rose underline" href={spot.officialUrl} target="_blank" rel="noreferrer">

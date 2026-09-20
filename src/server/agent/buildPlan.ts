@@ -19,6 +19,7 @@ import {
   type ProviderCtx,
 } from "@/server/providers";
 import { getCatalogSpot } from "@/server/providers/catalog";
+import { hydratePlacePhotos } from "@/server/providers/placePhotos";
 
 function fact<T>(value: T | null, evidenceIds: string[] = []) {
   return { value, evidenceIds };
@@ -54,6 +55,14 @@ export async function buildPlan(input: {
     evidence.push(...d.evidence);
     if (d.spot) spots[id] = d.spot;
   }
+
+  const selected: Record<string, Spot> = {};
+  for (const id of input.orderedSpotIds) {
+    if (spots[id]) selected[id] = spots[id];
+  }
+  const photos = await hydratePlacePhotos(input.ctx, selected);
+  Object.assign(spots, photos.spots);
+  evidence.push(...photos.evidence);
 
   const locked = input.input.fixedAppointments.map((a) => {
     const spotId =

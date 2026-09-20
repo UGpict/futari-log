@@ -2,6 +2,7 @@ import { getEnv } from "@/config/env";
 import type { Evidence, Spot } from "@/domain/schemas";
 import { newId } from "@/lib/ids";
 import { realNowIso } from "@/lib/time";
+import { hydratePlacePhotos } from "./placePhotos";
 import type { ProviderCtx } from "./types";
 
 export type GroundedImage = {
@@ -103,7 +104,13 @@ export async function attachSpotImages(args: {
   let searchEntryPointHtml: string | null = null;
 
   const env = getEnv();
-  const targets = Object.values(spots).slice(0, 4);
+  if (env.googleMapsApiKey) {
+    const places = await hydratePlacePhotos(args.ctx, spots, args.signal);
+    Object.assign(spots, places.spots);
+    for (const ev of places.evidence) evidence[ev.id] = ev;
+  }
+
+  const targets = Object.values(spots).filter((s) => !s.imageUrl).slice(0, 4);
   if (env.geminiVia && targets.length) {
     const grounded = await groundedFromGemini({
       ctx: args.ctx,
@@ -143,30 +150,6 @@ export async function attachSpotImages(args: {
       imageSourceUrl: spot.officialUrl,
       imageProvider: "official-og",
     };
-  }
-
-  if (env.googleMapsApiKey) {
-    for (const spot of Object.values(spots)) {
-      if (spot.imageUrl || spot.id.startsWith("mock:")) continue;
-      const photo = await placesPhotoUrl(args.ctx, env.googleMapsApiKey, spot.id, args.signal);
-      if (!photo) continue;
-      spots[spot.id] = {
-        ...spot,
-        imageUrl: photo.imageUrl,
-        imageSourceUrl: photo.imageSourceUrl,
-        imageProvider: "places",
-      };
-      const ev = evidenceOf({
-        kind: "API",
-        provider: "places",
-        sourceRef: spot.id,
-        sourceField: "photos.media",
-        fetchedAt: realNowIso(),
-        validFor: null,
-        note: "Places photo media の公開 URL。Gemini グラウディング未取得時のフォールバック",
-      });
-      evidence[ev.id] = ev;
-    }
   }
 
   return { spots, evidence, queries, searchEntryPointHtml };
@@ -366,38 +349,4 @@ async function fetchOgImage(pageUrl: string, signal?: AbortSignal): Promise<stri
   } catch {
     return null;
   }
-}
-
-async function placesPhotoUrl(
-  ctx: ProviderCtx,
-  apiKey: string,
-  placeId: string,
-  signal?: AbortSignal,
-): Promise<{ imageUrl: string; imageSourceUrl: string } | null> {
-  ctx.httpAttempts += 1;
-  await ctx.onHttp({ provider: "places", cacheHit: false, attempt: ctx.httpAttempts });
-  const details = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`, {
-    headers: {
-      "X-Goog-Api-Key": apiKey,
-      "X-Goog-FieldMask": "id,photos.name,googleMapsUri",
-    },
-    signal: signal ?? AbortSignal.timeout(8000),
-  });
-  if (!details.ok) return null;
-  const body = (await details.json()) as { photos?: { name?: string }[]; googleMapsUri?: string };
-  const photoName = body.photos?.[0]?.name;
-  if (!photoName) return null;
-  ctx.httpAttempts += 1;
-  await ctx.onHttp({ provider: "places-photo", cacheHit: false, attempt: ctx.httpAttempts });
-  const media = await fetch(
-    `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=800&skipHttpRedirect=true`,
-    {
-      headers: { "X-Goog-Api-Key": apiKey },
-      signal: signal ?? AbortSignal.timeout(8000),
-    },
-  );
-  const mediaJson = (await media.json().catch(() => ({}))) as { photoUri?: string };
-  const photoUri = resolveHttpUrl(mediaJson.photoUri ?? "");
-  if (!photoUri) return null;
-  return { imageUrl: photoUri, imageSourceUrl: body.googleMapsUri ?? photoUri };
 }

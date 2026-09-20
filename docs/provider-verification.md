@@ -28,8 +28,11 @@
 ## Google Places API (New)
 
 - Nearby Search: `POST https://places.googleapis.com/v1/places:searchNearby`
-- FieldMask 必須。検索は `places.id,places.displayName,places.location,places.types,places.primaryType,places.googleMapsUri`
-- Details は `id,displayName,location,types,primaryType,websiteUri,googleMapsUri,regularOpeningHours,currentOpeningHours,priceLevel,priceRange,businessStatus`
+- FieldMask 必須。検索は `places.id,places.displayName,places.location,places.types,places.primaryType,places.googleMapsUri,places.photos.name,places.photos.authorAttributions`
+- Details は上記に加え `photos.name,photos.authorAttributions`
+- Place Photos: `GET https://places.googleapis.com/v1/{photos.name}/media?maxWidthPx=800&skipHttpRedirect=true` → `photoUri`（クライアントに API キーを載せない）
+- 写真は店舗 ID に紐づく。同名の別店舗を拾わない
+- `authorAttributions.displayName` / `uri` を `imageAttributions` として返す
 - `priceRange` が無い場合は円額を作らず UNKNOWN
 - 空席フィールドは提供されない
 
