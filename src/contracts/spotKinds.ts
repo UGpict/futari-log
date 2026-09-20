@@ -743,15 +743,29 @@ export const UNSUPPORTED_WISHES: { re: RegExp; label: string }[] = [
   { re: /ものづくり/, label: "ものづくり体験" },
 ];
 
+function unsupportedFromFacets(facets: WishFacet[]): string[] {
+  const labels: string[] = [];
+  for (const facet of facets) {
+    if (facet.fulfillTypes.length) continue;
+    if (!labels.includes(facet.scoutCategory)) labels.push(facet.scoutCategory);
+  }
+  return labels;
+}
+
 export function scoutJobsFromWishes(text: string): { jobs: SpotScoutJob[]; unsupported: string[]; key: string } {
-  const unsupported = UNSUPPORTED_WISHES.filter((item) => item.re.test(text)).map((item) => item.label);
   const matched = facetsFromWishText(text);
+  const unsupported = [
+    ...UNSUPPORTED_WISHES.filter((item) => item.re.test(text)).map((item) => item.label),
+    ...unsupportedFromFacets(matched),
+  ].filter((label, index, all) => all.indexOf(label) === index);
   if (!text.trim() || (/おまかせ/.test(text) && !matched.length)) {
     return { jobs: DEFAULT_SPOT_SCOUT_JOBS, unsupported, key: "default" };
   }
   const jobs: SpotScoutJob[] = [];
   const seen = new Set<string>();
   for (const facet of matched) {
+    // Places type で達成判定できない希望は、検索を回さず確認質問へ回す。
+    if (!facet.fulfillTypes.length) continue;
     if (!facet.searchTypes.length || seen.has(facet.scoutCategory)) continue;
     seen.add(facet.scoutCategory);
     jobs.push(jobFromFacet(facet));

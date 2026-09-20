@@ -4,6 +4,7 @@ import {
   classifySpotKind,
   explainWishMatch,
   matchableKinds,
+  placeTypeList,
   scoutJobsFromWishes,
   searchTypesForWishText,
   SPOT_KIND_DISPLAY_ORDER,
@@ -16,6 +17,21 @@ import { searchCatalog } from "../src/server/providers/catalog";
 import { spotVisual } from "../src/features/session/spot-visuals";
 
 describe("spot kind classification", () => {
+  it("keeps primaryType and types together without overwriting either", () => {
+    assert.deepEqual(placeTypeList("cafe", ["cafe", "food", "point_of_interest"]), [
+      "cafe",
+      "food",
+      "point_of_interest",
+    ]);
+    assert.deepEqual(placeTypeList("museum", ["tourist_attraction", "point_of_interest"]), [
+      "museum",
+      "tourist_attraction",
+      "point_of_interest",
+    ]);
+    assert.deepEqual(placeTypeList("cafe", undefined), ["cafe"]);
+    assert.deepEqual(placeTypeList(null, ["art_gallery"]), ["art_gallery"]);
+  });
+
   it("does not treat generic food as a restaurant", () => {
     assert.equal(classifySpotKind("スターバックス", ["cafe", "food", "point_of_interest"]), "cafe");
     assert.equal(classifySpotKind("焼肉", ["restaurant", "food"]), "dining");
@@ -56,14 +72,27 @@ describe("wish to scout types", () => {
     const mapped = scoutJobsFromWishes("お肉、映画、温泉、ショッピング、ボウリング、街の写真を撮る");
     assert.ok(mapped.jobs.some((job) => job.includedTypes.includes("restaurant")));
     assert.ok(mapped.jobs.some((job) => job.includedTypes.includes("movie_theater")));
-    assert.ok(mapped.jobs.some((job) => job.includedTypes.includes("spa")));
+    assert.ok(mapped.unsupported.includes("温泉"));
+    assert.equal(
+      mapped.jobs.some((job) => job.includedTypes.includes("spa")),
+      false,
+    );
     assert.ok(mapped.jobs.some((job) => job.includedTypes.includes("shopping_mall")));
     assert.ok(mapped.jobs.some((job) => job.includedTypes.includes("bowling_alley")));
     assert.ok(mapped.jobs.some((job) => job.kind === "town"));
-    assert.equal(mapped.unsupported.length, 0);
     const stage = scoutJobsFromWishes("舞台を見たい");
     assert.ok(stage.jobs.some((job) => job.includedTypes.includes("performing_arts_theater")));
     assert.equal(stage.jobs.some((job) => job.includedTypes.includes("movie_theater")), false);
+  });
+
+  it("asks before searching when 温泉 cannot be type-fulfilled", () => {
+    const mapped = scoutJobsFromWishes("のんびり温泉に入りたい");
+    assert.deepEqual(mapped.unsupported, ["温泉"]);
+    assert.equal(mapped.jobs.some((job) => job.includedTypes.includes("spa")), false);
+    assert.equal(spotMatchesWish({ name: "スパ", categories: ["spa"] }, "温泉"), false);
+    const asSpa = scoutJobsFromWishes("のんびりスパに入りたい");
+    assert.equal(asSpa.unsupported.length, 0);
+    assert.ok(asSpa.jobs.some((job) => job.includedTypes.includes("spa")));
   });
 
   it("keeps ものづくり体験 unsupported and does not invent a type", () => {

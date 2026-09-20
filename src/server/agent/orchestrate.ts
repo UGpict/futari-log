@@ -74,11 +74,16 @@ export async function orchestratePlanning(input: {
   };
   const wish = scoutJobsForPreferences(input.session.input.preferences);
   if (wish.unsupported.length && !input.session.input.unsupportedWishAcknowledged) {
+    const hasOnsen = wish.unsupported.includes("温泉");
     return {
       waitingQuestion: {
         id: "q_unsupported_wish",
-        prompt: `「${wish.unsupported.join("、")}」はまだ候補検索に対応していません。対応できる範囲で続けますか？`,
-        options: ["対応できる範囲で続ける", "中断する"],
+        prompt: hasOnsen
+          ? `「${wish.unsupported.join("、")}」は現在の Places type だけでは達成判定できません。温泉をスパとして探すか、対応できる範囲で続けますか？`
+          : `「${wish.unsupported.join("、")}」はまだ候補検索に対応していません。対応できる範囲で続けますか？`,
+        options: hasOnsen
+          ? ["スパとして探す", "対応できる範囲で続ける", "中断する"]
+          : ["対応できる範囲で続ける", "中断する"],
       },
       built: null,
       llm: noneLlm(),

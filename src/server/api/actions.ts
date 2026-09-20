@@ -251,6 +251,19 @@ export async function answerQuestion(uid: string, runId: string, questionId: str
       found.run.error = "selected event unavailable; user cancelled";
       return { ok: true as const, restart: false };
     }
+    if (questionId === "q_unsupported_wish" && answer === "スパとして探す") {
+      found.bundle.session.input = {
+        ...found.bundle.session.input,
+        preferences: found.bundle.session.input.preferences.map((pref) => ({
+          ...pref,
+          content: pref.content.replaceAll("温泉", "スパ"),
+        })),
+      };
+      found.run.status = "PENDING";
+      found.run.waitingQuestion = null;
+      found.run.leaseOwner = null;
+      return { ok: true as const, restart: true, sessionId: found.bundle.session.id };
+    }
     if (questionId === "q_unsupported_wish" && answer === "対応できる範囲で続ける") {
       found.bundle.session.input = { ...found.bundle.session.input, unsupportedWishAcknowledged: true };
       found.run.status = "PENDING";
