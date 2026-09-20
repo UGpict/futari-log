@@ -30,51 +30,40 @@
 
 .header { padding: 0 4px 12px; }
 .headerRow { display: flex; min-height: 56px; align-items: center; justify-content: space-between; gap: 13px; }
+.headerActions { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
 
 .brand { flex: 1; min-width: 0; text-align: left; }
 .logo { display: block; width: 120px; max-width: 100%; height: auto; margin: 0; }
 
-.agentSuggestion {
-  position: relative;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  width: 100%;
-  min-height: 116px;
-  align-items: center;
-  gap: 18px;
-  margin: 0 0 12px;
-  padding: 3px 0;
-  border-radius: 22px;
-  color: #675463;
-  text-align: left;
+.agentSuggestion { margin: 4px 0 20px; }
+.suggestionConversation { display: flex; align-items: center; gap: 10px; margin: 0 4px 8px; }
+.suggestionMascot { display: block; flex: 0 0 52px; width: 52px; height: 64px; }
+.suggestionMascot > span { width: 52px; height: 64px; }
+.suggestionSpeech { position: relative; flex: 1; min-width: 0; padding: 10px 15px; border: 1px solid #eadfe5; border-radius: 18px; background: #fffdfd; color: #65505e; font-size: 14px; font-weight: 550; line-height: 1.65; }
+.suggestionSpeech::before { content: ''; position: absolute; top: calc(50% - 5px); left: -6px; width: 10px; height: 10px; border-bottom: 1px solid #eadfe5; border-left: 1px solid #eadfe5; background: #fffdfd; transform: rotate(45deg); }
+.suggestionHeading { margin: 0 4px 8px; }
+.suggestionCard { display: flex; width: 100%; overflow: hidden; padding: 0; border: 1px solid #ebdfe5; border-radius: 20px; background: #fffdfd; text-align: left; box-shadow: 0 4px 14px #60455608; }
+.suggestionPhoto { position: relative; flex: 0 0 29%; align-self: stretch; min-height: 104px; background: #d8c7b8 url('/images/itinerary/cafe.jpg') 58% center / cover; }
+.suggestionCopy { display: flex; flex: 1; min-width: 0; flex-direction: column; align-items: flex-start; padding: 8px 14px; }
+.suggestionArea { display: flex; align-items: center; gap: 4px; color: #87727f; font-size: 11px; line-height: 1.4; }
+.suggestionCopy strong { margin-top: 3px; color: #55424f; font-size: 18px; font-weight: 650; line-height: 1.45; letter-spacing: -.035em; }
+.suggestionRoute { display: flex; align-items: center; gap: 6px; margin-top: 3px; color: #87727f; font-size: 11px; line-height: 1.5; }
+.suggestionAction { display: flex; align-items: center; justify-content: space-between; gap: 5px; width: 100%; margin-top: 6px; padding-top: 5px; border-top: 1px solid #f0e5eb; color: #a65074; font-size: 12px; font-weight: 600; line-height: 1.5; }
+.suggestionAction svg { flex-shrink: 0; transition: transform .18s; }
+@media (hover: hover) {
+  .suggestionCard:hover { background: #fff8fb; box-shadow: 0 5px 18px #60455612; }
+  .suggestionCard:hover .suggestionAction svg { transform: translateX(3px); }
 }
-.agentBubble {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
-  min-height: 96px;
-  padding: 13px 12px 13px 17px;
-  border: 0;
-  border-radius: 28px 31px 26px 30px;
-  background: #fce4ed;
-  box-shadow: none;
+@media (max-width: 360px) {
+  .suggestionConversation { gap: 8px; margin-inline: 0; }
+  .suggestionMascot { flex-basis: 48px; width: 48px; height: 60px; }
+  .suggestionMascot > span { width: 48px; height: 60px; }
+  .suggestionSpeech { padding-inline: 11px; font-size: 13px; }
+  .suggestionCopy { padding-inline: 11px; }
+  .suggestionCopy strong { font-size: 16px; }
+  .suggestionAction { font-size: 11px; }
 }
-.agentBubble::before, .agentBubble::after {
-  content: "";
-  position: absolute;
-  border-radius: 50%;
-  background: #fce4ed;
-  pointer-events: none;
-}
-.agentBubble::before { left: -9px; top: calc(50% - 6px); width: 12px; height: 12px; }
-.agentBubble::after { left: -21px; top: calc(50% - 4px); width: 7px; height: 7px; }
-.agentBubble strong { position: relative; font-size: 13px; font-weight: 700; line-height: 1.85; letter-spacing: .01em; color: #805469; }
-.suggestionPhoto { display: block; flex: 0 0 66px; height: 66px; border-radius: var(--radius-card); background: #f5d5d8 url('/images/cafe-suggestion-social.png') center / cover; }
-@media (max-width: 360px) { .agentBubble { padding: 12px; gap: 6px; } .agentBubble strong { font-size: 11px; } .suggestionPhoto { flex-basis: 52px; height: 52px; } }
-.agentSuggestion:focus-visible { outline: 2px solid #bd7899; outline-offset: 4px; }
+@media (prefers-reduced-motion: reduce) { .suggestionAction svg { transition: none; } }
 
 .calendar {
   position: relative;
@@ -83,8 +72,12 @@
   border-radius: 24px;
   padding: 12px 8px 7px;
   background: #fffeff;
+  box-shadow: 0 7px 24px #6045561a;
 }
 .calendarHeader { display: grid; grid-template-columns: 40px 1fr 40px; align-items: center; padding: 0 4px 10px; gap: 6px; }
+.calendarMonth { position: relative; display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 40px; }
+.returnToCurrentMonth { position: absolute; left: calc(50% + 53px); top: 50%; translate: 0 -50%; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: var(--radius-pill); background: var(--surface-accent); color: var(--text-accent); font-size: 10px; font-weight: 600; }
+.returnToCurrentMonth[data-current="true"] { visibility: hidden; }
 .monthButton { display: grid; place-items: center; width: 34px; height: 34px; margin: 0 auto; border: 0; border-radius: 50%; background: transparent; color: #c47a9b; }
 .monthButton:hover { background: #f7e8ee; }
 .monthButton:active { transform: scale(.93); }
@@ -109,8 +102,33 @@
   right: max(10px, calc((100vw - 430px) / 2 + 10px));
   bottom: calc(14px + env(safe-area-inset-bottom));
 }
-.pageFootnote { display: flex; align-items: center; justify-content: center; gap: 12px; padding-top: 8px; font-size: 9px; color: #a299a4; }
-.pageFootnote button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 8px 16px; border: 0; border-radius: 999px; background: #f9e8ef; color: #b7688b; font-size: 11px; font-weight: 600; }
+.createDateFab[data-over-events="true"] button > svg { fill: #a84668; }
+.createDateFab[data-over-events="true"] button > svg text { stroke: #fff; stroke-width: 6px; stroke-linejoin: round; paint-order: stroke fill; }
+.nearbyEvents { margin: 8px -16px 0; padding: 8px 0 calc(96px + env(safe-area-inset-bottom)); }
+.nearbyEvents > header { display: flex; align-items: end; justify-content: space-between; gap: 12px; padding: 0 18px 11px; }
+.suggestionHeading, .nearbyEvents > header h2 { color: #675462; font-size: 16px; font-weight: 650; line-height: 1.5; }
+.nearbyEvents > header > small { display: inline-flex; min-height: 28px; align-items: center; gap: 4px; padding: 5px 9px; border: 1px solid #eadde4; border-radius: 999px; background: #fff; color: #a45d7d; font-size: 9px; font-weight: 650; white-space: nowrap; box-shadow: 0 3px 10px #6e4d5e0a; }
+.eventCarousel { display: flex; gap: 10px; overflow-x: auto; padding: 0 18px 24px; scroll-padding-inline: 18px; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-inline: contain; }
+.eventCarousel::-webkit-scrollbar { display: none; }
+.eventCarousel:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.eventBanner { position: relative; display: flex; min-width: min(282px, calc(100vw - 76px)); flex: 0 0 min(282px, calc(100vw - 76px)); overflow: hidden; flex-direction: column; padding: 0; border: 0; border-radius: 20px; background: #fffdfc; color: #695866; text-align: left; scroll-snap-align: start; box-shadow: 0 8px 24px #6045561c; }
+.eventArtwork { position: relative; display: block; width: 100%; height: 248px; flex: 0 0 248px; background-position: center top; background-size: cover; }
+.eventBanner[data-theme="garden"] .eventArtwork { background-image: url('/images/events/night-garden-poster.webp'); }
+.eventBanner[data-theme="mystery"] .eventArtwork { background-image: url('/images/events/mystery-walk-poster.webp'); }
+.eventBanner[data-theme="exhibition"] .eventArtwork { background-image: url('/images/events/odd-exhibition-poster.webp'); }
+.eventBanner[data-theme="ai-hack"] .eventArtwork { background-color: #0b0619; background-image: url('/images/events/ai-hack-2026-banner.webp'); background-position: center; background-size: contain; background-repeat: no-repeat; }
+.eventShade { position: absolute; inset: 0; background: #281d2714; }
+.eventDetails { position: relative; display: flex; min-height: 126px; flex-direction: column; padding: 22px 14px 13px; }
+.eventMeta { position: absolute; z-index: 1; top: -14px; left: 12px; right: 12px; display: flex; gap: 5px; overflow: hidden; }
+.eventMeta > span { display: inline-flex; min-width: 0; align-items: center; gap: 3px; overflow: hidden; border: 1px solid #eadde3; border-radius: 999px; padding: 5px 8px; background: #fffdfcf2; color: #7e6675; font-size: 8px; font-weight: 700; white-space: nowrap; text-overflow: ellipsis; box-shadow: 0 3px 10px #4b34420c; }
+.eventMeta > span:nth-child(2) { flex: 0 1 auto; }
+.eventMeta > span:last-child:not(:nth-child(2)) { flex: 0 0 auto; border-color: #d66f91; background: #d66f91; color: white; }
+.eventCopy, .eventAction { position: relative; z-index: 1; }
+.eventCopy { display: flex; flex-direction: column; gap: 3px; }
+.eventCopy strong { color: #665361; font-size: 15px; font-weight: 700; line-height: 1.35; }
+.eventCopy > span { color: #9a8794; font-size: 9px; line-height: 1.45; }
+.eventAction { display: flex; align-items: center; gap: 4px; margin-top: auto; padding-top: 10px; color: #b65e82; font-size: 10px; font-weight: 700; }
+.eventDisclosure { margin-top: 6px; color: #aaa0a7; font-size: 8px; text-align: center; }
 
 .sheet { position: fixed; inset: auto 0 0; width: 100%; max-width: 430px; max-height: 91dvh; margin: 0 auto; padding: 0; border: none; border-radius: 28px 28px 0 0; background: #fffcf9; color: var(--text-primary); overscroll-behavior: contain; box-shadow: 0 -10px 80px #30243215; }
 .sheet[open] { animation: sheetUp .25s ease-out; }
@@ -425,10 +443,6 @@
 .planTotalSummary strong { font-size: 12px; font-weight: 650; }
 .planTotalSummary small { color: #9d8996; font-size: 10px; }
 
-.suggestionCopy { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.agentBubble .suggestionCopy strong { font-size: 10px; line-height: 1.6; }
-.suggestionCopy > span { font-size: 12px; line-height: 1.65; color: #97657d; }
-@media (max-width: 360px) { .agentBubble .suggestionCopy strong { font-size: 9px; } .suggestionCopy > span { font-size: 11px; } }
 .sheet:has(.planningOverlay) { max-width: 430px; height: 100dvh; max-height: 100dvh; border-radius: 0; background: var(--surface-page); }
 .sheet:has(.planningOverlay) .sheetHeader, .sheet:has(.planningOverlay) .sheetHandle { display: none; }
 .planningOverlay { min-height: 94dvh; display: grid; align-items: center; }

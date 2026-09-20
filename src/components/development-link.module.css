@@ -1,7 +1,16 @@
-.link { position: fixed; left: 64px; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 30; }
-.button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 56px; height: 56px; border: 0; border-radius: 50%; background: var(--action-primary); color: var(--action-on-primary); text-decoration: none; font-size: 10px; font-weight: 700; line-height: 1; letter-spacing: .06em; touch-action: manipulation; transition: transform .18s; }
+.link { position: relative; display: flex; }
+.button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; width: var(--control-icon-size); height: var(--control-icon-size); border: 0; border-radius: 50%; background: var(--action-primary); color: var(--action-on-primary); text-decoration: none; font-size: 7px; font-weight: 700; line-height: 1; letter-spacing: .06em; touch-action: manipulation; transition: transform .18s; }
+.button svg { width: 16px; height: 16px; }
 .button:hover { background: var(--action-primary-hover); }
 .button:active { transform: scale(.96); }
 .button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 4px; }
-@media (max-width: 600px) { .link { left: 12px; bottom: calc(90px + env(safe-area-inset-bottom)); } }
+.menu { position: absolute; z-index: 30; top: calc(100% + 9px); right: 0; width: 220px; padding: 10px; border: 1px solid #eadde5; border-radius: 17px; background: #fff; box-shadow: 0 14px 38px #50344226; }
+.menu::before { content: ''; position: absolute; top: -6px; right: 17px; width: 11px; height: 11px; border-top: 1px solid #eadde5; border-left: 1px solid #eadde5; background: #fff; transform: rotate(45deg); }
+.menu > strong { display: block; padding: 3px 7px 8px; color: #75616e; font-size: 10px; }
+.resetButton,.menuLink { display: flex; width: 100%; min-height: 47px; align-items: center; gap: 9px; padding: 8px 9px; border: 0; border-radius: 11px; background: transparent; color: #6f5b68; font: inherit; text-align: left; text-decoration: none; }
+.resetButton { color: #a34f6c; }
+.resetButton:hover,.menuLink:hover { background: #fbf1f5; }
+.resetButton svg,.menuLink svg { flex: 0 0 auto; width: 16px; height: 16px; }
+.resetButton > span,.menuLink > span { display: flex; flex-direction: column; font-size: 11px; font-weight: 700; }
+.resetButton small { margin-top: 2px; color: #a7929e; font-size: 8px; font-weight: 500; }
 @media (prefers-reduced-motion: reduce) { .button { transition: none; } }
