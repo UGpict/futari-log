@@ -55,3 +55,4 @@ const snap = await api<SessionSnapshot>(`/api/sessions/${id}`);
 ```
 
 イベントカタログの契約・実レスポンス・確認状態は `docs/catalog-ui.md`。UI コードはまだ触らない。
+フロントからバックエンドへの実装依頼（カレンダー一覧・振り返りスタンプ・メモ・提案）は `docs/backend-handoff.md`。契約未確定の項目は API を先に切らない。

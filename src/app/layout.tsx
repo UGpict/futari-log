@@ -11,7 +11,7 @@ const notoSansJp = Noto_Sans_JP({
 });
 
 export const metadata: Metadata = {
-  title: "ふたりログ",
+  title: "FutariLog",
   description: "二人の希望を調整し、予定が崩れたら組み直し、確かめた記憶を次のデートに活かす",
 };
 

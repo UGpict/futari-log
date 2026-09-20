@@ -1,0 +1,14 @@
+.button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: var(--control-height); padding: 12px 18px; border: 1px solid transparent; border-radius: var(--radius-pill); font-size: 14px; font-weight: 650; line-height: 1.5; text-align: center; cursor: pointer; touch-action: manipulation; transition: background .18s, transform .18s; }
+.primary { background: var(--action-primary); color: var(--action-on-primary); }
+.secondary { background: var(--surface-card); border-color: var(--border-control); color: var(--text-accent); }
+.ghost { background: var(--surface-accent); color: var(--text-accent); }
+.danger { background: var(--surface-card); border-color: var(--border-control); color: var(--text-danger); }
+.compact { min-height: 40px; padding: 8px 13px; font-size: 12px; }
+.fullWidth { width: 100%; }
+.iconButton { display: inline-flex; flex: 0 0 var(--control-icon-size); align-items: center; justify-content: center; width: var(--control-icon-size); height: var(--control-icon-size); border: 1px solid var(--border-control); border-radius: var(--radius-pill); background: var(--surface-card); color: var(--text-muted); cursor: pointer; touch-action: manipulation; }
+.button:disabled, .iconButton:disabled { opacity: var(--disabled-opacity); cursor: not-allowed; }
+.button:focus-visible, .iconButton:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.button:active:not(:disabled), .iconButton:active:not(:disabled) { transform: scale(.97); }
+.button > svg, .iconButton > svg { width: 18px; height: 18px; flex-shrink: 0; }
+@media (hover: hover) { .primary:hover:not(:disabled) { background: var(--action-primary-hover); } .secondary:hover:not(:disabled), .ghost:hover:not(:disabled), .iconButton:hover:not(:disabled) { background: var(--surface-accent); } }
+@media (prefers-reduced-motion: reduce) { .button, .iconButton { transition: none; } }

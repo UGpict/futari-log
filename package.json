@@ -17,6 +17,7 @@
     "test:emulator": "USE_FIREBASE_EMULATOR=true firebase emulators:exec --only auth,firestore --project demo-futari-log \"tsx --test tests/firebase.test.ts\"",
     "build": "next build",
     "start": "tsx scripts/start.ts",
+    "doctor": "tsx scripts/doctor.ts",
     "verify:search": "tsx scripts/verify-search.ts",
     "ingest:events": "tsx scripts/ingest-events.ts",
     "verify:catalog": "tsx scripts/verify-catalog.ts",
@@ -27,6 +28,7 @@
     "deploy:cloudrun": "bash scripts/deploy-cloud-run.sh"
   },
   "dependencies": {
+    "@rive-app/canvas": "^2.42.2",
     "firebase-admin": "^14.4.0",
     "lucide-react": "^1.47.0",
     "next": "16.3.5",

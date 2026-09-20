@@ -1,364 +1,128 @@
 "use client";
 
+import { Button, ButtonLink } from "@/components/button";
+
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
-import { api } from "@/client/api";
+import Image from "next/image";
+import { useState } from "react";
+import { ArrowLeft, CalendarHeart, Wallet, Check, MessageCircle, SlidersHorizontal, ArrowUpRight, ExternalLink, Clock3, Coffee, Landmark, Trees, MapPin } from "lucide-react";
 import { useSession } from "@/client/hooks/use-session";
-import { Card } from "@/components/card";
-import { CostBadge } from "@/components/cost-badge";
-import { ModeBanner, SourceChip } from "@/components/mode-banner";
+import { api, fixturesEnabled } from "@/client/api";
 import { formatTokyoHm } from "@/lib/time";
+import { PlanLoading } from "./plan-loading";
+import { HomeSheet } from "../home/home-sheet";
+import { MoodSticker } from "@/components/mood-sticker";
+import styles from "./session.module.css";
+
+// Presentation-only placeholders until sourced venue photos are available in the API.
+function spotVisual(name: string, categories: string[]) {
+  const text = `${name} ${categories.join(" ")}`;
+  if (/美術館|博物館|展示|museum|gallery/i.test(text)) return { image: "museum", label: "アート・展示", Icon: Landmark };
+  if (/公園|森|庭園|散歩|park|garden/i.test(text)) return { image: "nature", label: "散策", Icon: Trees };
+  if (/カフェ|喫茶|コーヒー|ケーキ|ハーブス|cafe|coffee|bakery/i.test(text)) return { image: "cafe", label: "カフェ", Icon: Coffee };
+  return { image: null, label: "立ち寄りスポット", Icon: MapPin };
+}
 
 export function SessionScreen({ sessionId }: { sessionId: string }) {
-  const router = useRouter();
-  const { data, error, post, reload } = useSession(sessionId);
-  const [draft, setDraft] = useState<string | null>(null);
-  const [note, setNote] = useState("カフェは喜んでた。展示は途中で疲れてた");
-
-  const latestRun = data?.runs.at(-1);
-  const cost = useMemo(() => {
-    const runs = data?.runs ?? [];
-    return {
-      llm: runs.reduce((n, r) => n + (r.cost.llmJpy ?? 0), 0),
-      usd: runs.reduce((n, r) => n + (r.cost.llmUsd ?? 0), 0),
-      usdKnown: runs.some((r) => r.cost.llmUsd != null),
-      api: runs.reduce((n, r) => n + (r.cost.apiJpy ?? 0), 0),
-      hard: runs.reduce((n, r) => n + r.cost.hardCalls, 0),
-      mundane: runs.reduce((n, r) => n + r.cost.mundaneCalls, 0),
-      unaccounted: runs.reduce((n, r) => n + r.cost.unaccountedCalls, 0),
-    };
-  }, [data]);
-
-  const pendingApproval = data?.approvals.find((a) => a.status === "PENDING");
-  const autoEvent = data?.events.find((e) => e.type === "PLAN_AUTO_APPLIED");
-
-
-  if (!data) {
-    return <main className="p-8 text-ink-soft">{error ?? "読み込み中…"}</main>;
+  const { data, error, reload } = useSession(sessionId);
+  const [sheet, setSheet] = useState<"conditions" | "feedback" | null>(null);
+  const [target, setTarget] = useState<{ id: string; name: string; locked: boolean } | null>(null);
+  const [feedback, setFeedback] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [message, setMessage] = useState("");
+  const [pending, setPending] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const latest = data?.runs.at(-1);
+  const failed = latest && ["FAILED", "CANCELLED", "INTERRUPTED"].includes(latest.status);
+  const active = data?.runs.some((run) => ["PENDING", "RUNNING", "WAITING_INPUT", "WAITING_APPROVAL"].includes(run.status));
+  const approval = data?.approvals.find((item) => item.status === "PENDING");
+  const attention = latest?.status === "WAITING_INPUT" || data?.approvals.some((item) => item.status === "PENDING");
+  if (!data && error) return <main className={styles.page}><Link className={styles.back} href="/" aria-label="カレンダーに戻る"><ArrowLeft size={18} aria-hidden="true" /></Link><h1>読み込めませんでした</h1><p role="alert">{error}</p><Button variant="secondary" size="compact" onClick={() => void reload().catch(() => undefined)}>もう一度読み込む</Button></main>;
+  if (!data || (!data.plan && !failed && !attention)) return <main className={styles.page}><Link href="/" className={styles.back} aria-label="カレンダーに戻る"><ArrowLeft size={18} aria-hidden="true" /></Link><PlanLoading demo={fixturesEnabled()} /></main>;
+  const input = data.session.input;
+  const confirmed = ["CONFIRMED", "IN_PROGRESS", "DONE", "REFLECTED"].includes(data.session.status);
+  const budget = [input.budget.mealsJpy, input.budget.facilitiesJpy, input.budget.transitJpy];
+  const budgetLabel = budget.every((value) => value !== null) ? `¥${budget.reduce<number>((sum, value) => sum + (value ?? 0), 0).toLocaleString()}` : "未設定あり";
+  async function act(path: string, body: unknown, success: string) {
+    if (pending) return false;
+    setPending(true); setActionError(""); setMessage("");
+    try {
+      await api(path, { method: "POST", body: JSON.stringify(body) });
+      setMessage(success);
+      await reload();
+      return true;
+    } catch (error) { setActionError(error instanceof Error ? error.message : "保存できませんでした。もう一度お試しください。"); return false; }
+    finally { setPending(false); }
   }
-
-  return (
-    <main className="mx-auto max-w-4xl px-4 py-8 pb-28">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <Link href="/" className="text-sm text-rose">
-            ← 条件に戻る
-          </Link>
-          <h1 className="text-2xl font-semibold">
-            {data.session.input.dateTokyo} {data.session.input.meet.name}
-          </h1>
-          <p className="text-sm text-ink-soft">
-            セッション {data.session.status} / 行程 v{data.plan?.version ?? "—"} / 検証 {data.plan?.validation.state ?? "—"}
-          </p>
-        </div>
-        <Link href={`/memory?couple=${data.couple.id}`} className="text-sm underline">
-          記憶
-        </Link>
-      </div>
-
-      <div className="mt-4">
-        <ModeBanner
-          runtime={data.runtime}
-          emulator={data.emulator}
-          dataBackend={data.dataBackend}
-          authBackend={data.authBackend}
-          mode={latestRun?.mode}
-          overlays={data.overlays}
-        />
-      </div>
-      {error ? <p className="mt-3 text-sm text-rose">{error}</p> : null}
-
-      {autoEvent ? (
-        <section className="mt-4 rounded-2xl bg-moss-soft p-4 text-sm">
-          自動適用しました: {autoEvent.summary}
-        </section>
-      ) : null}
-      {pendingApproval ? (
-        <section className="mt-4 rounded-2xl border border-rose/30 bg-rose-soft p-4">
-          <h2 className="font-medium">承認が必要です</h2>
-          <p className="mt-1 text-sm">{pendingApproval.summary}</p>
-          {pendingApproval.diff ? (
-            <p className="text-sm text-ink-soft">差分: {pendingApproval.diff.summary}（v{pendingApproval.diff.fromVersion}→v{pendingApproval.diff.toVersion}）</p>
-          ) : null}
-          <p className="mt-1 text-xs text-ink-soft">承認するまで現行の行程は変わりません。</p>
-          <div className="mt-3 flex gap-2">
-            <button
-              className="rounded-full bg-rose px-4 py-2 text-sm text-white"
-              onClick={() => void post(`/api/approvals/${pendingApproval.id}/decision`, { decision: "APPROVE" })}
-            >
-              承認する
-            </button>
-            <button
-              className="rounded-full border border-line px-4 py-2 text-sm"
-              onClick={() => void post(`/api/approvals/${pendingApproval.id}/decision`, { decision: "REJECT" })}
-            >
-              却下
-            </button>
-          </div>
-        </section>
-      ) : null}
-
-      <section className="mt-6 grid gap-4 md:grid-cols-3">
-        <Card title="二人の希望">
-          <ul className="space-y-2 text-sm">
-            {data.session.input.preferences.map((p) => (
-              <li key={p.id}>
-                <span className="text-ink-soft">
-                  {p.subject === "SELF" ? "自分" : p.subject === "PARTNER" ? "相手（伝聞）" : "両方"} / {p.priority}
-                </span>
-                <div>{p.content}</div>
-              </li>
-            ))}
-          </ul>
-        </Card>
-        <Card title="残している仮定">
-          <ul className="list-disc pl-4 text-sm">
-            {(data.plan?.assumptions ?? []).map((a) => (
-              <li key={a}>{a}</li>
-            ))}
-          </ul>
-        </Card>
-        <Card title="Plan B">
-          <ul className="space-y-2 text-sm">
-            {(data.plan?.planB ?? []).map((b) => (
-              <li key={b.id}>
-                <div>{b.trigger}</div>
-                {b.isVerifiedAlternative && b.candidateSpotId ? (
-                  <div className="text-ink-soft">代替: {data.spots[b.candidateSpotId]?.name ?? b.candidateSpotId}</div>
-                ) : (
-                  <div className="text-ink-soft">{b.policy ?? "検証済み代替案ではない"}</div>
-                )}
-              </li>
-            ))}
-            {!data.plan?.planB.length ? <li className="text-ink-soft">現時点で追加の仮定は作っていません</li> : null}
-          </ul>
-        </Card>
-      </section>
-
-      <section className="mt-6 rounded-3xl border border-line bg-card p-5">
-        <h2 className="text-lg font-medium">タイムライン</h2>
-        <ol className="mt-4 space-y-4">
-          {(data.plan?.items ?? []).map((item, i) => {
-            const spot = data.spots[item.spotId];
-            return (
-              <li key={item.id} className="rounded-2xl border border-line p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <div className="text-sm text-ink-soft">
-                      {formatTokyoHm(item.startAt)}–{formatTokyoHm(item.endAt)}
-                    </div>
-                    <div className="text-lg font-medium">{spot?.name ?? item.spotId}</div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    {item.locked ? <span className="rounded-full bg-amber-soft px-2 py-1">時刻固定</span> : null}
-                    <span className="rounded-full bg-paper-deep px-2 py-1">{item.progress}</span>
-                    {spot?.environment.value ? <SourceChip kind="API" /> : <SourceChip kind="UNKNOWN" />}
-                  </div>
-                </div>
-                <p className="mt-2 text-sm">{item.reason}</p>
-                {spot?.costForTwoJpy.value ? (
-                  <p className="text-sm text-ink-soft">
-                    二人料金 上限¥{spot.costForTwoJpy.value.max}（取得）
-                  </p>
-                ) : (
-                  <p className="text-sm text-ink-soft">料金不明。予算内とは断定しません</p>
-                )}
-                {spot?.officialUrl ? (
-                  <a className="text-sm text-rose underline" href={spot.officialUrl} target="_blank" rel="noreferrer">
-                    公式サイト
-                  </a>
-                ) : null}
-                <div className="mt-3 flex gap-2">
-                  <button
-                    className="rounded-full border border-line px-3 py-1 text-xs"
-                    onClick={() =>
-                      void post(`/api/sessions/${data.session.id}/progress`, {
-                        itemId: item.id,
-                        progress: "DONE",
-                        status: i === 0 ? "IN_PROGRESS" : undefined,
-                      })
-                    }
-                  >
-                    完了にする
-                  </button>
-                </div>
-              </li>
-            );
-          })}
-        </ol>
-        {data.plan?.validation.issues.length ? (
-          <ul className="mt-4 space-y-1 text-sm">
-            {data.plan.validation.issues.map((iss) => (
-              <li key={iss.code + iss.message}>
-                {iss.severity}: {iss.message}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        {data.plan?.memoryInfluences.length ? (
-          <div className="mt-4 rounded-xl bg-paper-deep p-3 text-sm">
-            <div className="font-medium">記憶の寄与</div>
-            {data.plan.memoryInfluences.map((m) => (
-              <div key={m.memoryId + m.detail}>
-                {m.effect}: {m.detail}
+  function openFeedback(item?: { id: string; name: string; locked: boolean }) {
+    setTarget(item ?? null); setFeedback(""); setActionError(""); setSheet("feedback");
+  }
+  return <main className={styles.page}>
+    <header className={styles.header}><Link href="/" className={styles.back} aria-label="カレンダーに戻る"><ArrowLeft size={18} aria-hidden="true" /></Link><span className={styles.planStatus}>{fixturesEnabled() ? "サンプル" : confirmed ? "予定に追加済み" : "プランを相談中"}</span><Button variant="secondary" size="compact"  onClick={() => setSheet("conditions")}><SlidersHorizontal size={14} />条件</Button></header>
+    <section className={styles.hero}>
+      <div className={styles.dateHeading}><h1>{new Intl.DateTimeFormat("ja-JP", { month: "long", day: "numeric", weekday: "short", timeZone: "Asia/Tokyo" }).format(new Date(`${input.dateTokyo}T12:00:00+09:00`))}</h1><span className={styles.dateSticker} aria-hidden="true"><MoodSticker mood="happy" /></span></div>
+      <div className={styles.facts}><span><CalendarHeart size={13} />{input.startTime}–{input.endTime}</span><span><Wallet size={13} />{budgetLabel}<small>ふたり分</small></span><span>{data.plan?.items.length ?? 0}スポット</span></div>
+    </section>
+    {(error || actionError) && !sheet && <p className={styles.notice} role="alert">{actionError || error}</p>}
+    {message && <p className={styles.statusMessage} role="status"><Check size={14} />{message}</p>}
+    {active && !attention && <p className={styles.statusMessage} role="status">変更案を考えています。このまま少しお待ちください。</p>}
+    {failed && <div className={styles.notice} role="alert"><strong>プランを作り直せませんでした</strong><p>{latest?.error || "時間をおいて、もう一度お試しください。"}</p><Button variant="secondary" size="compact" disabled={pending || active} onClick={() => void act(`/api/sessions/${sessionId}/runs`, { kind: data.plan ? "REPLAN" : "INITIAL_PLAN", trigger: latest?.trigger }, "再度プランを考えています")}>もう一度試す</Button></div>}
+    {approval && <section className={styles.approval}><strong>変更案が届きました</strong><p>{approval.diff?.summary || approval.summary}</p><small>内容を確認してから、プランに反映できます。</small><div className={styles.buttonRow}><Button variant="primary" size="compact" disabled={pending} onClick={() => void act(`/api/approvals/${approval.id}/decision`, { decision: "APPROVE" }, "変更を反映しました")}>この変更にする</Button><Button variant="secondary" size="compact" disabled={pending} onClick={() => void act(`/api/approvals/${approval.id}/decision`, { decision: "REJECT" }, "元のプランを残しました")}>元のままにする</Button></div></section>}
+    {latest?.status === "WAITING_INPUT" && latest.waitingQuestion && <section className={styles.approval}><strong>{latest.waitingQuestion.prompt}</strong><div className={styles.buttonRow}>{latest.waitingQuestion.options.map((answer) => <Button variant="secondary" size="compact" key={answer} disabled={pending} onClick={() => void act(`/api/runs/${latest.id}/answers`, { questionId: latest.waitingQuestion!.id, answer }, "回答を送りました")}>{answer}</Button>)}</div></section>}
+    {!!data.plan?.validation.issues.length && <section className={styles.notice}><strong>お出かけ前に確認</strong>{data.plan.validation.issues.map((issue, index) => <p key={index}>{issue.message}</p>)}</section>}
+    <section className={styles.itinerary} aria-label="この日のスケジュール"><h2 className="sr-only">この日のスケジュール</h2>
+      <div className={styles.meeting}><span className={styles.endpointIcon}><MapPin size={17} /></span><div><small>{input.startTime} 集合</small><strong>{input.meet.name}</strong></div></div>
+      <ol>{data.plan?.items.map((item, index) => {
+        const spot = data.spots[item.spotId];
+        const visual = spotVisual(spot?.name ?? "", spot?.categories ?? []);
+        const duration = Math.max(0, Math.round((Date.parse(item.endAt) - Date.parse(item.startAt)) / 60000));
+        const next = data.plan?.items[index + 1];
+        const gap = next ? Math.round((Date.parse(next.startAt) - Date.parse(item.endAt)) / 60000) : 0;
+        return <li key={item.id}>
+          <div className={styles.timelineTime}><time dateTime={item.startAt}>{formatTokyoHm(item.startAt)}</time><span data-kind={visual.image}><visual.Icon size={19} /></span></div>
+          <div className={styles.stop}>
+            <article className={styles.spot}>
+              {visual.image && <div className={styles.spotImage}><Image src={`/images/itinerary/${visual.image}.jpg`} alt={`${visual.label}のイメージ写真（実際の施設とは異なります）`} fill sizes="(max-width: 430px) 76vw, 330px" /><span className={styles.photoLabel}>イメージ</span></div>}
+              <div className={styles.spotBody}>
+                <div className={styles.spotTop}><span className={styles.category}>{visual.label}</span><small><Clock3 size={12} />{duration}分</small>{item.locked && <small>時間固定</small>}{item.progress === "DONE" && <small><Check size={12} />訪問済み</small>}</div>
+                <h3>{spot?.name ?? "立ち寄りスポット"}</h3>
+                <p>{item.reason}</p>
+                <div className={styles.spotFoot}><span>{spot?.costForTwoJpy.value ? (spot.costForTwoJpy.value.max === 0 ? "無料" : `¥${spot.costForTwoJpy.value.max.toLocaleString()}まで / ふたり`) : "料金は要確認"}</span>{spot?.officialUrl && <a href={spot.officialUrl} target="_blank" rel="noreferrer">公式サイト <ExternalLink size={12} /></a>}</div>
+                {!["DONE", "REFLECTED"].includes(data.session.status) && <button className={styles.changeSpot} disabled={Boolean(active) || pending} onClick={() => openFeedback({ id: item.id, name: spot?.name ?? "このスポット", locked: item.locked })}><MessageCircle size={14} />ここを変えたい<ArrowUpRight size={13} /></button>}
               </div>
-            ))}
+            </article>
+            {gap > 0 && <p className={styles.transition}><span />次の予定まで {gap}分<small>移動・ひと休み</small></p>}
           </div>
-        ) : null}
-      </section>
-
-      <section className="mt-6 rounded-3xl border border-line bg-card p-5">
-        <h2 className="text-lg font-medium">判断トレース</h2>
-        <ol className="mt-3 space-y-2 text-sm">
-          {data.events.map((e) => (
-            <li key={e.eventId} className="flex gap-3">
-              <span className="w-28 shrink-0 text-ink-soft">{e.type}</span>
-              <span>{e.summary}</span>
-              {e.actualModel ? <span className="text-ink-soft">({e.pool}/{e.actualModel})</span> : null}
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <section className="mt-6 flex flex-wrap gap-2">
-        <button
-          className="rounded-full bg-ink px-4 py-2 text-sm text-white"
-          onClick={() => void post(`/api/sessions/${data.session.id}/progress`, { confirm: true, status: "CONFIRMED" })}
-        >
-          この案で確定
-        </button>
-        <button
-          className="rounded-full border border-line px-4 py-2 text-sm"
-          onClick={() =>
-            void post(`/api/sessions/${data.session.id}/scenarios`, {
-              kind: "WEATHER",
-              overlay: { precipitationMm: 8 },
-              from: data.session.input.dateTokyo + "T13:00:00+09:00",
-              to: data.session.input.dateTokyo + "T18:00:00+09:00",
-            })
-          }
-        >
-          雨を注入して再計画
-        </button>
-        <button
-          className="rounded-full border border-line px-4 py-2 text-sm"
-          onClick={() =>
-            void post(`/api/sessions/${data.session.id}/scenarios`, {
-              kind: "TRAVEL_DELAY",
-              overlay: { delayMinutes: 35 },
-              spotId: data.plan?.items.at(-1)?.spotId,
-            })
-          }
-        >
-          移動遅延を注入
-        </button>
-        <button
-          className="rounded-full border border-line px-4 py-2 text-sm"
-          onClick={async () => {
-            const res = await api<{ text: string | null; blocked: boolean }>(
-              `/api/sessions/${data.session.id}/message-draft`,
-              { method: "POST", body: "{}" },
-            );
-            setDraft(res.blocked ? "出力検査で表示を止めました" : res.text);
-          }}
-        >
-          共有文の下書き
-        </button>
-        <button
-          className="rounded-full border border-line px-4 py-2 text-sm"
-          onClick={async () => {
-            const created = await api<{ sessionId: string }>(`/api/couples/${data.couple.id}/sessions`, {
-              method: "POST",
-              body: JSON.stringify(
-                (data.session as { input: Record<string, unknown> }).input,
-              ),
-            });
-            await api(`/api/sessions/${created.sessionId}/runs`, {
-              method: "POST",
-              body: JSON.stringify({ kind: "NEXT_PLAN" }),
-            });
-            router.push(`/sessions/${created.sessionId}`);
-          }}
-        >
-          記憶を載せて次のデート
-        </button>
-        {latestRun ? (
-          <button
-            className="rounded-full border border-line px-4 py-2 text-sm"
-            onClick={async () => {
-              const res = await api<{ replayId: string }>(`/api/runs/${latestRun.id}/replay-export`, {
-                method: "POST",
-                body: "{}",
-              });
-              router.push(`/replay/${res.replayId}`);
-            }}
-          >
-            REPLAYを保存
-          </button>
-        ) : null}
-      </section>
-
-      {draft ? (
-        <pre className="mt-4 whitespace-pre-wrap rounded-2xl bg-paper-deep p-4 text-sm">{draft}</pre>
-      ) : null}
-
-      <section className="mt-8 rounded-3xl border border-line bg-card p-5">
-        <h2 className="text-lg font-medium">振り返り</h2>
-        <textarea
-          className="mt-3 w-full rounded-xl border border-line bg-paper p-3 text-sm"
-          rows={3}
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-        />
-        <button
-          className="mt-3 rounded-full bg-rose px-4 py-2 text-sm text-white"
-          onClick={async () => {
-            await post(`/api/sessions/${data.session.id}/progress`, { status: "DONE" });
-            const run = await api<{ runId: string }>(`/api/sessions/${data.session.id}/runs`, {
-              method: "POST",
-              body: JSON.stringify({ kind: "REFLECTION" }),
-            });
-            await reload();
-            void run;
-          }}
-        >
-          確認質問をつくる
-        </button>
-        {latestRun?.waitingQuestion ? (
-          <div className="mt-4 space-y-2">
-            <p>{latestRun.waitingQuestion.prompt}</p>
-            {latestRun.waitingQuestion.options.map((opt) => (
-              <button
-                key={opt}
-                className="block w-full rounded-xl border border-line px-3 py-2 text-left text-sm"
-                onClick={() =>
-                  void post(`/api/runs/${latestRun.id}/answers`, {
-                    questionId: latestRun.waitingQuestion!.id,
-                    answer: opt,
-                  })
-                }
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {data.memoryCandidates.length ? (
-          <p className="mt-3 text-sm text-ink-soft">
-            候補が {data.memoryCandidates.length} 件あります。承認するまで有効な記憶にはなりません。
-          </p>
-        ) : null}
-      </section>
-
-      <CostBadge
-        llmUsd={cost.usdKnown ? cost.usd : null}
-        llmJpy={cost.llm}
-        apiJpy={cost.api}
-        hard={cost.hard}
-        mundane={cost.mundane}
-        unaccounted={cost.unaccounted}
-      />
-    </main>
-  );
+        </li>;
+      })}</ol>
+      {!data.plan?.items.length && <p className={styles.notice}>表示できる行程がまだありません。</p>}
+      <div className={styles.meeting}><span className={styles.endpointIcon}><Check size={17} /></span><div><small>{input.endTime}ごろ 解散</small><strong>{input.end.name}</strong></div></div>
+    </section>
+    {!["DONE", "REFLECTED"].includes(data.session.status) && <button className={styles.wholeFeedback} disabled={Boolean(active) || pending} onClick={() => openFeedback()}><MoodSticker mood="relaxed" /><span><strong>もう少し、こんな一日にしたい</strong><small>プラン全体の希望を伝える</small></span><ArrowUpRight size={16} /></button>}
+    <footer className={styles.footer}>{confirmed ? <ButtonLink variant="secondary" fullWidth href="/"><Check size={17} />カレンダーで予定を見る</ButtonLink> : <Button fullWidth disabled={saving || pending || Boolean(active) || !data.plan?.items.length || data.plan.validation.state === "FAIL" || Boolean(attention)} onClick={async () => { setSaving(true); try { await act(`/api/sessions/${sessionId}/progress`, { confirm: true, status: "CONFIRMED" }, "カレンダーに予定を追加しました"); } finally { setSaving(false); } }}>{saving ? "保存しています…" : "このプランで決める"}<Check size={17} /></Button>}</footer>
+    {sheet === "feedback" && <HomeSheet title={target ? "ここ、少し変えよう" : "プランの希望を伝える"} onClose={() => setSheet(null)}>
+      <form className={styles.feedbackForm} onSubmit={async (event) => {
+        event.preventDefault();
+        if (!feedback.trim() || pending || active || !fixturesEnabled()) return;
+        const trigger = `${target ? `対象: ${target.name}（行程ID: ${target.id}）。` : "プラン全体について。"}希望: ${feedback.trim()}。固定予定と訪問済みの予定は維持し、必要な前後の予定も調整してください。`;
+        if (await act(`/api/sessions/${sessionId}/runs`, { kind: "REPLAN", trigger }, fixturesEnabled() ? "サンプルとして希望を受け付けました。実際の再提案は行いません。" : "希望を送りました。変更案を考えています。")) setSheet(null);
+      }}>
+        <div className={styles.feedbackIntro}><MoodSticker mood="relaxed" /><div><strong>{target?.name ?? "一日の過ごし方"}</strong><p>気になることを、ひとこと教えてね。</p></div></div>
+        {target?.locked && <p className={styles.fieldHint}>時間が決まっている予定です。固定条件を守れる範囲で調整します。</p>}
+        <div className={styles.quickOptions}>{["別の場所がいい", "もう少し予算を抑えたい", "ゆっくり過ごしたい", "移動を少なくしたい"].map((text) => <Button variant="secondary" size="compact" type="button" key={text} disabled={pending} onClick={() => setFeedback((value) => value ? `${value}
+${text}` : text)}>{text}</Button>)}</div>
+        <label className={styles.feedbackLabel}>どんなふうに変えたい？<textarea autoFocus rows={3} maxLength={1000} value={feedback} disabled={pending} onChange={(event) => setFeedback(event.target.value)} placeholder="例えば、ここは行ったことがあるから、別の美術館がいいな。" /></label>
+        <p className={styles.fieldHint}>{fixturesEnabled() ? "現在は操作確認用のサンプルです。" : "変更希望の送信は準備中です。"}</p>
+        {actionError && <p className={styles.notice} role="alert">{actionError}</p>}
+        <Button fullWidth type="submit" disabled={!feedback.trim() || pending || Boolean(active) || !fixturesEnabled()}>{pending ? "送っています…" : "この希望で考え直す"}<ArrowUpRight size={17} /></Button>
+      </form>
+    </HomeSheet>}
+    {sheet === "conditions" && <HomeSheet title="プランをつくった条件" onClose={() => setSheet(null)}>
+      <div className={styles.conditionSheet}><p>最初の3ステップで入力した内容です。</p><dl><dt>時間</dt><dd>{input.startTime}〜{input.endTime}</dd><dt>集合 → 解散</dt><dd>{input.meet.name} → {input.end.name}</dd><dt>ふたりの予算</dt><dd>{budgetLabel}</dd></dl>
+        <h3>伝えた希望</h3>{input.preferences.map((item) => <p className={styles.preference} key={item.id}>{item.content}</p>)}
+        {!!data.plan?.assumptions.length && <><h3>まだ確認できていないこと</h3>{data.plan.assumptions.map((item) => <p key={item}>{item}</p>)}</>}
+        {!!data.plan?.planB.length && <><h3>予定が変わったら</h3>{data.plan.planB.map((item) => <p key={item.id}><strong>{item.trigger}</strong><br />{item.isVerifiedAlternative && item.candidateSpotId ? data.spots[item.candidateSpotId]?.name : item.policy || "代わりのプランを検討します"}</p>)}</>}
+      </div>
+    </HomeSheet>}
+  </main>;
 }
