@@ -53,9 +53,9 @@ export const MODEL_PARAMS = {
 } as const;
 
 export const PLACES_FIELD_MASK_SEARCH =
-  "places.id,places.displayName,places.location,places.types,places.primaryType,places.googleMapsUri";
+  "places.id,places.displayName,places.location,places.types,places.primaryType,places.googleMapsUri,places.photos.name,places.photos.authorAttributions";
 
 export const PLACES_FIELD_MASK_DETAILS =
-  "id,displayName,location,types,primaryType,websiteUri,googleMapsUri,regularOpeningHours,currentOpeningHours,priceLevel,priceRange,businessStatus";
+  "id,displayName,location,types,primaryType,websiteUri,googleMapsUri,regularOpeningHours,currentOpeningHours,priceLevel,priceRange,businessStatus,photos.name,photos.authorAttributions";
 
 export const ROUTES_FIELD_MASK = "routes.duration,routes.distanceMeters";

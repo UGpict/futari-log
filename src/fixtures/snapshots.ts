@@ -16,7 +16,11 @@ function versions() {
   return { schema: "0.5.0", prompt: "0.5.0", tool: "0.5.0", modelSettings: "0.5.0", git: "fixture" };
 }
 
-function baseSpot(id: string, name: string, extra: { officialUrl?: string | null } = {}) {
+function baseSpot(
+  id: string,
+  name: string,
+  extra: { officialUrl?: string | null; imageUrl?: string | null } = {},
+) {
   return {
     id,
     name,
@@ -28,6 +32,10 @@ function baseSpot(id: string, name: string, extra: { officialUrl?: string | null
     restEase: { value: "EASY", evidenceIds: [] },
     standingBurden: { value: "LOW", evidenceIds: [] },
     officialUrl: extra.officialUrl ?? null,
+    imageUrl: extra.imageUrl ?? null,
+    imageSourceUrl: extra.imageUrl ? "https://example.com/source" : null,
+    imageProvider: extra.imageUrl ? "fixture" : null,
+    imageAttributions: extra.imageUrl ? [{ displayName: "fixture photographer", uri: null }] : [],
   };
 }
 
@@ -159,7 +167,9 @@ function baseSnapshot(id: string, overrides: Partial<SessionSnapshot> = {}): Ses
       memoryInfluences: [],
     },
     spots: {
-      ChIJ_noritake: baseSpot("ChIJ_noritake", "ノリタケの森"),
+      ChIJ_noritake: baseSpot("ChIJ_noritake", "ノリタケの森", {
+        imageUrl: "https://example.com/noritake.jpg",
+      }),
       "mock:aichi-art-museum": baseSpot("mock:aichi-art-museum", "愛知県美術館"),
       ChIJ_herbs: baseSpot("ChIJ_herbs", "ハーブス 栄本店", {
         officialUrl: "https://example.com/herbs",

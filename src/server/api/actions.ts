@@ -37,6 +37,9 @@ export function snapshotOf(couple: CoupleBundle, bundle: SessionBundle) {
   const runs = Object.values(bundle.runs).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const events = Object.values(bundle.events).sort((a, b) => a.seq - b.seq);
   const approvals = Object.values(couple.approvals).filter((a) => a.sessionId === bundle.session.id);
+  const groundingEv = Object.values(bundle.evidence).find(
+    (e) => e.provider === "gemini-grounding" && e.sourceField === "searchEntryPoint",
+  );
   return {
     runtime: env.runtime,
     emulator: env.emulator,
@@ -55,6 +58,12 @@ export function snapshotOf(couple: CoupleBundle, bundle: SessionBundle) {
     memoryCandidates: Object.values(couple.memoryCandidates),
     scenarios: Object.values(bundle.scenarios),
     overlays: Object.values(bundle.scenarios).map((s) => s.kind),
+    grounding: groundingEv
+      ? {
+          queries: groundingEv.sourceRef ? groundingEv.sourceRef.split(" | ").filter(Boolean) : [],
+          searchEntryPointHtml: groundingEv.note,
+        }
+      : null,
   };
 }
 

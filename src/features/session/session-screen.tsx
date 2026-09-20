@@ -2,7 +2,7 @@
 
 import { Button, ButtonLink } from "@/components/button";
 
-import Image from "next/image";
+import { SpotPhoto } from "./spot-photo";
 import { useState } from "react";
 import { Check, MessageCircle, SlidersHorizontal, ArrowUpRight, ExternalLink, Clock3, MapPin } from "lucide-react";
 import { useSession } from "@/client/hooks/use-session";
@@ -87,6 +87,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
     {active && !attention && <p className={styles.workingMessage} role="status">変更案を考えています。このまま少しお待ちください。</p>}
     {failed && <div className={styles.notice} role="alert"><strong>プランを作り直せませんでした</strong><p>{latest?.error || "時間をおいて、もう一度お試しください。"}</p><Button variant="secondary" size="compact" disabled={pending || active} onClick={() => void act(`/api/sessions/${sessionId}/runs`, { kind: data.plan ? "REPLAN" : "INITIAL_PLAN", trigger: latest?.trigger }, "再度プランを考えています")}>もう一度試す</Button></div>}
     {approval && <section className={styles.approval}><strong>変更案が届きました</strong><p>{approval.diff?.summary || approval.summary}</p><small>内容を確認してから、プランに反映できます。</small><div className={styles.buttonRow}><Button variant="primary" size="compact" disabled={pending} onClick={() => void act(`/api/approvals/${approval.id}/decision`, { decision: "APPROVE" }, "変更を反映しました")}>この変更にする</Button><Button variant="secondary" size="compact" disabled={pending} onClick={() => void act(`/api/approvals/${approval.id}/decision`, { decision: "REJECT" }, "元のプランを残しました")}>元のままにする</Button></div></section>}
+    {data.grounding?.searchEntryPointHtml && <iframe title="検索情報の出典" sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={data.grounding.searchEntryPointHtml} className={styles.searchSources} />}
     {latest?.status === "WAITING_INPUT" && latest.waitingQuestion && <section className={styles.approval}><strong>{latest.waitingQuestion.prompt}</strong><div className={styles.buttonRow}>{latest.waitingQuestion.options.map((answer) => <Button variant="secondary" size="compact" key={answer} disabled={pending} onClick={() => void act(`/api/runs/${latest.id}/answers`, { questionId: latest.waitingQuestion!.id, answer }, "回答を送りました")}>{answer}</Button>)}</div></section>}
     {!!data.plan?.validation.issues.length && <section className={styles.notice}><strong>お出かけ前に確認</strong>{data.plan.validation.issues.map((issue, index) => <p key={index}>{issue.message}</p>)}</section>}
     <section className={styles.itinerary} aria-label="この日のスケジュール"><h2 className="sr-only">この日のスケジュール</h2>
@@ -101,7 +102,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
           <div className={styles.timelineTime}><time dateTime={item.startAt}>{formatTokyoHm(item.startAt)}</time><span data-kind={visual.id}><visual.Icon size={19} /></span></div>
           <div className={styles.stop}>
             {replanningItemId === item.id ? <article className={styles.replanningSpot} aria-label={`${spot?.name ?? "この場所"}の変更案を考えています`}><PlanLoading demo={fixturesEnabled()} compact /></article> : <article className={styles.spot}>
-              {visual.image && <div className={styles.spotImage}><Image src={`/images/itinerary/${visual.image}.jpg`} alt={`${visual.label}のイメージ写真（実際の施設とは異なります）`} fill sizes="(max-width: 430px) 76vw, 330px" /><span className={styles.photoLabel}>イメージ</span></div>}
+              <SpotPhoto key={`${item.id}:${spot?.imageUrl ?? ""}`} spot={spot} fallback={visual.image} label={visual.label} />
               <div className={styles.spotBody}>
                 <div className={styles.spotTop}><span className={styles.category}>{visual.label}</span><small><Clock3 size={12} />{duration}分</small>{item.locked && <small>時間固定</small>}{item.progress === "DONE" && <small><Check size={12} />訪問済み</small>}</div>
                 <h3>{spot?.name ?? "立ち寄りスポット"}</h3>

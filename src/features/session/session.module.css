@@ -75,6 +75,9 @@
 @keyframes replanCardIn { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: scale(1); } }
 .spotImage { position: relative; height: 130px; background: #f1e5e9; }
 .spotImage img { object-fit: cover; }
+.photoCredits { display: flex; flex-wrap: wrap; gap: 4px 10px; padding: 6px 12px; font-size: 10px; }
+.photoCredits a { color: inherit; text-decoration: underline; }
+.searchSources { width: 100%; border: 0; height: 100px; }
 .photoLabel { position: absolute; bottom: 7px; right: 8px; border-radius: 5px; padding: 2px 5px; color: white; background: #40323b70; font-size: 8px; }
 .spotBody { padding: 11px 13px 0; }
 .spotTop { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; color: #9d8c99; }
