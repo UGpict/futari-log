@@ -8,6 +8,7 @@ substitutions:
   _ORCA_BASE: https://api.orcarouter.ai/v1
   _ORCA_MUNDANE: openai/gpt-4o-mini
   _ORCA_HARD: openai/gpt-4o
+  _TAG: latest
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -17,9 +18,9 @@ steps:
     args:
       - build
       - --build-arg
-      - GIT_COMMIT=$SHORT_SHA
+      - GIT_COMMIT=$_TAG
       - -t
-      - $_REGION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/app:$SHORT_SHA
+      - $_REGION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/app:$_TAG
       - -t
       - $_REGION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/app:latest
       - .
@@ -36,7 +37,7 @@ steps:
       - run
       - deploy
       - $_SERVICE
-      - --image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/app:$SHORT_SHA
+      - --image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/app:$_TAG
       - --region=$_REGION
       - --platform=managed
       - --allow-unauthenticated
@@ -46,9 +47,9 @@ steps:
       - --min-instances=1
       - --no-cpu-throttling
       - --timeout=300
-      - --set-env-vars=NODE_ENV=production,APP_RUNTIME=$_APP_RUNTIME,ENABLE_DEMO_CONTROLS=true,COOKIE_SECURE=true,DATA_BACKEND=firestore,FIREBASE_PROJECT_ID=$PROJECT_ID,NEXT_PUBLIC_FIREBASE_PROJECT_ID=$PROJECT_ID,ORCAROUTER_BASE_URL=$_ORCA_BASE,ORCAROUTER_MUNDANE_MODEL=$_ORCA_MUNDANE,ORCAROUTER_HARD_MODEL=$_ORCA_HARD,DEMO_AREA_NAME=名古屋駅周辺,DEMO_LAT=35.170915,DEMO_LNG=136.881537,DEMO_DATE=2026-09-19,WORKER_CONCURRENCY=1
+      - --set-env-vars=NODE_ENV=production,APP_RUNTIME=$_APP_RUNTIME,ENABLE_DEMO_CONTROLS=true,COOKIE_SECURE=true,DATA_BACKEND=firestore,FIREBASE_PROJECT_ID=$PROJECT_ID,NEXT_PUBLIC_FIREBASE_PROJECT_ID=$PROJECT_ID,ORCAROUTER_BASE_URL=$_ORCA_BASE,ORCAROUTER_MUNDANE_MODEL=$_ORCA_MUNDANE,ORCAROUTER_HARD_MODEL=$_ORCA_HARD,DEMO_AREA_NAME=東京駅周辺,DEMO_LAT=35.681236,DEMO_LNG=139.767125,DEMO_DATE=2026-09-19,WORKER_CONCURRENCY=1
       - --set-secrets=ORCAROUTER_API_KEY=ORCAROUTER_API_KEY:latest,GOOGLE_MAPS_API_KEY=GOOGLE_MAPS_API_KEY:latest,NEXT_PUBLIC_FIREBASE_API_KEY=NEXT_PUBLIC_FIREBASE_API_KEY:latest,NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:latest,NEXT_PUBLIC_FIREBASE_APP_ID=NEXT_PUBLIC_FIREBASE_APP_ID:latest
 
 images:
-  - $_REGION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/app:$SHORT_SHA
+  - $_REGION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/app:$_TAG
   - $_REGION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/app:latest

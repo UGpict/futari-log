@@ -1,8 +1,9 @@
 "use client";
 
-import { FX } from "@/config/public";
+import { FX, formatYen } from "@/config/public";
 
 export function CostBadge(props: {
+  llmUsd?: number | null;
   llmJpy: number | null;
   apiJpy: number | null;
   hard: number;
@@ -10,15 +11,13 @@ export function CostBadge(props: {
   unaccounted: number;
   replay?: boolean;
 }) {
-  const total =
-    props.llmJpy != null || props.apiJpy != null
-      ? (props.llmJpy ?? 0) + (props.apiJpy ?? 0)
-      : null;
+  const jpyKnown = props.llmJpy != null || props.apiJpy != null;
+  const jpyTotal = jpyKnown ? (props.llmJpy ?? 0) + (props.apiJpy ?? 0) : null;
   const label = props.replay ? "収録時のコスト" : "今回の概算";
-  const amount =
-    total == null
-      ? `集計可能分・未計上${props.unaccounted}回`
-      : `¥${total}・高性能${props.hard}回／安価${props.mundane}回`;
+  const yenLabel = jpyKnown ? formatYen(jpyTotal) : "換算不能";
+  const usdLabel = props.llmUsd != null ? ` / $${props.llmUsd.toFixed(6)}` : "";
+  const unaccounted = props.unaccounted > 0 ? `・未計上${props.unaccounted}回` : "";
+  const amount = `${yenLabel}${usdLabel}・高性能${props.hard}回／安価${props.mundane}回${unaccounted}`;
   return (
     <div className="fixed right-4 bottom-4 z-40 rounded-full border border-line bg-card px-4 py-2 text-sm shadow-md">
       <div className="text-[11px] text-ink-soft">{label}</div>

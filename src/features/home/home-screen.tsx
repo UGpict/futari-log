@@ -6,6 +6,7 @@ import { api } from "@/client/api";
 import { useMe } from "@/client/hooks/use-me";
 import { ModeBanner } from "@/components/mode-banner";
 import { Field } from "@/components/field";
+import { tokyoToday } from "@/config/public";
 
 export function HomeScreen() {
   const router = useRouter();
@@ -23,19 +24,18 @@ export function HomeScreen() {
     transit: "2000",
     self: "散歩と展示",
     partner: "甘いもの",
-    locked: true,
     auto: false,
   });
 
-  const dateTokyo = form.dateTokyo || me?.demoDate || "2026-09-19";
+  const dateTokyo = form.dateTokyo || me?.demoDate || tokyoToday();
   const meetName =
     form.meetName ||
-    (me?.demoAreaName?.includes("名古屋") ? "名古屋駅" : me?.demoAreaName) ||
-    "名古屋駅";
+    (me?.demoAreaName?.includes("東京") ? "東京駅" : me?.demoAreaName) ||
+    "東京駅";
   const endName =
     form.endName ||
-    (me?.demoAreaName?.includes("名古屋") ? "名古屋駅" : me?.demoAreaName) ||
-    "名古屋駅";
+    (me?.demoAreaName?.includes("東京") ? "東京駅" : me?.demoAreaName) ||
+    "東京駅";
 
   async function submit() {
     if (!me) return;
@@ -50,9 +50,6 @@ export function HomeScreen() {
         });
         coupleId = created.id;
       }
-      const date = dateTokyo;
-      const lockedStart = `${date}T15:00:00+09:00`;
-      const lockedEnd = `${date}T16:00:00+09:00`;
       const session = await api<{ sessionId: string }>(`/api/couples/${coupleId}/sessions`, {
         method: "POST",
         body: JSON.stringify({
@@ -63,13 +60,13 @@ export function HomeScreen() {
             name: meetName,
             lat: me.demoLat,
             lng: me.demoLng,
-            spotId: "mock:nagoya-station",
+            spotId: null,
           },
           end: {
             name: endName,
             lat: me.demoLat,
             lng: me.demoLng,
-            spotId: "mock:nagoya-station",
+            spotId: null,
           },
           budget: {
             mealsJpy: Number(form.meals),
@@ -92,19 +89,7 @@ export function HomeScreen() {
               source: "PARTNER_STATEMENT_REPORTED",
             },
           ],
-          fixedAppointments: form.locked
-            ? [
-                {
-                  id: "fix_art",
-                  label: "愛知県美術館",
-                  spotId: "mock:aichi-art-museum",
-                  spotNameHint: "愛知県美術館",
-                  startAt: lockedStart,
-                  endAt: lockedEnd,
-                  kind: "TIME_FIXED",
-                },
-              ]
-            : [],
+          fixedAppointments: [],
           autoApply: {
             enabled: form.auto,
             acknowledgedScope: form.auto
@@ -230,14 +215,6 @@ export function HomeScreen() {
             />
           </Field>
         </div>
-        <label className="mt-4 flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={form.locked}
-            onChange={(e) => setForm({ ...form, locked: e.target.checked })}
-          />
-          愛知県美術館 15:00–16:00 を時刻固定にする（予約済みとは表示しない）
-        </label>
         <label className="mt-2 flex items-start gap-2 text-sm">
           <input
             type="checkbox"

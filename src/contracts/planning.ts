@@ -60,6 +60,8 @@ export const planningInputSchema = z.object({
   areaLat: z.number(),
   areaLng: z.number(),
   radiusMeters: z.number().default(2500),
+  selectedEventIds: z.array(z.string()).optional(),
+  eventFallbackAcknowledged: z.boolean().optional(),
 });
 export type PlanningInput = z.infer<typeof planningInputSchema>;
 

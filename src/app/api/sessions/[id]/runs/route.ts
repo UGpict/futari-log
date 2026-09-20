@@ -2,6 +2,7 @@ import { json, requireUid, idempotencyKey, readJson } from "@/server/api/http";
 import { startRun } from "@/server/api/actions";
 import { sha256 } from "@/lib/ids";
 import { startRunRequestSchema } from "@/contracts/session";
+import { dispatchProposal } from "@/server/workflows/dispatch";
 
 export async function POST(
   request: Request,
@@ -23,5 +24,6 @@ export async function POST(
     bodyHash: sha256(JSON.stringify({ kind, trigger })),
   });
   if (!result.ok) return json({ error: result.error }, result.status);
+  if (!result.duplicated) void dispatchProposal(result.runId, kind);
   return json({ runId: result.runId }, 202);
 }

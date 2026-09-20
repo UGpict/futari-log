@@ -50,7 +50,7 @@ export async function fixtureResponse<T>(path: string, init?: RequestInit): Prom
     return { scenarioId: "scen_fx", runId: "run_fx" } as T;
   }
   if (/\/api\/sessions\/[^/]+\/message-draft$/.test(url) && method === "POST") {
-    return { text: "名古屋駅集合でどうかな。", blocked: false } as T;
+    return { text: "東京駅集合でどうかな。", blocked: false } as T;
   }
   if (/\/api\/approvals\/[^/]+\/decision$/.test(url) && method === "POST") {
     return { ok: true } as T;

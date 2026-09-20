@@ -53,3 +53,5 @@ import type { SessionSnapshot } from "@/contracts";
 const me = await ensureAuth();
 const snap = await api<SessionSnapshot>(`/api/sessions/${id}`);
 ```
+
+イベントカタログの契約・実レスポンス・確認状態は `docs/catalog-ui.md`。UI コードはまだ触らない。

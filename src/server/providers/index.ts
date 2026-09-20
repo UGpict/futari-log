@@ -15,7 +15,17 @@ import type {
 import { newId } from "@/lib/ids";
 import { realNowIso, toTokyoParts } from "@/lib/time";
 import { getCatalogSpot, MOCK_CATALOG, searchCatalog, type CatalogSpot } from "./catalog";
+import { getEvent, getVenue } from "@/server/catalog/repo";
+import { catalogEventToSpot, venueHours } from "@/server/catalog/toSpot";
 import type { ScenarioOverlay } from "@/domain/schemas";
+import {
+  assessHours,
+  parsePlaceHours,
+  parseYenRange,
+  type PlaceHoursRule,
+} from "./placeFacts";
+
+export type { PlaceHoursRule };
 
 export type ProviderCtx = {
   runId: string;
@@ -23,6 +33,7 @@ export type ProviderCtx = {
   cache: Map<string, { at: string; value: unknown; stale: boolean }>;
   httpAttempts: number;
   onHttp: (info: { provider: string; cacheHit: boolean; attempt: number }) => void | Promise<void>;
+  placeHours?: Record<string, PlaceHoursRule[]>;
 };
 
 function evidence(partial: Omit<Evidence, "id"> & { id?: string }): Evidence {
@@ -92,10 +103,18 @@ function toSpot(c: CatalogSpot): Spot {
 
 export async function searchSpots(
   ctx: ProviderCtx,
-  args: { area: { lat: number; lng: number; name: string }; category: string; radiusMeters: number },
+  args: {
+    area: { lat: number; lng: number; name: string };
+    category: string;
+    radiusMeters: number;
+    rankPreference?: "POPULARITY" | "DISTANCE";
+    includedTypes?: string[];
+  },
 ): Promise<{ spots: Spot[]; evidence: Evidence[] }> {
   const env = getEnv();
-  const key = `search:${args.area.lat}:${args.area.lng}:${args.category}:${args.radiusMeters}`;
+  const rank = args.rankPreference ?? "POPULARITY";
+  const typesKey = (args.includedTypes ?? []).join(",");
+  const key = `search:${args.area.lat}:${args.area.lng}:${args.category}:${args.radiusMeters}:${rank}:${typesKey}`;
   const cached = cacheGet<{ spots: Spot[]; evidence: Evidence[] }>(ctx, key, CACHE_TTL_MS.spotBasics);
   if (cached) {
     await ctx.onHttp({ provider: env.runtime === "LIVE" ? "places" : "mock-places", cacheHit: true, attempt: ctx.httpAttempts });
@@ -107,7 +126,7 @@ export async function searchSpots(
     return result;
   }
   const result = await counted(ctx, "mock-places", async () => {
-    const found = searchCatalog(args.category).slice(0, 20);
+    const found = searchCatalog(args.category, args.area, args.radiusMeters).slice(0, 20);
     const evidenceList = [
       evidence({
         kind: "API",
@@ -125,16 +144,45 @@ export async function searchSpots(
   return result;
 }
 
+export type SpotDetails = {
+  spot: Spot | null;
+  evidence: Evidence[];
+  hours: PlaceHoursRule[];
+};
+
 export async function getSpotDetails(
   ctx: ProviderCtx,
   args: { spotId: string },
-): Promise<{ spot: Spot | null; evidence: Evidence[] }> {
+): Promise<SpotDetails> {
   const env = getEnv();
   const key = `details:${args.spotId}`;
-  const cached = cacheGet<{ spot: Spot | null; evidence: Evidence[] }>(ctx, key, CACHE_TTL_MS.spotBasics);
+  const cached = cacheGet<SpotDetails>(ctx, key, CACHE_TTL_MS.spotBasics);
   if (cached) {
     await ctx.onHttp({ provider: "places", cacheHit: true, attempt: ctx.httpAttempts });
     return cached;
+  }
+  if (args.spotId.startsWith("evt_")) {
+    const event = await getEvent(args.spotId);
+    const dateHint = event?.dateStart ?? event?.fetchedAt.slice(0, 10) ?? "1970-01-01";
+    const spot = event ? catalogEventToSpot(event, dateHint) : null;
+    const venue = event?.venueId ? await getVenue(event.venueId) : null;
+    const result: SpotDetails = {
+      spot,
+      hours: venueHours(venue),
+      evidence: [
+        evidence({
+          kind: event ? "API" : "UNKNOWN",
+          provider: "event-catalog",
+          sourceRef: args.spotId,
+          sourceField: "catalogEvents",
+          fetchedAt: event?.fetchedAt ?? realNowIso(),
+          validFor: null,
+          note: event ? "カタログイベント。施設営業時間とは別" : "カタログイベントなし",
+        }),
+      ],
+    };
+    cacheSet(ctx, key, result);
+    return result;
   }
   if (env.runtime === "LIVE" && env.googleMapsApiKey && !args.spotId.startsWith("mock:")) {
     const result = await counted(ctx, "places", () => liveDetails(env.googleMapsApiKey!, args.spotId));
@@ -143,9 +191,10 @@ export async function getSpotDetails(
   }
   const result = await counted(ctx, "mock-places", async () => {
     const c = getCatalogSpot(args.spotId);
-    if (!c) return { spot: null, evidence: [] };
+    if (!c) return { spot: null, evidence: [], hours: [] };
     return {
       spot: toSpot(c),
+      hours: c.hours,
       evidence: [
         evidence({
           kind: "API",
@@ -281,7 +330,8 @@ export async function estimateTravel(
   );
   const delayMinutes = delayOverlay ? Number(delayOverlay.overlay.delayMinutes ?? 25) : 0;
   const env = getEnv();
-  const key = `travel:${args.from.lat}:${args.from.lng}:${args.to.lat}:${args.to.lng}:${args.mode}:${args.departureAt}`;
+  const day = toTokyoParts(args.departureAt).date;
+  const key = `travel:${args.from.lat}:${args.from.lng}:${args.to.lat}:${args.to.lng}:${args.mode}:${day}`;
   const cached = cacheGet<{
     durationMinutes: number | null;
     distanceMeters: number | null;
@@ -292,7 +342,7 @@ export async function estimateTravel(
   let base = cached;
   if (!base) {
     if (env.runtime === "LIVE" && env.googleMapsApiKey) {
-      base = await counted(ctx, "routes", () => liveRoute(env.googleMapsApiKey!, args));
+      base = await liveRouteWithFallback(ctx, env.googleMapsApiKey, args);
     } else {
       base = await counted(ctx, "mock-routes", async () => {
         const meters = haversineMeters(args.from, args.to);
@@ -351,34 +401,14 @@ export async function checkOpen(
     (o) => o.kind === "SPOT_FULL" && o.target.spotId === args.spotId,
   );
   const result = await counted(ctx, env.runtime === "LIVE" ? "places" : "mock-places", async () => {
-    const catalog = getCatalogSpot(args.spotId);
-    if (!catalog) {
-      return {
-        spotId: args.spotId,
-        startAt: args.startAt,
-        endAt: args.endAt,
-        state: "UNKNOWN" as const,
-        evidenceIds: [],
-      };
-    }
-    const start = toTokyoParts(args.startAt);
-    const end = toTokyoParts(args.endAt);
-    const rule = catalog.hours.find((h) => h.days.includes(start.weekday));
-    let state: OpeningAssessment["state"] = "UNKNOWN";
-    if (!rule) state = "CLOSED";
-    else {
-      const openMin = hmToMin(rule.open);
-      const closeMin = hmToMin(rule.close);
-      const stayStart = start.hour * 60 + start.minute;
-      const stayEnd = end.hour * 60 + end.minute;
-      state = stayStart >= openMin && stayEnd <= closeMin ? "OPEN" : "CLOSED";
-    }
+    const hours = ctx.placeHours?.[args.spotId] ?? getCatalogSpot(args.spotId)?.hours;
+    const state = assessHours(hours, args.startAt, args.endAt, toTokyoParts);
     return {
       spotId: args.spotId,
       startAt: args.startAt,
       endAt: args.endAt,
       state,
-      evidenceIds: [`open-${args.spotId}`],
+      evidenceIds: state === "UNKNOWN" ? [] : [`open-${args.spotId}`],
     };
   });
   if (full) {
@@ -388,16 +418,17 @@ export async function checkOpen(
   return result;
 }
 
-function hmToMin(hm: string): number {
-  const [h, m] = hm.split(":").map(Number);
-  return h * 60 + m;
-}
-
 async function liveSearch(
   apiKey: string,
-  args: { area: { lat: number; lng: number }; category: string; radiusMeters: number },
+  args: {
+    area: { lat: number; lng: number };
+    category: string;
+    radiusMeters: number;
+    rankPreference?: "POPULARITY" | "DISTANCE";
+    includedTypes?: string[];
+  },
 ): Promise<{ spots: Spot[]; evidence: Evidence[] }> {
-  const includedTypes = categoryToPlaceTypes(args.category);
+  const includedTypes = args.includedTypes?.length ? args.includedTypes : categoryToPlaceTypes(args.category);
   const res = await fetch("https://places.googleapis.com/v1/places:searchNearby", {
     method: "POST",
     headers: {
@@ -409,6 +440,7 @@ async function liveSearch(
       includedTypes,
       maxResultCount: 20,
       languageCode: "ja",
+      ...(args.rankPreference === "DISTANCE" ? { rankPreference: "DISTANCE" } : {}),
       locationRestriction: {
         circle: {
           center: { latitude: args.area.lat, longitude: args.area.lng },
@@ -419,7 +451,8 @@ async function liveSearch(
     signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) {
-    throw new Error(`places searchNearby ${res.status}`);
+    const detail = (await res.text().catch(() => "")).slice(0, 180);
+    throw new Error(`places searchNearby ${res.status} ${args.category} ${detail}`);
   }
   const data = (await res.json()) as {
     places?: {
@@ -460,7 +493,7 @@ async function liveSearch(
   };
 }
 
-async function liveDetails(apiKey: string, spotId: string): Promise<{ spot: Spot | null; evidence: Evidence[] }> {
+async function liveDetails(apiKey: string, spotId: string): Promise<SpotDetails> {
   const res = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(spotId)}`, {
     headers: {
       "X-Goog-Api-Key": apiKey,
@@ -475,11 +508,32 @@ async function liveDetails(apiKey: string, spotId: string): Promise<{ spot: Spot
     location?: { latitude: number; longitude: number };
     types?: string[];
     websiteUri?: string;
-    priceRange?: { startPrice?: { units?: string }; endPrice?: { units?: string } };
+    regularOpeningHours?: {
+      periods?: {
+        open?: { day?: number; hour?: number; minute?: number };
+        close?: { day?: number; hour?: number; minute?: number };
+      }[];
+    };
+    priceRange?: {
+      startPrice?: { currencyCode?: string; units?: string };
+      endPrice?: { currencyCode?: string; units?: string };
+    };
   };
   const fetchedAt = realNowIso();
   const envEst = estimateEnvironment(p.types ?? []);
+  const hours = parsePlaceHours(p.regularOpeningHours);
+  const yen = parseYenRange(p.priceRange);
+  const costEvidence = evidence({
+    kind: yen ? "API" : "UNKNOWN",
+    provider: "places",
+    sourceRef: p.id,
+    sourceField: yen ? "priceRange" : "details",
+    fetchedAt,
+    validFor: null,
+    note: yen ? "Places priceRange（JPY）。人数内訳は未確認" : "Place Details (New)。円額なし",
+  });
   return {
+    hours,
     spot: {
       id: p.id,
       name: p.displayName?.text ?? p.id,
@@ -487,7 +541,7 @@ async function liveDetails(apiKey: string, spotId: string): Promise<{ spot: Spot
       lng: p.location?.longitude ?? 0,
       categories: p.types ?? [],
       environment: envEst,
-      costForTwoJpy: { value: null, evidenceIds: [] },
+      costForTwoJpy: { value: yen, evidenceIds: yen ? [costEvidence.id] : [] },
       restEase: estimateRest(p.types ?? []),
       standingBurden: estimateStanding(p.types ?? []),
       officialUrl: p.websiteUri ?? null,
@@ -500,10 +554,59 @@ async function liveDetails(apiKey: string, spotId: string): Promise<{ spot: Spot
         sourceField: "details",
         fetchedAt,
         validFor: null,
-        note: "Place Details (New)",
+        note: hours.length ? "Place Details (New)。営業時間あり" : "Place Details (New)。営業時間なし",
       }),
+      costEvidence,
     ],
   };
+}
+
+type RouteEstimate = {
+  durationMinutes: number | null;
+  distanceMeters: number | null;
+  evidence: Evidence;
+  kind: SourceKind;
+};
+
+async function liveRouteWithFallback(
+  ctx: ProviderCtx,
+  apiKey: string,
+  args: {
+    from: { lat: number; lng: number };
+    to: { lat: number; lng: number };
+    mode: TravelMode;
+    departureAt: string;
+  },
+): Promise<RouteEstimate> {
+  const departureAt = clampDeparture(args.departureAt);
+  const modes: TravelMode[] = [];
+  for (const mode of [args.mode, "WALK", "DRIVE"] as TravelMode[]) {
+    if (!modes.includes(mode)) modes.push(mode);
+  }
+  let last: RouteEstimate | null = null;
+  for (const mode of modes) {
+    last = await counted(ctx, "routes", () => liveRoute(apiKey, { ...args, mode, departureAt }));
+    if (last.durationMinutes != null) {
+      if (mode !== args.mode || departureAt !== args.departureAt) {
+        last = {
+          ...last,
+          evidence: {
+            ...last.evidence,
+            note: `Routes ${mode}${departureAt !== args.departureAt ? "（出発を現在以降に補正）" : ""}`,
+          },
+        };
+      }
+      return last;
+    }
+  }
+  return last!;
+}
+
+function clampDeparture(iso: string): string {
+  const at = new Date(iso).getTime();
+  if (!Number.isFinite(at)) return realNowIso();
+  if (at >= Date.now() - 30_000) return iso;
+  return realNowIso();
 }
 
 async function liveRoute(
@@ -575,9 +678,15 @@ async function liveRoute(
 }
 
 function categoryToPlaceTypes(category: string): string[] {
-  if (/散歩|walk|park|屋外/.test(category)) return ["park", "tourist_attraction"];
-  if (/展示|museum|art|美術館/.test(category)) return ["art_gallery", "museum"];
-  if (/甘い|cafe|スイーツ/.test(category)) return ["cafe", "bakery"];
+  if (/公園|park/.test(category) && !/名所|tourist/.test(category)) return ["park"];
+  if (/散歩|walk|屋外|名所/.test(category)) return ["tourist_attraction"];
+  if (/美術館|gallery/.test(category)) return ["art_gallery"];
+  if (/展示|museum|博物館/.test(category)) return ["museum"];
+  if (/菓子|bakery/.test(category)) return ["bakery"];
+  if (/甘い|cafe|スイーツ|カフェ/.test(category)) return ["cafe"];
+  if (/書店|本/.test(category)) return ["bookstore"];
+  if (/図書館/.test(category)) return ["library"];
+  if (/買い物|mall/.test(category)) return ["shopping_mall"];
   return ["tourist_attraction"];
 }
 

@@ -9,7 +9,7 @@ export function fixturesEnabled(): boolean {
 const now = "2026-09-19T13:00:00+09:00";
 
 function cost() {
-  return { llmJpy: 1, apiJpy: null, mundaneCalls: 0, hardCalls: 1, unaccountedCalls: 0 };
+  return { llmUsd: 0.0067, llmJpy: 1, apiJpy: null, mundaneCalls: 0, hardCalls: 1, unaccountedCalls: 0 };
 }
 
 function versions() {
@@ -242,11 +242,11 @@ export const fixtureMe: MeResponse = {
   dataBackend: "file",
   emulator: false,
   demoControls: true,
-  demoAreaName: "名古屋駅周辺",
+  demoAreaName: "東京駅周辺",
   demoDate: "2026-09-19",
-  demoLat: 35.170915,
-  demoLng: 136.881537,
-  blockers: [{ code: "VENUE", item: "東京の発表会場住所・最寄り駅は未提供。開発時は名古屋駅周辺を明示使用" }],
+  demoLat: 35.681236,
+  demoLng: 139.767125,
+  blockers: [{ code: "VENUE", item: "発表会場の住所は未提供。検索中心は東京駅周辺（会場そのものではない）" }],
 };
 
 export const fixtureSuccess = baseSnapshot("fx-success");

@@ -1,11 +1,11 @@
 process.env.APP_RUNTIME ??= "MOCK";
 process.env.ENABLE_DEMO_CONTROLS ??= "true";
-process.env.DEMO_DATE ??= "2026-09-19";
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
+import { tokyoToday } from "../src/config/public";
 
 const BASE = process.env.DEMO_BASE_URL ?? "http://127.0.0.1:3000";
 const five = process.argv.includes("--five");
@@ -89,7 +89,10 @@ async function onePass(): Promise<Report> {
     token,
     body: JSON.stringify({ isDemo: true }),
   });
-  const date = process.env.DEMO_DATE ?? "2026-09-19";
+  const today = tokyoToday();
+  const envDate = process.env.DEMO_DATE;
+  const date = envDate && /^\d{4}-\d{2}-\d{2}$/.test(envDate) && envDate >= today ? envDate : today;
+  notes.push(`dateTokyo=${date} (today=${today}${envDate && envDate !== date ? `; ignored past DEMO_DATE=${envDate}` : ""})`);
   const session = await api(`/api/couples/${couple.id}/sessions`, {
     method: "POST",
     token,
@@ -97,36 +100,43 @@ async function onePass(): Promise<Report> {
       dateTokyo: date,
       startTime: "13:00",
       endTime: "18:00",
-      meet: { name: "名古屋駅", lat: 35.170915, lng: 136.881537, spotId: "mock:nagoya-station" },
-      end: { name: "名古屋駅", lat: 35.170915, lng: 136.881537, spotId: "mock:nagoya-station" },
+      meet: { name: "東京駅", lat: 35.681236, lng: 139.767125, spotId: null },
+      end: { name: "東京駅", lat: 35.681236, lng: 139.767125, spotId: null },
       budget: { mealsJpy: 8000, facilitiesJpy: 4000, transitJpy: 2000 },
       preferences: [
         { id: "pref_self", subject: "SELF", content: "散歩と展示", priority: "PREFER", source: "SELF_REPORT" },
         { id: "pref_partner", subject: "PARTNER", content: "甘いもの", priority: "MUST", source: "PARTNER_STATEMENT_REPORTED" },
       ],
-      fixedAppointments: [
-        {
-          id: "fix_art",
-          label: "愛知県美術館",
-          spotId: "mock:aichi-art-museum",
-          spotNameHint: "愛知県美術館",
-          startAt: `${date}T15:00:00+09:00`,
-          endAt: `${date}T16:00:00+09:00`,
-          kind: "TIME_FIXED",
-        },
-      ],
+      fixedAppointments: [],
       autoApply: {
         enabled: true,
         acknowledgedScope: "未着手1件 PASS 予算増なし 終了遅延なし 移動増なし",
         validUntil: "2099-01-01T00:00:00.000Z",
       },
       travelMode: "WALK",
-      areaName: "名古屋駅周辺",
-      areaLat: 35.170915,
-      areaLng: 136.881537,
+      areaName: "東京駅周辺",
+      areaLat: 35.681236,
+      areaLng: 139.767125,
       radiusMeters: 2500,
     }),
   });
+
+  if (process.env.ENABLE_EVENT_CATALOG === "true") {
+    const listed = await api(`/api/catalog/events?genre=${encodeURIComponent("展覧会")}`, { token });
+    const pick = (listed.events as { id: string; planEligible?: boolean; title: string }[] | undefined)?.find(
+      (e) => e.planEligible,
+    );
+    if (!pick) {
+      failures.push("catalog ON but no planEligible event");
+    } else {
+      await api(`/api/sessions/${session.sessionId}/selected-events`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({ eventIds: [pick.id] }),
+      });
+      notes.push(`catalog selected ${pick.id} ${pick.title}`);
+    }
+  }
 
   const init = await api(`/api/sessions/${session.sessionId}/runs`, {
     method: "POST",
@@ -142,12 +152,13 @@ async function onePass(): Promise<Report> {
   const snap1 = await api(`/api/sessions/${session.sessionId}`, { token });
   const items = snap1.plan?.items ?? [];
   if (items.length < 3 || items.length > 4) failures.push(`spot count ${items.length}`);
-  const locked = items.find((i: { locked: boolean }) => i.locked);
-  if (!locked) failures.push("locked item missing");
   if (snap1.plan?.openings?.some((o: { state: string }) => o.state === "CLOSED")) {
     failures.push("CLOSED present");
   }
   notes.push(`first status=${first.view.run.status} validation=${snap1.plan?.validation?.state} items=${items.length} runs=${(snap1.runs as {id:string;status:string;kind:string}[]).map((r)=>r.kind+":"+r.status).join(",")}`);
+  if (first.view.run.status === "WAITING_INPUT") {
+    failures.push(`waiting ${first.view.run.waitingQuestion?.id ?? "unknown"}: ${first.view.run.waitingQuestion?.prompt ?? ""}`);
+  }
   if (snap1.plan?.validation?.state === "FAIL") {
     failures.push(`initial validation FAIL: ${(snap1.plan.validation.issues as {code:string}[]).map((i)=>i.code).join(",")}`);
   }
@@ -167,7 +178,7 @@ async function onePass(): Promise<Report> {
         itemId: doneItem.id,
         progress: "DONE",
         status: "IN_PROGRESS",
-        location: { lat: 35.170278, lng: 136.908611, label: "愛知県美術館" },
+        location: { lat: 35.681236, lng: 139.767125, label: "東京駅" },
       }),
     });
   }
@@ -197,13 +208,17 @@ async function onePass(): Promise<Report> {
   }
 
   const beforeDelayVersion = snapRain.session.currentPlanVersion;
+  const delaySpotId =
+    (snapRain.plan?.items as { locked?: boolean; spotId: string }[] | undefined)?.find((i) => !i.locked)?.spotId ??
+    (snapRain.plan?.items as { spotId: string }[] | undefined)?.at(-1)?.spotId ??
+    null;
   const delay = await api(`/api/sessions/${session.sessionId}/scenarios`, {
     method: "POST",
     token,
     body: JSON.stringify({
       kind: "TRAVEL_DELAY",
       overlay: { delayMinutes: 55 },
-      spotId: "mock:aichi-art-museum",
+      spotId: delaySpotId,
     }),
   });
   const delayWait = await waitRun(token, delay.runId);

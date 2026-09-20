@@ -71,7 +71,7 @@ async function main() {
   rows.push(
     await check("open-meteo", async () => {
       const url =
-        "https://api.open-meteo.com/v1/forecast?latitude=35.17&longitude=136.88&hourly=precipitation&forecast_days=1&timezone=Asia%2FTokyo";
+        "https://api.open-meteo.com/v1/forecast?latitude=35.681236&longitude=139.767125&hourly=precipitation&forecast_days=1&timezone=Asia%2FTokyo";
       const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
       return {
         status: res.ok ? "PASS" : "FAIL",
@@ -140,7 +140,7 @@ async function main() {
             includedTypes: ["cafe"],
             maxResultCount: 1,
             locationRestriction: {
-              circle: { center: { latitude: 35.170915, longitude: 136.881537 }, radius: 500 },
+              circle: { center: { latitude: 35.681236, longitude: 139.767125 }, radius: 500 },
             },
           }),
           signal: AbortSignal.timeout(10000),
@@ -154,9 +154,16 @@ async function main() {
   }
 
   rows.push({
+    name: "event-catalog",
+    status: env.enableEventCatalog ? "PASS" : "BLOCKED",
+    detail: env.enableEventCatalog
+      ? `ENABLE_EVENT_CATALOG=true model=${env.orcaSearchModel} max=${env.ingestMaxEvents}`
+      : "ENABLE_EVENT_CATALOG は未設定。収集は手動 npm run ingest:events。Scheduler 未接続",
+  });
+  rows.push({
     name: "venue",
     status: "BLOCKED",
-    detail: "東京の発表会場住所・駅は未提供。開発時は名古屋駅周辺",
+    detail: "発表会場の住所は未提供。検索中心は東京駅周辺",
   });
 
   for (const row of rows) {

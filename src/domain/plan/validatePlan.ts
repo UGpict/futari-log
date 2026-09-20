@@ -8,6 +8,7 @@ import type {
   PlanningInput,
   Preference,
 } from "@/domain/schemas";
+import { toTokyoParts } from "@/lib/time";
 export type PlanContext = {
   spots: Record<string, Spot>;
   input: PlanningInput;
@@ -144,19 +145,48 @@ export function validatePlan(plan: Plan, ctx: PlanContext): ValidationResult {
   }
 
   for (const item of items) {
+    const spot = spots[item.spotId];
     const opening = plan.openings.find((o) => o.spotId === item.spotId);
+    if (spot?.spotKind === "EVENT") {
+      const window = spot.eventWindow;
+      if (!window || window.confirmation !== "VERIFIED" || !window.startAt || !window.endAt) {
+        issues.push(issue("EVENT_UNKNOWN", "UNKNOWN", "開催期間が未検証のため確定できません", [item.id]));
+      } else {
+        const stayStart = new Date(item.startAt).getTime();
+        const stayEnd = new Date(item.endAt).getTime();
+        if (stayEnd < new Date(window.startAt).getTime() || stayStart > new Date(window.endAt).getTime()) {
+          issues.push(issue("EVENT_OUTSIDE", "ERROR", "滞在が開催期間の外です", [item.id], window.evidenceIds));
+        }
+      }
+      const parts = toTokyoParts(item.startAt);
+      const closed = spot.eventClosed;
+      if (!closed || closed.confirmation !== "VERIFIED") {
+        issues.push(issue("EVENT_CLOSED_UNKNOWN", "UNKNOWN", "休館日が未検証のため採用しません", [item.id]));
+      } else if (isClosedOn(closed, parts.date, parts.weekday)) {
+        issues.push(issue("EVENT_CLOSED", "ERROR", "その日は休館です", [item.id], closed.evidenceIds));
+      }
+      const hours = spot.eventHours;
+      if (!hours || hours.confirmation !== "VERIFIED" || !hours.open || !hours.close) {
+        issues.push(issue("EVENT_HOURS_UNKNOWN", "UNKNOWN", "開催時間が未検証のため採用しません", [item.id]));
+      } else {
+        const close = parts.weekday === 5 && hours.fridayClose ? hours.fridayClose : hours.close;
+        const stayStartMin = parts.hour * 60 + parts.minute;
+        const endParts = toTokyoParts(item.endAt);
+        const stayEndMin = endParts.hour * 60 + endParts.minute;
+        const openMin = hmToMin(hours.open);
+        const closeMin = hmToMin(close);
+        if (stayStartMin < openMin || stayEndMin > closeMin) {
+          issues.push(issue("EVENT_HOURS_OUTSIDE", "ERROR", "滞在が開催時間の外です", [item.id], hours.evidenceIds));
+        }
+      }
+      continue;
+    }
     if (!opening) {
-      issues.push(
-        issue("OPENING_MISSING", "UNKNOWN", "営業時間が未検証です", [item.id]),
-      );
+      issues.push(issue("OPENING_MISSING", "UNKNOWN", "営業時間が未検証です", [item.id]));
     } else if (opening.state === "CLOSED") {
-      issues.push(
-        issue("CLOSED", "ERROR", "指定滞在時間帯は閉店です", [item.id], opening.evidenceIds),
-      );
+      issues.push(issue("CLOSED", "ERROR", "指定滞在時間帯は閉店です", [item.id], opening.evidenceIds));
     } else if (opening.state === "UNKNOWN") {
-      issues.push(
-        issue("OPENING_UNKNOWN", "UNKNOWN", "営業時間が不明です", [item.id], opening.evidenceIds),
-      );
+      issues.push(issue("OPENING_UNKNOWN", "UNKNOWN", "施設の営業時間が不明です", [item.id], opening.evidenceIds));
     }
   }
 
@@ -263,7 +293,9 @@ export function preferenceMatchIds(spot: Spot, prefs: Preference[]): string[] {
       ids.push(pref.id);
     } else if (
       exhibit &&
-      (spot.categories.includes("art_gallery") ||
+      (spot.spotKind === "EVENT" ||
+        spot.categories.includes("exhibition") ||
+        spot.categories.includes("art_gallery") ||
         spot.categories.includes("museum") ||
         /美術館|科学館/.test(spot.name))
     ) {
@@ -290,4 +322,19 @@ export function doneItemsPreserved(prev: PlanItem[], next: PlanItem[]): boolean 
     if (found.startAt !== item.startAt || found.endAt !== item.endAt) return false;
   }
   return true;
+}
+
+function hmToMin(hm: string): number {
+  const [h, m] = hm.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function isClosedOn(
+  rule: { weekdays: number[]; exceptionOpen: string[]; extraClosed: string[] },
+  dateTokyo: string,
+  weekday: number,
+): boolean {
+  if (rule.exceptionOpen.includes(dateTokyo)) return false;
+  if (rule.extraClosed.includes(dateTokyo)) return true;
+  return rule.weekdays.includes(weekday);
 }

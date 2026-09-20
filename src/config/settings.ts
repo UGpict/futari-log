@@ -2,8 +2,8 @@ export { TIME_ZONE, FX } from "./public";
 
 export const APP_NAME = "ふたりログ";
 export const SCHEMA_VERSION = "0.5.0";
-export const PROMPT_VERSION = "0.5.0";
-export const TOOL_VERSION = "0.5.0";
+export const PROMPT_VERSION = "0.6.0";
+export const TOOL_VERSION = "0.6.2";
 export const MODEL_SETTINGS_VERSION = "0.5.0";
 
 export const LIMITS = {
@@ -16,6 +16,9 @@ export const LIMITS = {
   maxRunsPerCouplePerDay: 20,
   maxInputChars: 2000,
   llmOutputRepairAttempts: 1,
+  ingestMaxEvents: 10,
+  sourceFetchTimeoutMs: 8_000,
+  sourceFetchMaxBytes: 512_000,
 } as const;
 
 export const DEADLINES_MS = {
@@ -27,14 +30,14 @@ export const DEADLINES_MS = {
 
 export const CACHE_TTL_MS = {
   spotBasics: 24 * 60 * 60 * 1000,
-  weather: 10 * 60 * 1000,
-  travel: 5 * 60 * 1000,
-  opening: 60 * 60 * 1000,
+  weather: 24 * 60 * 60 * 1000,
+  travel: 24 * 60 * 60 * 1000,
+  opening: 24 * 60 * 60 * 1000,
 } as const;
 
 export const WORKER = {
   pollMs: 400,
-  leaseMs: 30_000,
+  leaseMs: 90_000,
   heartbeatMs: 5_000,
 } as const;
 

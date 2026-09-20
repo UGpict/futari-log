@@ -26,6 +26,7 @@ export type CoupleBundle = {
   approvals: Record<string, Approval>;
   sessions: Record<string, SessionBundle>;
   replays: Record<string, ReplayManifest>;
+  agentMemories?: import("@/server/agent/types").AgentMemories;
 };
 
 export type SessionBundle = {

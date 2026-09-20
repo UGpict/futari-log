@@ -29,6 +29,7 @@ export const startRunResponseSchema = z.object({
 export type StartRunResponse = z.infer<typeof startRunResponseSchema>;
 
 export const costSchema = z.object({
+  llmUsd: z.number().nullable().optional(),
   llmJpy: z.number().nullable(),
   apiJpy: z.number().nullable(),
   mundaneCalls: z.number(),

@@ -66,11 +66,37 @@ export async function claimPendingRun(): Promise<string | null> {
   });
 }
 
+export async function claimRun(runId: string, owner: string = WORKER_ID): Promise<boolean> {
+  return withStore((db) => {
+    const found = findRun(db, runId);
+    if (!found) return false;
+    const now = Date.now();
+    if (found.run.status === "RUNNING") {
+      if (found.run.leaseOwner === owner) {
+        found.run.heartbeatAt = realNowIso();
+        found.run.leaseExpiresAt = new Date(Date.now() + WORKER.leaseMs).toISOString();
+        return true;
+      }
+      if (found.run.leaseExpiresAt && new Date(found.run.leaseExpiresAt).getTime() > now) {
+        return false;
+      }
+    } else if (found.run.status !== "PENDING") {
+      return false;
+    }
+    found.run.status = "RUNNING";
+    found.run.startedAt = found.run.startedAt ?? realNowIso();
+    found.run.leaseOwner = owner;
+    found.run.heartbeatAt = realNowIso();
+    found.run.leaseExpiresAt = new Date(Date.now() + WORKER.leaseMs).toISOString();
+    return true;
+  });
+}
+
 export async function heartbeat(runId: string): Promise<boolean> {
   return withStore((db) => {
     const found = findRun(db, runId);
     if (!found) return false;
-    if (found.run.leaseOwner !== WORKER_ID) return false;
+    if (!found.run.leaseOwner) return false;
     found.run.heartbeatAt = realNowIso();
     found.run.leaseExpiresAt = new Date(Date.now() + WORKER.leaseMs).toISOString();
     return true;

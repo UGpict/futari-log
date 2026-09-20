@@ -75,6 +75,38 @@ export const spotSchema = z.object({
   restEase: factSchema(restEaseSchema),
   standingBurden: factSchema(standingBurdenSchema),
   officialUrl: z.string().nullable(),
+  spotKind: z.enum(["VENUE", "EVENT"]).optional(),
+  catalogEventId: z.string().nullable().optional(),
+  catalogVenueId: z.string().nullable().optional(),
+  eventWindow: z
+    .object({
+      startAt: z.string().nullable(),
+      endAt: z.string().nullable(),
+      confirmation: z.enum(["VERIFIED", "PARTIAL", "UNKNOWN"]),
+      evidenceIds: z.array(z.string()),
+    })
+    .nullable()
+    .optional(),
+  eventHours: z
+    .object({
+      open: z.string().nullable(),
+      close: z.string().nullable(),
+      fridayClose: z.string().nullable(),
+      confirmation: z.enum(["VERIFIED", "PARTIAL", "UNKNOWN"]),
+      evidenceIds: z.array(z.string()),
+    })
+    .nullable()
+    .optional(),
+  eventClosed: z
+    .object({
+      weekdays: z.array(z.number()),
+      exceptionOpen: z.array(z.string()),
+      extraClosed: z.array(z.string()),
+      confirmation: z.enum(["VERIFIED", "PARTIAL", "UNKNOWN"]),
+      evidenceIds: z.array(z.string()),
+    })
+    .nullable()
+    .optional(),
 });
 export type Spot = z.infer<typeof spotSchema>;
 
@@ -311,6 +343,7 @@ export const runSchema = z.object({
   waitingApprovalId: z.string().nullable(),
   error: z.string().nullable(),
   cost: z.object({
+    llmUsd: z.number().nullable().optional(),
     llmJpy: z.number().nullable(),
     apiJpy: z.number().nullable(),
     mundaneCalls: z.number(),

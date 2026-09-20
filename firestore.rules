@@ -20,5 +20,16 @@ service cloud.firestore {
         allow write: if false;
       }
     }
+
+    // カタログは Admin SDK のみ。sys/root には載せない。
+    match /catalogEvents/{id} {
+      allow read, write: if false;
+    }
+    match /catalogVenues/{id} {
+      allow read, write: if false;
+    }
+    match /catalogIngestRuns/{id} {
+      allow read, write: if false;
+    }
   }
 }

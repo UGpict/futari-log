@@ -1,6 +1,7 @@
 import { getEnv } from "@/config/env";
-import { FX, LLM_PRICE_TABLE, MODEL_PARAMS } from "@/config/settings";
+import { LLM_PRICE_TABLE, MODEL_PARAMS } from "@/config/settings";
 import { z, type ZodType } from "zod";
+import { orcaBase, orcaHeaders, usdToJpy, usageFromOrca } from "./usage";
 
 export type Pool = "mundane" | "hard";
 export type LlmTask =
@@ -40,11 +41,6 @@ export type LlmCallResult<T> = {
 function modelFor(pool: Pool): string {
   const env = getEnv();
   return pool === "hard" ? env.orcaHardModel : env.orcaMundaneModel;
-}
-
-function usdToJpy(usd: number | null): number | null {
-  if (usd == null) return null;
-  return Math.round(usd * FX.usdJpy);
 }
 
 export async function callLLM<T>(input: {
@@ -93,13 +89,9 @@ export async function callLLM<T>(input: {
   };
 
   const attempt = async (): Promise<LlmCallResult<T>> => {
-    const res = await fetch(`${env.orcaBaseUrl.replace(/\/$/, "")}/chat/completions`, {
+    const res = await fetch(`${orcaBase()}/chat/completions`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.orcaApiKey}`,
-        "Content-Type": "application/json",
-        "X-OrcaRouter-Include-Cost": "true",
-      },
+      headers: orcaHeaders(),
       body: JSON.stringify(body),
       signal: input.signal ?? AbortSignal.timeout(25000),
     });
@@ -141,16 +133,17 @@ export async function callLLM<T>(input: {
       parsed = null;
     }
     const checked = input.schema.safeParse(parsed);
+    const usage = usageFromOrca(json);
     return {
       data: checked.success ? checked.data : null,
       ok: checked.success,
       requestedModel,
       actualModel: json.model ?? actualModel,
       pool,
-      promptTokens: json.usage?.prompt_tokens ?? null,
-      completionTokens: json.usage?.completion_tokens ?? null,
-      costUsd: json.usage?.cost_usd ?? null,
-      costJpy: usdToJpy(json.usage?.cost_usd ?? null),
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+      costUsd: usage.costUsd,
+      costJpy: usage.costJpy,
       latencyMs,
       repaired: false,
       error: checked.success ? null : "schema validation failed",
@@ -164,6 +157,119 @@ export async function callLLM<T>(input: {
     return repaired;
   }
   return result;
+}
+
+/** OrcaRouter JSON。キーがあるときは MOCK runtime でも実呼び出しする（収集の構造化用） */
+export async function callOrcaJson<T>(input: {
+  messages: { role: "system" | "user"; content: string }[];
+  schema: ZodType<T>;
+  model?: string;
+  signal?: AbortSignal;
+}): Promise<LlmCallResult<T>> {
+  const env = getEnv();
+  const requestedModel = input.model ?? env.orcaMundaneModel;
+  const started = Date.now();
+  if (!env.orcaApiKey) {
+    return {
+      data: null,
+      ok: false,
+      requestedModel,
+      actualModel: "none",
+      pool: "mundane",
+      promptTokens: null,
+      completionTokens: null,
+      costUsd: null,
+      costJpy: null,
+      latencyMs: Date.now() - started,
+      repaired: false,
+      error: "ORCAROUTER_API_KEY missing",
+    };
+  }
+  const messages = input.messages.some((m) => /json/i.test(m.content))
+    ? input.messages
+    : [{ role: "system" as const, content: "Respond with a JSON object." }, ...input.messages];
+  const res = await fetch(`${orcaBase()}/chat/completions`, {
+    method: "POST",
+    headers: orcaHeaders(),
+    body: JSON.stringify({
+      model: requestedModel,
+      messages,
+      temperature: MODEL_PARAMS.temperature,
+      max_tokens: MODEL_PARAMS.maxTokens,
+      response_format: { type: "json_object" as const },
+    }),
+    signal: input.signal ?? AbortSignal.timeout(25000),
+  });
+  const latencyMs = Date.now() - started;
+  const actualModel =
+    res.headers.get("X-Orca-Resolved-Model") ?? res.headers.get("x-orca-resolved-model") ?? "unknown";
+  if (!res.ok) {
+    return {
+      data: null,
+      ok: false,
+      requestedModel,
+      actualModel,
+      pool: "mundane",
+      promptTokens: null,
+      completionTokens: null,
+      costUsd: null,
+      costJpy: null,
+      latencyMs,
+      repaired: false,
+      error: `orcarouter ${res.status}`,
+    };
+  }
+  const json = (await res.json()) as {
+    model?: string;
+    choices?: { message?: { content?: string } }[];
+    usage?: { prompt_tokens?: number; completion_tokens?: number; cost_usd?: number };
+  };
+  let parsed: unknown = null;
+  try {
+    parsed = JSON.parse(json.choices?.[0]?.message?.content ?? "");
+  } catch {
+    parsed = extractJsonObject(json.choices?.[0]?.message?.content ?? "");
+  }
+  const checked = input.schema.safeParse(parsed);
+  const usage = usageFromOrca(json);
+  return {
+    data: checked.success ? checked.data : null,
+    ok: checked.success,
+    requestedModel,
+    actualModel: json.model ?? actualModel,
+    pool: "mundane",
+    promptTokens: usage.promptTokens,
+    completionTokens: usage.completionTokens,
+    costUsd: usage.costUsd,
+    costJpy: usage.costJpy,
+    latencyMs,
+    repaired: false,
+    error: checked.success ? null : "schema validation failed",
+  };
+}
+
+function extractJsonObject(content: string): unknown {
+  const fence = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fence?.[1] ?? content;
+  const start = candidate.indexOf("{");
+  const end = candidate.lastIndexOf("}");
+  if (start < 0 || end <= start) {
+    const a = candidate.indexOf("[");
+    const b = candidate.lastIndexOf("]");
+    if (a >= 0 && b > a) {
+      try {
+        return JSON.parse(candidate.slice(a, b + 1));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+  try {
+    return JSON.parse(candidate.slice(start, end + 1));
+  } catch {
+    return null;
+  }
 }
 
 export function estimateFromTable(

@@ -69,6 +69,7 @@ export async function createCouple(uid: string, isDemo: boolean) {
       approvals: {},
       sessions: {},
       replays: {},
+      agentMemories: {},
     };
   });
   return { id };
@@ -208,6 +209,7 @@ export async function startRun(input: {
       waitingApprovalId: null,
       error: null,
       cost: {
+        llmUsd: env.runtime === "MOCK" ? 0 : null,
         llmJpy: env.runtime === "MOCK" ? 0 : null,
         apiJpy: env.runtime === "MOCK" ? 0 : null,
         mundaneCalls: 0,
@@ -267,12 +269,27 @@ export async function getRunView(uid: string, runId: string) {
 }
 
 export async function answerQuestion(uid: string, runId: string, questionId: string, answer: string) {
-  return withStore((db) => {
+  const result = await withStore((db) => {
     const found = findRun(db, runId);
-    if (!found) return { ok: false as const, status: 404, error: "not found" };
-    if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
+    if (!found) return { ok: false as const, status: 404, error: "not found", restart: false };
+    if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden", restart: false };
     if (found.run.status !== "WAITING_INPUT" || found.run.waitingQuestion?.id !== questionId) {
-      return { ok: false as const, status: 409, error: "question mismatch" };
+      return { ok: false as const, status: 409, error: "question mismatch", restart: false };
+    }
+    if (questionId === "q_event_fallback") {
+      if (answer === "施設の候補で続ける") {
+        found.bundle.session.input = { ...found.bundle.session.input, eventFallbackAcknowledged: true };
+        found.run.status = "PENDING";
+        found.run.waitingQuestion = null;
+        found.run.leaseOwner = null;
+        return { ok: true as const, restart: true, sessionId: found.bundle.session.id };
+      }
+      found.run.status = "CANCELLED";
+      found.run.finishedAt = realNowIso();
+      found.run.waitingQuestion = null;
+      found.run.leaseOwner = null;
+      found.run.error = "selected event unavailable; user cancelled";
+      return { ok: true as const, restart: false };
     }
     const reflectionId = newId("ref");
     const masked = maskPii(answer);
@@ -321,8 +338,15 @@ export async function answerQuestion(uid: string, runId: string, questionId: str
     found.run.status = "SUCCEEDED";
     found.run.finishedAt = realNowIso();
     found.run.waitingQuestion = null;
-    return { ok: true as const };
+    return { ok: true as const, restart: false };
   });
+  if (result.ok && "restart" in result && result.restart) {
+    const { dispatchProposal } = await import("@/server/workflows/dispatch");
+    const { executeRun } = await import("@/server/agent/execute");
+    void dispatchProposal(runId, "INITIAL_PLAN");
+    if (getEnv().planOrchestrator !== "workflows") void executeRun(runId);
+  }
+  return result;
 }
 
 export async function decideApproval(uid: string, approvalId: string, decision: "APPROVE" | "REJECT") {
@@ -609,6 +633,24 @@ export async function getReplay(uid: string, replayId: string) {
       };
     }
     return { ok: false as const, status: 404 as const, error: "not found" };
+  });
+}
+
+export async function selectSessionEvents(uid: string, sessionId: string, eventIds: string[]) {
+  return withStore((db) => {
+    const found = findSession(db, sessionId);
+    if (!found) return { ok: false as const, status: 404, error: "not found" };
+    if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
+    found.bundle.session.input = {
+      ...found.bundle.session.input,
+      selectedEventIds: [...new Set(eventIds)],
+      eventFallbackAcknowledged: false,
+    };
+    return {
+      ok: true as const,
+      sessionId,
+      selectedEventIds: found.bundle.session.input.selectedEventIds,
+    };
   });
 }
 

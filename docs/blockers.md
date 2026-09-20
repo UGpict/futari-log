@@ -7,7 +7,7 @@
 | Firebase Auth / Firestore | Emulator PASS | 本番公開は手元 PC でプロジェクト・匿名 Auth・許可ドメイン・Cloud Run SA。Cloud Agent では Google ログインしない |
 | OrcaRouter | BLOCKED | `ORCAROUTER_API_KEY`、mundane/hard の Named Router 実名 |
 | Google Places / Routes | BLOCKED | `GOOGLE_MAPS_API_KEY`（Places New と Routes を有効化） |
-| 東京発表会場 | BLOCKED | 会場住所と最寄り駅。未提供のため開発デモは名古屋駅周辺を**明示**して使用。発表エリア確定とは言わない |
+| 東京発表会場 | BLOCKED | 会場住所は未提供。開発デモの検索中心は**東京駅周辺**（会場そのものではない） |
 | LIVE 5連成功 | 未実施 | 上記キー。モック連続は `npm run demo:five` |
 | モック通し | 実施済み | `demo:live` PASS。Auth/Firestore は Emulator |
 | Cloud Run 公開 | 準備済み・未公開 | 手元 PC の手順は `docs/cloud-run.md` |

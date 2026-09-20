@@ -21,6 +21,8 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
     const runs = data?.runs ?? [];
     return {
       llm: runs.reduce((n, r) => n + (r.cost.llmJpy ?? 0), 0),
+      usd: runs.reduce((n, r) => n + (r.cost.llmUsd ?? 0), 0),
+      usdKnown: runs.some((r) => r.cost.llmUsd != null),
       api: runs.reduce((n, r) => n + (r.cost.apiJpy ?? 0), 0),
       hard: runs.reduce((n, r) => n + r.cost.hardCalls, 0),
       mundane: runs.reduce((n, r) => n + r.cost.mundaneCalls, 0),
@@ -350,6 +352,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
       </section>
 
       <CostBadge
+        llmUsd={cost.usdKnown ? cost.usd : null}
         llmJpy={cost.llm}
         apiJpy={cost.api}
         hard={cost.hard}

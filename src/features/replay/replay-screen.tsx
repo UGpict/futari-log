@@ -51,6 +51,7 @@ export function ReplayScreen({ replayId }: { replayId: string }) {
       ) : null}
       <CostBadge
         replay
+        llmUsd={data.costSnapshot.llmUsd}
         llmJpy={data.costSnapshot.llmJpy}
         apiJpy={data.costSnapshot.apiJpy}
         hard={data.costSnapshot.hardCalls}
