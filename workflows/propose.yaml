@@ -1,0 +1,53 @@
+# 行程の中身を提案する。情報取得と決定論的な提案を別ステップにする。
+# 秘密は実行引数に入れない。Secret Manager から読む。
+
+main:
+  params: [input]
+  steps:
+    - init:
+        assign:
+          - runId: ${input.runId}
+          - kind: ${input.kind}
+          - baseUrl: ${input.baseUrl}
+          - projectId: ${input.projectId}
+    - load_secret:
+        call: http.get
+        args:
+          url: ${"https://secretmanager.googleapis.com/v1/projects/" + projectId + "/secrets/WORKFLOW_INVOKE_SECRET/versions/latest:access"}
+          auth:
+            type: OAuth2
+        result: secretResp
+    - decode_secret:
+        assign:
+          - invokeSecret: ${text.decode(base64.decode(secretResp.body.payload.data))}
+    - which:
+        switch:
+          - condition: ${kind == "REFLECTION"}
+            next: propose
+          - condition: true
+            next: gather
+    - gather:
+        call: http.post
+        args:
+          url: ${baseUrl + "/api/internal/workflows/gather"}
+          headers:
+            Content-Type: "application/json"
+            X-Futari-Workflow: ${invokeSecret}
+          body:
+            runId: ${runId}
+          timeout: 90
+        result: gathered
+        next: propose
+    - propose:
+        call: http.post
+        args:
+          url: ${baseUrl + "/api/internal/workflows/propose"}
+          headers:
+            Content-Type: "application/json"
+            X-Futari-Workflow: ${invokeSecret}
+          body:
+            runId: ${runId}
+          timeout: 90
+        result: proposed
+    - done:
+        return: ${proposed.body}

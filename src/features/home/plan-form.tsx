@@ -7,6 +7,9 @@ import { useRouter } from "next/navigation";
 import { PlanLoading } from "@/features/session/plan-loading";
 import { api, fixturesEnabled } from "@/client/api";
 import { useMe } from "@/client/hooks/use-me";
+import { usePlaceSearch } from "@/client/hooks/use-place-search";
+import { SERVICE_AREA_NOTICE, tokyoToday } from "@/config/public";
+import type { PlaceCandidate } from "@/contracts";
 import { MemoMascot } from "@/components/memo-mascot";
 import { Plus, ChevronLeft, ChevronRight, ArrowRight, Check, ChevronDown, Sparkles, CalendarHeart, Clock3, MapPinned } from "lucide-react";
 import styles from "./home.module.css";
@@ -26,6 +29,42 @@ function parseDate(value: string) {
 
 function dateValue(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function PlaceSuggest({
+  query,
+  selected,
+  search,
+  onPick,
+  label,
+}: {
+  query: string;
+  selected: PlaceCandidate | null;
+  search: { places: PlaceCandidate[]; state: string; error: string; pending: boolean };
+  onPick: (place: PlaceCandidate) => void;
+  label: string;
+}) {
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (selected || query.trim().length < 2) return;
+    if (!search.places.length && search.pending) return;
+    listRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [query, selected, search.pending, search.places.length]);
+  if (selected) return <p className={styles.placeHint}>候補「{selected.name}」を使います</p>;
+  if (query.trim().length < 2) return <p className={styles.placeHint}>候補から選ぶと、その場所の座標で探します。</p>;
+  return (
+    <div ref={listRef} className={styles.placeSuggest} role="listbox" aria-label={label} aria-busy={search.pending || undefined}>
+      {search.pending && !search.places.length ? <p className={styles.placeHint}>場所を探しています…</p> : null}
+      {search.places.map((place) => (
+        <button type="button" role="option" key={place.id} onClick={() => onPick(place)}>
+          {place.name}
+          {place.address && place.address !== place.name ? <small>{place.address}</small> : null}
+        </button>
+      ))}
+      {!search.pending && search.state === "empty" ? <p className={styles.placeHint}>候補が見つかりません。別の呼び方で検索してください。</p> : null}
+      {search.state === "failed" ? <p className={styles.error} role="alert">{search.error || "場所を検索できませんでした。"}</p> : null}
+    </div>
+  );
 }
 
 export function PlanForm({ initialDate, initialWish, onStepChange }: { initialDate: string; initialWish?: string; onStepChange?: (step: number) => void }) {
@@ -112,17 +151,19 @@ export function PlanForm({ initialDate, initialWish, onStepChange }: { initialDa
     const initial = parseDate(initialDate);
     return new Date(initial.getFullYear(), initial.getMonth(), 1);
   });
+  const [meetPlace, setMeetPlace] = useState<PlaceCandidate | null>(null);
+  const [endPlace, setEndPlace] = useState<PlaceCandidate | null>(null);
+  const bias = me ? { lat: me.demoLat, lng: me.demoLng } : null;
+  const meetSearch = usePlaceSearch(form.meetName, bias);
+  const endSearch = usePlaceSearch(form.endName, bias);
 
-  const dateTokyo = form.dateTokyo || me?.demoDate || "2026-09-19";
-  const meetName =
-    form.meetName ||
-    (me?.demoAreaName?.includes("名古屋") ? "名古屋駅" : me?.demoAreaName) ||
-    "名古屋駅";
+  const dateTokyo = form.dateTokyo || me?.demoDate || tokyoToday();
   const wish = [currentCategory?.wish, selected.filter((item) => item !== "おまかせ").length ? `気になること：${selected.filter((item) => item !== "おまかせ").join("、")}` : "", form.self.trim()].filter(Boolean).join("。") || "ふたりで楽しめる過ごし方を提案してほしい";
   const total = Number(form.meals) + Number(form.facilities) + Number(form.transit);
   const budgetTotalValue = [form.meals, form.facilities, form.transit].every((value) => value.trim() !== "") ? String(total) : "";
   const timingValid = Boolean(dateTokyo && form.startTime && form.endTime && form.startTime < form.endTime);
-  const valid = Boolean(category || selected.length || form.self.trim()) && timingValid && [form.meals, form.facilities, form.transit].every((value) => value.trim() !== "" && Number.isFinite(Number(value)) && Number(value) >= 0) && (!form.locked || (form.fixedName.trim() && form.fixedStart >= form.startTime && form.fixedEnd <= form.endTime && form.fixedStart < form.fixedEnd));
+  const placeValid = Boolean(meetPlace && (form.endName.trim() ? endPlace : true));
+  const valid = Boolean(category || selected.length || form.self.trim()) && timingValid && placeValid && [form.meals, form.facilities, form.transit].every((value) => value.trim() !== "" && Number.isFinite(Number(value)) && Number(value) >= 0) && (!form.locked || (form.fixedName.trim() && form.fixedStart >= form.startTime && form.fixedEnd <= form.endTime && form.fixedStart < form.fixedEnd));
   const selectedDate = parseDate(dateTokyo);
   const calendarStart = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1).getDay();
   const calendarDays = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0).getDate();
@@ -164,6 +205,8 @@ export function PlanForm({ initialDate, initialWish, onStepChange }: { initialDa
 
   async function submit() {
     if (!me || !valid || busy) return;
+    const end = endPlace && form.endName.trim() ? endPlace : meetPlace;
+    if (!meetPlace || !end) return;
     setBusy(true);
     const startedAt = Date.now();
     setError(null);
@@ -186,16 +229,18 @@ export function PlanForm({ initialDate, initialWish, onStepChange }: { initialDa
           startTime: form.startTime,
           endTime: form.endTime,
           meet: {
-            name: meetName,
-            lat: me.demoLat,
-            lng: me.demoLng,
-            spotId: "mock:nagoya-station",
+            name: meetPlace.name,
+            lat: meetPlace.lat,
+            lng: meetPlace.lng,
+            spotId: meetPlace.id,
+            address: meetPlace.address,
           },
           end: {
-            name: form.endName || meetName,
-            lat: me.demoLat,
-            lng: me.demoLng,
-            spotId: "mock:nagoya-station",
+            name: end.name,
+            lat: end.lat,
+            lng: end.lng,
+            spotId: end.id,
+            address: end.address ?? meetPlace.address,
           },
           budget: {
             mealsJpy: Number(form.meals),
@@ -239,9 +284,9 @@ export function PlanForm({ initialDate, initialWish, onStepChange }: { initialDa
             validUntil: form.auto ? new Date(Date.now() + 86400000).toISOString() : null,
           },
           travelMode: "WALK",
-          areaName: me.demoAreaName,
-          areaLat: me.demoLat,
-          areaLng: me.demoLng,
+          areaName: meetPlace.name,
+          areaLat: meetPlace.lat,
+          areaLng: meetPlace.lng,
           radiusMeters: 2500,
         }),
       });
@@ -290,6 +335,7 @@ export function PlanForm({ initialDate, initialWish, onStepChange }: { initialDa
           {freeWish && <label className={styles.formLabel}>こんなこともしたい<textarea rows={2} maxLength={1500} placeholder="海が見えるところで、ゆっくりしたい" value={form.self} onChange={(e) => setForm({ ...form, self: e.target.value })} /></label>}
         </>}
         {step === 1 && <div className={styles.schedulePanel}>
+          <p className={styles.areaNotice}>{SERVICE_AREA_NOTICE}。都外の場所は確認します。</p>
           <div className={styles.scheduleDatePicker}>
             <button type="button" className={styles.scheduleDate} aria-expanded={calendarOpen} aria-controls="plan-calendar" onClick={() => { if (calendarTimer.current) return; setCalendarMonth(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1)); setCalendarOpen(!calendarOpen); }}>
               <CalendarHeart size={20} /><span><small>日にち</small><strong>{dateLabel}</strong></span><ChevronDown size={17} />
@@ -313,8 +359,11 @@ export function PlanForm({ initialDate, initialWish, onStepChange }: { initialDa
             <div className={styles.inlineTimes}><Clock3 size={17} aria-hidden="true" /><label><span>開始</span><select aria-label="開始時刻" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</select><ChevronDown size={16} aria-hidden="true" /></label><span>〜</span><label><span>終了</span><select aria-label="終了時刻" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</select><ChevronDown size={16} aria-hidden="true" /></label></div>
           </fieldset>
           {!timingValid && <p className={styles.error} role="alert">終了は開始よりあとの時刻にしてね。</p>}
-          <div className={styles.meetingCard}><label><MapPinned size={18} /><span>待ち合わせ</span><input aria-label="集合場所" value={meetName} onChange={(e) => setForm({ ...form, meetName: e.target.value })} placeholder="駅や目印になる場所" /></label>
-            <details><summary>{form.endName ? `解散：${form.endName}` : "解散も同じ場所"}<ChevronDown size={13} /></summary><input aria-label="解散場所" value={form.endName || meetName} onChange={(e) => setForm({ ...form, endName: e.target.value })} /></details>
+          <div className={styles.meetingCard}><label><MapPinned size={18} /><span>待ち合わせ</span><input aria-label="集合場所" value={form.meetName} onChange={(e) => { setMeetPlace(null); setForm({ ...form, meetName: e.target.value }); }} onFocus={(event) => event.currentTarget.closest(`.${styles.meetingCard}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" })} placeholder="駅や目印になる場所" autoComplete="off" /></label>
+            <PlaceSuggest query={form.meetName} selected={meetPlace} search={meetSearch} label="集合場所の候補" onPick={(place) => { setMeetPlace(place); setForm((current) => ({ ...current, meetName: place.name })); }} />
+            <details><summary>{form.endName ? `解散：${form.endName}` : "解散も同じ場所"}<ChevronDown size={13} /></summary><input aria-label="解散場所" value={form.endName} onChange={(e) => { setEndPlace(null); setForm({ ...form, endName: e.target.value }); }} placeholder={meetPlace?.name ?? "解散場所"} autoComplete="off" />
+              {form.endName.trim().length >= 2 || endPlace ? <PlaceSuggest query={form.endName} selected={endPlace} search={endSearch} label="解散場所の候補" onPick={(place) => { setEndPlace(place); setForm((current) => ({ ...current, endName: place.name })); }} /> : <p className={styles.placeHint}>候補から選ぶと、その場所の座標で探します。</p>}
+            </details>
           </div>
         </div>}
         {step === 2 && <div className={styles.finishPanel}>
@@ -327,7 +376,7 @@ export function PlanForm({ initialDate, initialWish, onStepChange }: { initialDa
       </section>
       <footer className={styles.planFooter}>
         {(error || authError) && <p role="alert" className={styles.error}>{error || authError}</p>}
-        {step < 2 ? <Button fullWidth type="button" className={styles.primaryButton} disabled={advancing || selectingCategory || (step === 0 ? !category && !selected.length && !form.self.trim() : !timingValid)} onClick={() => move(step + 1)}>{step === 0 ? (selected.some((item) => item !== "おまかせ") || form.self.trim() ? "この希望で進む" : "この気分でおまかせ") : "予算と希望へ"}<ArrowRight size={18} /></Button> : <><p className={styles.planTotalSummary}><strong>ふたりで {total.toLocaleString()}円まで</strong><small>{form.startTime}〜{form.endTime}</small></p><Button fullWidth type="button" className={styles.primaryButton} disabled={busy || !me || !valid} onClick={() => void submit()}><Sparkles size={18} />{!me ? "準備中…" : busy ? "プランを考えています…" : "この内容でプランをつくる"}</Button></>}
+        {step < 2 ? <Button fullWidth type="button" className={styles.primaryButton} disabled={advancing || selectingCategory || (step === 0 ? !category && !selected.length && !form.self.trim() : !timingValid || !placeValid)} onClick={() => move(step + 1)}>{step === 0 ? (selected.some((item) => item !== "おまかせ") || form.self.trim() ? "この希望で進む" : "この気分でおまかせ") : "予算と希望へ"}<ArrowRight size={18} /></Button> : <><p className={styles.planTotalSummary}><strong>ふたりで {total.toLocaleString()}円まで</strong><small>{form.startTime}〜{form.endTime} · {meetPlace?.name ?? "集合未選択"}</small></p><Button fullWidth type="button" className={styles.primaryButton} disabled={busy || !me || !valid} onClick={() => void submit()}><Sparkles size={18} />{!me ? "準備中…" : busy ? "プランを考えています…" : "この内容でプランをつくる"}</Button></>}
       </footer>
       {me && me.blockers.length > 0 && step === 2 && <details className={styles.environmentDetails}><summary>実行環境について</summary>{me.blockers.map((blocker) => <p key={blocker.code}>{blocker.item}</p>)}</details>}
     </div>

@@ -25,7 +25,7 @@ export function HomeSheet({ title, onClose, children, fixedHeight = false }: {
   return (
     <dialog ref={ref} className={`${styles.sheet} ${fixedHeight ? styles.fixedSheet : ""}`} aria-labelledby={titleId}
       onCancel={onClose} onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div className={styles.sheetInner}>
+      <div className={styles.sheetInner} onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
         <div className={styles.sheetHandle} aria-hidden="true" />
         <header className={styles.sheetHeader}>
           <h2 id={titleId}>{title}</h2>

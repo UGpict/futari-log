@@ -1,35 +1,38 @@
 {
-  "at": "2026-09-20T03:35:59.461Z",
+  "at": "2026-09-20T08:08:06.564Z",
   "reports": [
     {
       "ok": true,
-      "git": "7d89974",
+      "git": "0431840",
       "runIds": [
-        "run_bd379d24a31269fe",
-        "run_c66e11d6390942d7",
-        "run_9e6fdbd5271f312e",
-        "run_13e7e399171558c6",
-        "run_f7159c216a90612f"
+        "run_fc94fd4572958bac",
+        "run_a2baeafb60404fb7",
+        "run_469fe374989835c2",
+        "run_9a80f81a4ae0f65a",
+        "run_3aa079644a7f453f"
       ],
       "durationsMs": [
-        3764,
-        3044,
-        2151,
-        2930
+        2381,
+        2166,
+        1596,
+        1495
       ],
       "costs": [
         {
-          "llmJpy": 1,
-          "apiJpy": null,
+          "llmUsd": 0,
+          "llmJpy": 0,
+          "apiJpy": 0,
           "mundaneCalls": 0,
-          "hardCalls": 1,
+          "hardCalls": 0,
           "unaccountedCalls": 0
         }
       ],
       "notes": [
-        "first status=SUCCEEDED validation=CONDITIONAL items=4 runs=INITIAL_PLAN:SUCCEEDED",
+        "dateTokyo=2026-09-20 (today=2026-09-20)",
+        "catalog selected evt_ad53ab81c271fbc6 水滸伝",
+        "first status=SUCCEEDED validation=CONDITIONAL items=3 runs=INITIAL_PLAN:SUCCEEDED",
         "rain APPROVAL",
-        "memory influence DURATION,NONE"
+        "memory influence DURATION,REST_INSERT,DURATION"
       ],
       "failures": []
     }

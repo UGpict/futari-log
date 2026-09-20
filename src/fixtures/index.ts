@@ -38,6 +38,31 @@ export async function fixtureResponse<T>(path: string, init?: RequestInit): Prom
   if (url === "/api/auth/anonymous" && method === "POST") {
     return { uid: fixtureMe.uid, runtime: "MOCK" } as T;
   }
+  if (url === "/api/places/search" && method === "GET") {
+    const q = (path.split("?")[1] ? new URLSearchParams(path.split("?")[1]).get("q") : "") ?? "";
+    const places = [
+      { id: "mock:nagoya-station", name: "名古屋駅", lat: 35.170915, lng: 136.881537, address: "名古屋市中村区" },
+      { id: "mock:tokyo-station-gallery", name: "東京駅", lat: 35.681236, lng: 139.767125, address: "東京都千代田区" },
+    ].filter((place) => !q.trim() || place.name.includes(q.trim()));
+    return { query: q, state: places.length ? "ok" : "empty", places, error: null } as T;
+  }
+  if (url === "/api/places/photos" && method === "GET") {
+    const ids = (path.split("?")[1] ? new URLSearchParams(path.split("?")[1]).get("ids") : "") ?? "";
+    return {
+      photos: ids.split(",").filter(Boolean).map((id) => ({
+        placeId: id,
+        state: "none",
+        kind: "VENUE",
+        source: "places",
+        imageUrl: null,
+        googleMapsUri: null,
+        authorAttributions: [],
+      })),
+    } as T;
+  }
+  if (url === "/api/auth/anonymous" && method === "POST") {
+    return { uid: fixtureMe.uid, runtime: "MOCK" } as T;
+  }
   if (url === "/api/couples" && method === "POST") return { id: "cpl_fixture" } as T;
   if (/^\/api\/couples\/[^/]+\/sessions$/.test(url) && method === "GET") {
     return { plans: [...calendarSnapshots.values()].map((snap) => ({ id: snap.session.id, date: snap.session.input.dateTokyo, startTime: snap.session.input.startTime, endTime: snap.session.input.endTime, status: snap.session.status, title: snap.plan?.items.map((item) => snap.spots[item.spotId]?.name).filter(Boolean).join("・") || "作成中のプラン" })) } as T;

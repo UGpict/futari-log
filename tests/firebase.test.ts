@@ -2,7 +2,7 @@ import "./firebase.env";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { issueAnonymous, verifyToken } from "../src/server/auth/index";
-import { withStore } from "../src/server/repositories/store";
+import { emptyCoupleBundle, loadCouple, putCouple } from "../src/server/repositories/store";
 import { getEnv } from "../src/config/env";
 
 describe("firebase emulator", () => {
@@ -22,20 +22,12 @@ describe("firebase emulator", () => {
     assert.equal(await verifyToken(`${token}ffff`), null);
   });
 
-  it("persists a couple bundle through Firestore", async () => {
+  it("persists a couple through split Firestore documents", async () => {
     const id = `cpl_test_${Date.now()}`;
-    await withStore((db) => {
-      db.couples[id] = {
-        couple: { id, ownerUid: "uid_test", isDemo: true, createdAt: new Date().toISOString() },
-        memories: {},
-        memoryCandidates: {},
-        reflections: {},
-        approvals: {},
-        sessions: {},
-        replays: {},
-      };
-    });
-    const found = await withStore((db) => db.couples[id]?.couple.ownerUid ?? null);
-    assert.equal(found, "uid_test");
+    await putCouple(
+      emptyCoupleBundle({ id, ownerUid: "uid_test", isDemo: true, createdAt: new Date().toISOString() }),
+    );
+    const found = await loadCouple(id);
+    assert.equal(found?.couple.ownerUid, "uid_test");
   });
 });

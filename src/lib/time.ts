@@ -1,7 +1,12 @@
 import { TIME_ZONE } from "@/config/public";
+export { tokyoToday, formatYen } from "@/config/public";
 
 export function realNowIso(): string {
   return new Date().toISOString();
+}
+
+export function sameTokyoDate(aIso: string, bIso: string = realNowIso()): boolean {
+  return toTokyoParts(aIso).date === toTokyoParts(bIso).date;
 }
 
 export function toTokyoParts(iso: string): {

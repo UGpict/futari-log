@@ -42,6 +42,7 @@ export const meetPointSchema = z.object({
   lat: z.number(),
   lng: z.number(),
   spotId: z.string().nullable(),
+  address: z.string().nullable().optional(),
 });
 export type MeetPoint = z.infer<typeof meetPointSchema>;
 
@@ -60,6 +61,12 @@ export const planningInputSchema = z.object({
   areaLat: z.number(),
   areaLng: z.number(),
   radiusMeters: z.number().default(2500),
+  selectedEventIds: z.array(z.string()).optional(),
+  eventFallbackAcknowledged: z.boolean().optional(),
+  unsupportedWishAcknowledged: z.boolean().optional(),
+  walkLongAcknowledged: z.boolean().optional(),
+  tokyoAreaAcknowledged: z.boolean().optional(),
+  searchExpandAcknowledged: z.boolean().optional(),
 });
 export type PlanningInput = z.infer<typeof planningInputSchema>;
 

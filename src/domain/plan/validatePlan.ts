@@ -1,3 +1,4 @@
+import { spotMatchesWish } from "@/contracts/spotKinds";
 import type {
   Plan,
   PlanItem,
@@ -8,6 +9,7 @@ import type {
   PlanningInput,
   Preference,
 } from "@/domain/schemas";
+import { toTokyoParts } from "@/lib/time";
 export type PlanContext = {
   spots: Record<string, Spot>;
   input: PlanningInput;
@@ -104,6 +106,18 @@ export function validatePlan(plan: Plan, ctx: PlanContext): ValidationResult {
     }
     const dur = leg.durationMinutes.value;
     const delay = leg.delayMinutesInjected ?? 0;
+    const buffer = leg.bufferMinutes ?? 0;
+    if (leg.cachedAt) {
+      issues.push(
+        issue(
+          "TRAVEL_CACHE",
+          "WARNING",
+          `移動時間はキャッシュ（取得 ${leg.cachedAt}）を使っています`,
+          [item.id],
+          leg.evidenceIds,
+        ),
+      );
+    }
     if (dur == null) {
       issues.push(
         issue(
@@ -115,7 +129,7 @@ export function validatePlan(plan: Plan, ctx: PlanContext): ValidationResult {
         ),
       );
     } else {
-      const arrive = new Date(leg.departureAt).getTime() + (dur + delay) * 60_000;
+      const arrive = new Date(leg.departureAt).getTime() + (dur + buffer + delay) * 60_000;
       if (arrive > new Date(item.startAt).getTime() + 60_000) {
         issues.push(
           issue("WAIT_OR_TRAVEL", "ERROR", "移動を含めると開始に間に合いません", [item.id], leg.evidenceIds),
@@ -128,13 +142,25 @@ export function validatePlan(plan: Plan, ctx: PlanContext): ValidationResult {
     const last = items[items.length - 1];
     const dur = lastToEnd.durationMinutes.value;
     const delay = lastToEnd.delayMinutesInjected ?? 0;
+    const buffer = lastToEnd.bufferMinutes ?? 0;
     const sessionEnd = tokyoEnd(input);
+    if (lastToEnd.cachedAt) {
+      issues.push(
+        issue(
+          "TRAVEL_CACHE",
+          "WARNING",
+          `終了地点への移動時間はキャッシュ（取得 ${lastToEnd.cachedAt}）を使っています`,
+          [last.id],
+          lastToEnd.evidenceIds,
+        ),
+      );
+    }
     if (dur == null) {
       issues.push(
-        issue("END_TRAVEL_UNKNOWN", "UNKNOWN", "終了地点への移動時間が未検証です", [last.id]),
+        issue("END_TRAVEL_UNKNOWN", "UNKNOWN", "終了地点への移動時間が未検証です", [last.id], lastToEnd.evidenceIds),
       );
     } else {
-      const arriveEnd = new Date(last.endAt).getTime() + (dur + delay) * 60_000;
+      const arriveEnd = new Date(last.endAt).getTime() + (dur + buffer + delay) * 60_000;
       if (arriveEnd > new Date(sessionEnd).getTime() + 60_000) {
         issues.push(
           issue("LATE_TO_END", "ERROR", "指定終了時刻までに終了地点へ着けません", [last.id]),
@@ -144,19 +170,48 @@ export function validatePlan(plan: Plan, ctx: PlanContext): ValidationResult {
   }
 
   for (const item of items) {
+    const spot = spots[item.spotId];
     const opening = plan.openings.find((o) => o.spotId === item.spotId);
+    if (spot?.spotKind === "EVENT") {
+      const window = spot.eventWindow;
+      if (!window || window.confirmation !== "VERIFIED" || !window.startAt || !window.endAt) {
+        issues.push(issue("EVENT_UNKNOWN", "UNKNOWN", "開催期間が未検証のため確定できません", [item.id]));
+      } else {
+        const stayStart = new Date(item.startAt).getTime();
+        const stayEnd = new Date(item.endAt).getTime();
+        if (stayEnd < new Date(window.startAt).getTime() || stayStart > new Date(window.endAt).getTime()) {
+          issues.push(issue("EVENT_OUTSIDE", "ERROR", "滞在が開催期間の外です", [item.id], window.evidenceIds));
+        }
+      }
+      const parts = toTokyoParts(item.startAt);
+      const closed = spot.eventClosed;
+      if (!closed || closed.confirmation !== "VERIFIED") {
+        issues.push(issue("EVENT_CLOSED_UNKNOWN", "UNKNOWN", "休館日が未検証のため採用しません", [item.id]));
+      } else if (isClosedOn(closed, parts.date, parts.weekday)) {
+        issues.push(issue("EVENT_CLOSED", "ERROR", "その日は休館です", [item.id], closed.evidenceIds));
+      }
+      const hours = spot.eventHours;
+      if (!hours || hours.confirmation !== "VERIFIED" || !hours.open || !hours.close) {
+        issues.push(issue("EVENT_HOURS_UNKNOWN", "UNKNOWN", "開催時間が未検証のため採用しません", [item.id]));
+      } else {
+        const close = parts.weekday === 5 && hours.fridayClose ? hours.fridayClose : hours.close;
+        const stayStartMin = parts.hour * 60 + parts.minute;
+        const endParts = toTokyoParts(item.endAt);
+        const stayEndMin = endParts.hour * 60 + endParts.minute;
+        const openMin = hmToMin(hours.open);
+        const closeMin = hmToMin(close);
+        if (stayStartMin < openMin || stayEndMin > closeMin) {
+          issues.push(issue("EVENT_HOURS_OUTSIDE", "ERROR", "滞在が開催時間の外です", [item.id], hours.evidenceIds));
+        }
+      }
+      continue;
+    }
     if (!opening) {
-      issues.push(
-        issue("OPENING_MISSING", "UNKNOWN", "営業時間が未検証です", [item.id]),
-      );
+      issues.push(issue("OPENING_MISSING", "UNKNOWN", "営業時間が未検証です", [item.id]));
     } else if (opening.state === "CLOSED") {
-      issues.push(
-        issue("CLOSED", "ERROR", "指定滞在時間帯は閉店です", [item.id], opening.evidenceIds),
-      );
+      issues.push(issue("CLOSED", "ERROR", "指定滞在時間帯は閉店です", [item.id], opening.evidenceIds));
     } else if (opening.state === "UNKNOWN") {
-      issues.push(
-        issue("OPENING_UNKNOWN", "UNKNOWN", "営業時間が不明です", [item.id], opening.evidenceIds),
-      );
+      issues.push(issue("OPENING_UNKNOWN", "UNKNOWN", "施設の営業時間が不明です", [item.id], opening.evidenceIds));
     }
   }
 
@@ -252,34 +307,7 @@ function tokyoEnd(input: PlanningInput): string {
 }
 
 export function preferenceMatchIds(spot: Spot, prefs: Preference[]): string[] {
-  const ids: string[] = [];
-  for (const pref of prefs) {
-    const text = `${spot.name} ${spot.categories.join(" ")}`.toLowerCase();
-    const c = pref.content;
-    const walk = /散歩|歩く|散策|屋外/.test(c);
-    const exhibit = /展示|美術館|博物館|科学館/.test(c);
-    const sweet = /甘い|スイーツ|カフェ|デザート|ケーキ/.test(c);
-    if (walk && (spot.categories.includes("park") || spot.environment.value === "OUTDOOR")) {
-      ids.push(pref.id);
-    } else if (
-      exhibit &&
-      (spot.categories.includes("art_gallery") ||
-        spot.categories.includes("museum") ||
-        /美術館|科学館/.test(spot.name))
-    ) {
-      ids.push(pref.id);
-    } else if (
-      sweet &&
-      (spot.categories.includes("cafe") ||
-        spot.categories.includes("bakery") ||
-        /珈琲|カフェ|スイーツ/.test(spot.name))
-    ) {
-      ids.push(pref.id);
-    } else if (text.includes(c.toLowerCase())) {
-      ids.push(pref.id);
-    }
-  }
-  return ids;
+  return prefs.filter((pref) => spotMatchesWish(spot, pref.content)).map((pref) => pref.id);
 }
 
 export function doneItemsPreserved(prev: PlanItem[], next: PlanItem[]): boolean {
@@ -290,4 +318,19 @@ export function doneItemsPreserved(prev: PlanItem[], next: PlanItem[]): boolean 
     if (found.startAt !== item.startAt || found.endAt !== item.endAt) return false;
   }
   return true;
+}
+
+function hmToMin(hm: string): number {
+  const [h, m] = hm.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function isClosedOn(
+  rule: { weekdays: number[]; exceptionOpen: string[]; extraClosed: string[] },
+  dateTokyo: string,
+  weekday: number,
+): boolean {
+  if (rule.exceptionOpen.includes(dateTokyo)) return false;
+  if (rule.extraClosed.includes(dateTokyo)) return true;
+  return rule.weekdays.includes(weekday);
 }

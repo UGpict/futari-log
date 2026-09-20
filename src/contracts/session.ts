@@ -19,7 +19,10 @@ export type RunStatus = z.infer<typeof runStatusSchema>;
 
 export const startRunRequestSchema = z.object({
   kind: runKindSchema.optional(),
-  trigger: z.string().optional(),
+  trigger: z.string().max(1000).optional(),
+  instruction: z.string().min(1).max(1000).optional(),
+  targetPlanItemId: z.string().min(1).max(80).optional(),
+  basePlanVersion: z.number().int().optional(),
 });
 export type StartRunRequest = z.infer<typeof startRunRequestSchema>;
 
@@ -29,6 +32,7 @@ export const startRunResponseSchema = z.object({
 export type StartRunResponse = z.infer<typeof startRunResponseSchema>;
 
 export const costSchema = z.object({
+  llmUsd: z.number().nullable().optional(),
   llmJpy: z.number().nullable(),
   apiJpy: z.number().nullable(),
   mundaneCalls: z.number(),
@@ -61,6 +65,8 @@ export const runDtoSchema = z.object({
   leaseExpiresAt: z.string().nullable(),
   heartbeatAt: z.string().nullable(),
   trigger: z.string().nullable(),
+  instruction: z.string().nullable().optional(),
+  targetPlanItemId: z.string().nullable().optional(),
   basePlanVersion: z.number().nullable(),
   resultPlanVersion: z.number().nullable(),
   waitingQuestion: waitingQuestionSchema.nullable(),
@@ -328,6 +334,7 @@ export const sessionSnapshotSchema = z.object({
   couple: coupleDtoSchema,
   session: sessionDtoSchema,
   plan: planDtoSchema.nullable(),
+  proposedPlan: planDtoSchema.nullable().optional(),
   spots: z.record(z.string(), spotDtoSchema),
   evidence: z.record(z.string(), z.unknown()).optional(),
   runs: z.array(runDtoSchema),

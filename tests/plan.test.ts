@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import { validatePlan } from "../src/domain/plan/validatePlan";
 import { evaluateAutoApply } from "../src/domain/plan/evaluateAutoApply";
 import { diffPlan } from "../src/domain/plan/diffPlan";
+import { composeReplanOrder, replanStartError } from "../src/domain/plan/replanOrder";
+import { classifyReplanIntent, hasMaterialPlanChange, replanRequestSatisfied } from "../src/domain/plan/replanIntent";
 import type { Plan, PlanningInput, Spot } from "../src/domain/schemas";
 
 function fact<T>(value: T | null) {
@@ -159,6 +161,14 @@ describe("validatePlan", () => {
     const result = validatePlan(plan, { spots, input });
     assert.equal(result.state, "FAIL");
   });
+
+  it("MUST_UNMET stays ERROR when no type-backed preference match is recorded", () => {
+    const plan = basePlan();
+    plan.items[0].matchesPreferenceIds = [];
+    const result = validatePlan(plan, { spots, input });
+    assert.equal(result.state, "FAIL");
+    assert.ok(result.issues.some((issue) => issue.code === "MUST_UNMET"));
+  });
 });
 
 describe("evaluateAutoApply", () => {
@@ -247,5 +257,99 @@ describe("evaluateAutoApply", () => {
       expectedBaseVersion: 1,
     });
     assert.equal(result.apply, true);
+  });
+});
+
+describe("composeReplanOrder", () => {
+  const items = [
+    { id: "it_a", spotId: "cafe", locked: false, progress: "NOT_STARTED" },
+    { id: "it_b", spotId: "park", locked: true, progress: "NOT_STARTED" },
+    { id: "it_c", spotId: "museum", locked: false, progress: "DONE" },
+  ];
+
+  it("replaces only the targeted item and keeps protected spots", () => {
+    const result = composeReplanOrder({
+      currentItems: items,
+      candidates: ["cafe", "park", "museum", "book"],
+      targetPlanItemId: "it_a",
+    });
+    assert.deepEqual(result.orderedSpotIds, ["book", "park", "museum"]);
+  });
+
+  it("replaces only unprotected items for a whole-plan wish", () => {
+    const result = composeReplanOrder({
+      currentItems: items,
+      candidates: ["book", "gallery"],
+    });
+    assert.deepEqual(result.orderedSpotIds, ["book", "park", "museum"]);
+  });
+
+  it("returns 409 when the displayed plan version is stale", () => {
+    const error = replanStartError({
+      kind: "REPLAN",
+      instruction: "別の場所がいい",
+      basePlanVersion: 1,
+      currentPlanVersion: 2,
+      targetPlanItemId: "it_a",
+      currentItemIds: ["it_a"],
+    });
+    assert.equal(error?.status, 409);
+    assert.equal(error?.error, "stale version");
+  });
+
+  it("does not treat a same-spot candidate as a replacement", () => {
+    const result = composeReplanOrder({
+      currentItems: items,
+      candidates: ["cafe", "park", "museum"],
+      targetPlanItemId: "it_a",
+    });
+    assert.deepEqual(result.orderedSpotIds, ["cafe", "park", "museum"]);
+    assert.equal(result.targetChanged, false);
+  });
+});
+
+describe("replan intent and material change", () => {
+  it("treats 別のカフェ as a place replacement, not a time tweak", () => {
+    assert.equal(classifyReplanIntent("このカフェを別のカフェにして", "it_a"), "replace_place");
+    assert.equal(classifyReplanIntent("ゆっくり過ごしたい", "it_a"), "adjust_same_place");
+  });
+
+  it("does not count item-id reissue as a place change", () => {
+    const previous = basePlan();
+    const next = structuredClone(previous);
+    next.version = 2;
+    next.items[0] = { ...next.items[0], id: "it_new", reason: "言い換え" };
+    const diff = diffPlan(previous, next);
+    assert.equal(hasMaterialPlanChange(diff), false);
+    assert.equal(
+      replanRequestSatisfied({
+        intent: "replace_place",
+        previous,
+        next,
+        diff,
+        targetPlanItemId: previous.items[0].id,
+      }),
+      false,
+    );
+  });
+
+  it("accepts a different spotId for the targeted item", () => {
+    const previous = basePlan();
+    const next = structuredClone(previous);
+    next.version = 2;
+    next.items[0] = { ...next.items[0], id: "it_new", spotId: "park" };
+    const diff = diffPlan(previous, next);
+    assert.equal(diff.replaced[0]?.fromSpotId, "cafe");
+    assert.equal(diff.replaced[0]?.toSpotId, "park");
+    assert.equal(
+      replanRequestSatisfied({
+        intent: "replace_place",
+        previous,
+        next,
+        diff,
+        targetPlanItemId: previous.items[0].id,
+      }),
+      true,
+    );
   });
 });

@@ -53,3 +53,7 @@ import type { SessionSnapshot } from "@/contracts";
 const me = await ensureAuth();
 const snap = await api<SessionSnapshot>(`/api/sessions/${id}`);
 ```
+
+イベントカタログの契約・実レスポンス・確認状態は `docs/catalog-ui.md`。写真は未検証。
+フロントからの実装依頼は `docs/backend-handoff.md`。
+カレンダー一覧と場所検索の契約・完了条件は `docs/specs/calendar-place.md`。

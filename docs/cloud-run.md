@@ -28,6 +28,9 @@ curl -sS "$CLOUD_RUN_URL/api/health"
 DEMO_BASE_URL="$CLOUD_RUN_URL" npm run demo:live
 ```
 
+提案の実行は Cloud Workflows（`docs/workflows.md`）。gather → propose。
+
+
 ## スクリプトがやること
 
 `scripts/deploy-cloud-run.sh` は次を冪等に実行します。秘密は git に出さず、`.env.local` から Secret Manager へ入れます。

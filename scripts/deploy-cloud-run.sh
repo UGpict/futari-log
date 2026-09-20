@@ -89,7 +89,8 @@ gcloud services enable \
   identitytoolkit.googleapis.com \
   firebase.googleapis.com \
   places.googleapis.com \
-  routes.googleapis.com
+  routes.googleapis.com \
+  workflows.googleapis.com
 
 if ! gcloud artifacts repositories describe "$AR_REPO" --location="$REGION" >/dev/null 2>&1; then
   gcloud artifacts repositories create "$AR_REPO" \
@@ -146,6 +147,7 @@ grant "$COMPUTE_SA" roles/secretmanager.secretAccessor
 grant "$COMPUTE_SA" roles/datastore.user
 grant "$COMPUTE_SA" roles/firebaseauth.admin
 grant "$COMPUTE_SA" roles/logging.logWriter
+grant "$COMPUTE_SA" roles/workflows.invoker
 
 if command -v firebase >/dev/null 2>&1; then
   firebase use "$PROJECT_ID" --non-interactive >/dev/null 2>&1 || true
@@ -155,14 +157,35 @@ else
   echo "firebase-tools が無いので firestore.rules は未デプロイ。npm i -g firebase-tools のあと firebase deploy --only firestore:rules,firestore:indexes"
 fi
 
+IMAGE_TAG="$(git rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)"
 gcloud builds submit --config cloudbuild.yaml \
-  --substitutions=_REGION="$REGION",_SERVICE="$SERVICE",_AR_REPO="$AR_REPO",_APP_RUNTIME="$DEPLOY_RUNTIME",_ORCA_BASE="$ORCA_BASE",_ORCA_MUNDANE="$ORCA_MUNDANE",_ORCA_HARD="$ORCA_HARD"
+  --substitutions=_REGION="$REGION",_SERVICE="$SERVICE",_AR_REPO="$AR_REPO",_APP_RUNTIME="$DEPLOY_RUNTIME",_ORCA_BASE="$ORCA_BASE",_ORCA_MUNDANE="$ORCA_MUNDANE",_ORCA_HARD="$ORCA_HARD",_TAG="$IMAGE_TAG"
 
 CLOUD_RUN_URL="$(gcloud run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')"
 RUN_HOST="${CLOUD_RUN_URL#https://}"
 export PROJECT_ID RUN_HOST
 
 echo "Cloud Run URL: $CLOUD_RUN_URL"
+
+if ! gcloud secrets describe WORKFLOW_INVOKE_SECRET >/dev/null 2>&1; then
+  node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))" \
+    | gcloud secrets create WORKFLOW_INVOKE_SECRET --data-file=- >/dev/null
+  echo "secret WORKFLOW_INVOKE_SECRET ok"
+else
+  echo "secret WORKFLOW_INVOKE_SECRET exists"
+fi
+
+gcloud workflows deploy futari-propose \
+  --location="$REGION" \
+  --source="$ROOT/workflows/propose.yaml" \
+  --service-account="$COMPUTE_SA"
+
+gcloud run services update "$SERVICE" \
+  --region="$REGION" \
+  --update-env-vars="PLAN_ORCHESTRATOR=workflows,PUBLIC_BASE_URL=$CLOUD_RUN_URL,WORKFLOW_NAME=futari-propose,WORKFLOW_LOCATION=$REGION,ENABLE_EVENT_CATALOG=false,INGEST_OIDC_SERVICE_ACCOUNT=$COMPUTE_SA,ORCAROUTER_SEARCH_MODEL=google/gemini-2.5-flash" \
+  --update-secrets=WORKFLOW_INVOKE_SECRET=WORKFLOW_INVOKE_SECRET:latest
+
+echo "workflow: https://console.cloud.google.com/workflows/workflow/$REGION/futari-propose/executions?project=$PROJECT_ID"
 
 node <<'NODE'
 const { execSync } = require("node:child_process");

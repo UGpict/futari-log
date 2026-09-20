@@ -102,7 +102,10 @@ function sumKnownTravel(plan: Plan): number | null {
   let sum = 0;
   for (const leg of plan.legs) {
     if (leg.durationMinutes.value == null) return null;
-    sum += leg.durationMinutes.value + (leg.delayMinutesInjected ?? 0);
+    sum +=
+      leg.durationMinutes.value +
+      (leg.bufferMinutes ?? 0) +
+      (leg.delayMinutesInjected ?? 0);
   }
   return sum;
 }

@@ -21,6 +21,7 @@ ENV GIT_COMMIT=$GIT_COMMIT
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/.next ./.next
+COPY --from=build /app/public ./public
 COPY --from=build /app/src ./src
 COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/next.config.ts ./next.config.ts

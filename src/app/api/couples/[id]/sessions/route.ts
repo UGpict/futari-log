@@ -1,5 +1,21 @@
 import { json, requireUid } from "@/server/api/http";
-import { createSession } from "@/server/api/actions";
+import { createSession, listCalendarPlans } from "@/server/api/actions";
+
+export async function GET(
+  request: Request,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  const auth = await requireUid(request);
+  if ("error" in auth) return auth.error;
+  const { id } = await ctx.params;
+  const url = new URL(request.url);
+  const result = await listCalendarPlans(auth.uid, id, {
+    from: url.searchParams.get("from"),
+    to: url.searchParams.get("to"),
+  });
+  if (!result.ok) return json({ error: result.error }, result.status);
+  return json(result.data);
+}
 
 export async function POST(
   request: Request,

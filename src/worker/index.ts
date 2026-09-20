@@ -1,4 +1,5 @@
 import { WORKER, LIMITS } from "@/config/settings";
+import { getEnv } from "@/config/env";
 import { claimPendingRun, heartbeat } from "@/server/agent/lease";
 import { executeRun } from "@/server/agent/execute";
 
@@ -30,6 +31,10 @@ async function loop() {
 }
 
 export function startWorker() {
+  if (getEnv().planOrchestrator === "workflows") {
+    console.log("worker idle: PLAN_ORCHESTRATOR=workflows");
+    return;
+  }
   setInterval(() => {
     void loop().catch((error) => console.error("worker loop failed", error));
   }, WORKER.pollMs);

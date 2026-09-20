@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import type { SessionSnapshot } from "@/contracts";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { SessionSnapshot, StartRunRequest } from "@/contracts";
 import { api, ensureAuth, fixturesEnabled } from "../api";
 
 export function useSession(sessionId: string) {
   const [data, setData] = useState<SessionSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const idempotencyRef = useRef(`replan:${sessionId}:${crypto.randomUUID()}`);
 
   const reload = useCallback(async () => {
     if (fixturesEnabled() && sessionId === "fx-loading") return;
@@ -36,5 +37,28 @@ export function useSession(sessionId: string) {
     }
   }
 
-  return { data, error, setError, reload, post };
+  async function startReplan(input: {
+    instruction: string;
+    targetPlanItemId?: string;
+    basePlanVersion: number;
+  }) {
+    const body: StartRunRequest = {
+      kind: "REPLAN",
+      instruction: input.instruction,
+      basePlanVersion: input.basePlanVersion,
+      ...(input.targetPlanItemId ? { targetPlanItemId: input.targetPlanItemId } : {}),
+    };
+    try {
+      await api(`/api/sessions/${sessionId}/runs`, {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyRef.current },
+        body: JSON.stringify(body),
+      });
+      await reload();
+    } finally {
+      idempotencyRef.current = `replan:${sessionId}:${crypto.randomUUID()}`;
+    }
+  }
+
+  return { data, error, setError, reload, post, startReplan };
 }

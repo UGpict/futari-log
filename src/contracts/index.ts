@@ -4,3 +4,8 @@ export * from "./me";
 export * from "./session";
 export * from "./memory";
 export * from "./replay";
+export * from "./catalog";
+export * from "./calendar";
+export * from "./places";
+export * from "./spotKinds";
+export * from "./serviceArea";

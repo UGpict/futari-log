@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { sessionSnapshotSchema } from "../src/contracts/session";
+import { sessionSnapshotSchema, startRunRequestSchema } from "../src/contracts/session";
 import { meResponseSchema } from "../src/contracts/me";
 import {
   fixtureApproval,
@@ -28,5 +28,18 @@ describe("contracts / fixtures", () => {
     assert.equal(fixturesEnabled(), false);
     process.env.NEXT_PUBLIC_USE_API_FIXTURES = prevFix;
     process.env.NEXT_PUBLIC_APP_RUNTIME = prevRt;
+  });
+
+  it("accepts structured replan fields without stuffing an item id into trigger", () => {
+    const parsed = startRunRequestSchema.parse({
+      kind: "REPLAN",
+      instruction: "別のカフェがいい",
+      targetPlanItemId: "it_1",
+      basePlanVersion: 2,
+    });
+    assert.equal(parsed.instruction, "別のカフェがいい");
+    assert.equal(parsed.targetPlanItemId, "it_1");
+    assert.equal(parsed.basePlanVersion, 2);
+    assert.equal(parsed.trigger, undefined);
   });
 });

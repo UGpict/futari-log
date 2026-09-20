@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { TIME_ZONE } from "./settings";
+import { tokyoToday } from "./public";
 
 function loadDotEnv() {
   const g = globalThis as { __futariEnvLoaded?: boolean };
@@ -42,6 +43,13 @@ function readNumber(name: string, fallback: number): number {
   if (value == null) return fallback;
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function resolveDemoDate(): string {
+  const today = tokyoToday();
+  const raw = read("DEMO_DATE");
+  if (raw && /^\d{4}-\d{2}-\d{2}$/.test(raw) && raw >= today) return raw;
+  return today;
 }
 
 export type RuntimeMode = "MOCK" | "LIVE";
@@ -140,17 +148,32 @@ export function getEnv() {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
-    demoAreaName: read("DEMO_AREA_NAME") ?? "名古屋駅周辺",
-    demoLat: readNumber("DEMO_LAT", 35.170915),
-    demoLng: readNumber("DEMO_LNG", 136.881537),
-    demoDate: read("DEMO_DATE") ?? "2026-09-19",
+    demoAreaName: read("DEMO_AREA_NAME") ?? "東京駅周辺",
+    demoLat: readNumber("DEMO_LAT", 35.681236),
+    demoLng: readNumber("DEMO_LNG", 139.767125),
+    demoDate: resolveDemoDate(),
+    enableEventCatalog: readBool("ENABLE_EVENT_CATALOG", false),
+    orcaSearchModel: read("ORCAROUTER_SEARCH_MODEL") ?? "google/gemini-2.5-flash",
+    ingestMaxEvents: Math.max(1, Math.min(10, readNumber("INGEST_MAX_EVENTS", 10))),
+    ingestOidcAudience:
+      read("INGEST_OIDC_AUDIENCE") ??
+      (read("PUBLIC_BASE_URL")
+        ? `${read("PUBLIC_BASE_URL")!.replace(/\/$/, "")}/api/internal/catalog/ingest`
+        : null),
+    ingestOidcServiceAccount: read("INGEST_OIDC_SERVICE_ACCOUNT"),
     workerConcurrency: Math.max(1, readNumber("WORKER_CONCURRENCY", 1)),
+    planOrchestrator: read("PLAN_ORCHESTRATOR") === "workflows" ? ("workflows" as const) : ("worker" as const),
+    workflowName: read("WORKFLOW_NAME") ?? "futari-propose",
+    workflowLocation: read("WORKFLOW_LOCATION") ?? "asia-northeast1",
+    workflowInvokeSecret: read("WORKFLOW_INVOKE_SECRET"),
+    publicBaseUrl: read("PUBLIC_BASE_URL"),
     mockAuthSecret: read("MOCK_AUTH_SECRET") ?? "dev-only-change-me",
     cookieSecure: readBool("COOKIE_SECURE", onCloudRun),
     port: readNumber("PORT", 3000),
     timeZone: TIME_ZONE,
     onCloudRun,
     uiFixtures,
+    firestoreNamespace: read("FIRESTORE_NAMESPACE"),
   };
 }
 
@@ -180,7 +203,7 @@ export function publicBlockers(): { code: string; item: string; status: "BLOCKED
   }
   items.push({
     code: "VENUE",
-    item: "東京の発表会場住所・最寄り駅は未提供。開発時は名古屋駅周辺を明示使用",
+    item: "発表会場の住所は未提供。検索中心は東京駅周辺（会場そのものではない）",
     status: "BLOCKED",
   });
   return items;

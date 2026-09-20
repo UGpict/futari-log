@@ -75,6 +75,38 @@ export const spotSchema = z.object({
   restEase: factSchema(restEaseSchema),
   standingBurden: factSchema(standingBurdenSchema),
   officialUrl: z.string().nullable(),
+  spotKind: z.enum(["VENUE", "EVENT"]).optional(),
+  catalogEventId: z.string().nullable().optional(),
+  catalogVenueId: z.string().nullable().optional(),
+  eventWindow: z
+    .object({
+      startAt: z.string().nullable(),
+      endAt: z.string().nullable(),
+      confirmation: z.enum(["VERIFIED", "PARTIAL", "UNKNOWN"]),
+      evidenceIds: z.array(z.string()),
+    })
+    .nullable()
+    .optional(),
+  eventHours: z
+    .object({
+      open: z.string().nullable(),
+      close: z.string().nullable(),
+      fridayClose: z.string().nullable(),
+      confirmation: z.enum(["VERIFIED", "PARTIAL", "UNKNOWN"]),
+      evidenceIds: z.array(z.string()),
+    })
+    .nullable()
+    .optional(),
+  eventClosed: z
+    .object({
+      weekdays: z.array(z.number()),
+      exceptionOpen: z.array(z.string()),
+      extraClosed: z.array(z.string()),
+      confirmation: z.enum(["VERIFIED", "PARTIAL", "UNKNOWN"]),
+      evidenceIds: z.array(z.string()),
+    })
+    .nullable()
+    .optional(),
   imageUrl: z.string().nullable().optional(),
   imageSourceUrl: z.string().nullable().optional(),
   imageProvider: z.string().nullable().optional(),
@@ -110,6 +142,10 @@ export const travelLegSchema = z.object({
   departureAt: z.string(),
   durationMinutes: factSchema(z.number()),
   distanceMeters: factSchema(z.number()),
+  bufferMinutes: z.number().optional(),
+  cachedAt: z.string().nullable().optional(),
+  requestedDepartureAt: z.string().nullable().optional(),
+  effectiveDepartureAt: z.string().nullable().optional(),
   delayMinutesInjected: z.number().nullable(),
   evidenceIds: z.array(z.string()),
 });
@@ -306,6 +342,8 @@ export const runSchema = z.object({
   leaseExpiresAt: z.string().nullable(),
   heartbeatAt: z.string().nullable(),
   trigger: z.string().nullable(),
+  instruction: z.string().nullable().optional(),
+  targetPlanItemId: z.string().nullable().optional(),
   basePlanVersion: z.number().nullable(),
   resultPlanVersion: z.number().nullable(),
   waitingQuestion: z
@@ -318,6 +356,7 @@ export const runSchema = z.object({
   waitingApprovalId: z.string().nullable(),
   error: z.string().nullable(),
   cost: z.object({
+    llmUsd: z.number().nullable().optional(),
     llmJpy: z.number().nullable(),
     apiJpy: z.number().nullable(),
     mundaneCalls: z.number(),
@@ -391,6 +430,19 @@ export const sessionStatusSchema = z.enum([
 ]);
 export type SessionStatus = z.infer<typeof sessionStatusSchema>;
 
+export const walkLongAckSchema = z.object({
+  fingerprint: z.string(),
+  at: z.string(),
+  dateTokyo: z.string().optional(),
+  travelMode: z.string().optional(),
+  meetSpotId: z.string().nullable().optional(),
+  endSpotId: z.string().nullable().optional(),
+  routeSpotIds: z.array(z.string()).optional(),
+  longestLegMinutes: z.number().optional(),
+  totalMinutes: z.number().optional(),
+});
+export type WalkLongAck = z.infer<typeof walkLongAckSchema>;
+
 export const sessionSchema = z.object({
   id: z.string(),
   coupleId: z.string(),
@@ -408,6 +460,8 @@ export const sessionSchema = z.object({
   scheduleNow: z.string().nullable(),
   isDemo: z.boolean(),
   createdAt: z.string(),
+  walkLongAck: walkLongAckSchema.nullable().optional(),
+  pendingWalkAckFingerprint: z.string().nullable().optional(),
 });
 export type Session = z.infer<typeof sessionSchema>;
 

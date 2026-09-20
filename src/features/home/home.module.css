@@ -302,8 +302,10 @@
 .dateDetails .planChips button { min-height: 39px; font-size: 11px; padding: 8px 11px; }
 
 /* Compact planning sheet: progress, mascot, then one choice surface. */
-.sheet:has(.compactPlan) .sheetInner { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
-.sheet:has(.compactPlan) .sheetHeader { margin-bottom: 8px; }
+.sheet:has(.compactPlan) { display: flex; flex-direction: column; overflow: hidden; }
+.sheet:has(.compactPlan) .sheetInner { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+.sheet:has(.compactPlan) .sheetHeader { flex-shrink: 0; margin-bottom: 8px; }
+.sheet:has(.compactPlan) .sheetHandle { flex-shrink: 0; }
 .planProgress { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; }
 .planProgress button { position: relative; flex-direction: column; gap: 4px; padding: 3px 0; min-height: 44px; font-size: 10px; isolation: isolate; }
 .planProgress button:not(:last-child)::after { content: ''; position: absolute; left: 50%; top: 15px; width: 100%; height: 3px; background: #e8dce3; z-index: -1; }
@@ -313,14 +315,15 @@
 .planProgress button:disabled { opacity: 1; color: #aa98a4; }
 .planCompanion { height: 74px; margin: 0; overflow: hidden; }
 .planCompanion > span { transform: scale(.58); transform-origin: top center; }
-.compactPlan { gap: 8px; }
+.compactPlan { flex: 1; min-height: 0; gap: 8px; }
 .compactPlan .planStage h3 { text-align: center; font-size: 19px; }
 .compactPlan .dateMoodGrid { gap: 9px; margin: 12px 0 8px; }
 .compactPlan .dateMoodPhoto { height: clamp(58px, 11dvh, 94px); aspect-ratio: auto; background-size: 200% auto; }
 .compactPlan .dateMoodCaption { padding: 8px; text-align: center; }
 .compactPlan .dateMoodCaption strong { font-size: 12px; }
 .compactPlan .planChips { margin: 8px 0 0; }
-.compactPlan .planFooter { bottom: 0; padding: 8px 0 0; }
+.compactPlan .planStage { flex: 1; min-height: 0; overflow: auto; }
+.compactPlan .planFooter { position: static; bottom: auto; z-index: 1; flex-shrink: 0; padding: 8px 0 0; }
 .compactPlan .dateDetails { padding: 0; margin-top: 6px; border: 0; background: transparent; }
 .stepBack { display: inline-flex; min-height: 44px; align-items: center; gap: 6px; margin: -4px 0 4px -8px; padding: 8px 12px; border-radius: 12px; color: #925675; font-size: 12px; font-weight: 600; }
 .stepBack:hover { background: #f6e9f0; }
@@ -409,6 +412,11 @@
 .meetingCard details { border-top: 1px solid #f0e7ec; margin: 12px 0 0 29px; padding-top: 4px; }
 .meetingCard summary { display: flex; align-items: center; justify-content: space-between; min-height: 32px; font-size: 11px; color: #9d8796; cursor: pointer; }
 .meetingCard details input { margin-bottom: 6px; }
+.placeSuggest { display: grid; gap: 4px; margin: 8px 0 0; max-height: min(240px, 36dvh); overflow: auto; }
+.placeSuggest button { display: grid; gap: 2px; text-align: left; border: 0; border-radius: 12px; padding: 8px 10px; background: #faf6f8; color: #695362; font-size: 12px; }
+.placeSuggest button small { color: #9d8796; font-size: 10px; }
+.placeHint { margin: 6px 0 0; font-size: 10px; color: #9d8796; }
+.areaNotice { margin: 0 0 10px; color: #917e8b; font-size: 11px; line-height: 1.6; }
 @media (prefers-reduced-motion: reduce) { .stageEntering, .stageLeaving, .dateDetails .categoryQuestion, .dateDetails > .planHint, .dateDetails .planChips, .planCalendar, .planCalendarDays button[data-choosing="true"], .planCalendarDays button[data-choosing="true"]::before { animation: none; } }
 
 /* Keep native date/time editing, without duplicate browser glyphs. */

@@ -9,6 +9,7 @@ import type {
   Spot,
   TravelLeg,
 } from "@/domain/schemas";
+import { explainWishMatches } from "@/contracts/spotKinds";
 import { preferenceMatchIds, validatePlan } from "@/domain/plan/validatePlan";
 import { newId } from "@/lib/ids";
 import { addMinutes, minutesBetween, tokyoDateTime } from "@/lib/time";
@@ -200,8 +201,27 @@ export async function buildPlan(input: {
   const meet = input.input.meet;
   const endPoint = input.input.end;
   const mode = input.input.travelMode;
+  const travelNotes: string[] = [];
 
-  async function legBetween(
+  function isProtected(item: PlanItem): boolean {
+    return item.locked || item.progress === "DONE" || item.progress === "IN_PROGRESS";
+  }
+
+  function stayOf(item: PlanItem): number {
+    const stay = minutesBetween(item.startAt, item.endAt);
+    return stay > 0 && stay <= 80 ? stay : 50;
+  }
+
+  function blockMinutes(t: {
+    durationMinutes: number | null;
+    bufferMinutes?: number;
+    delayMinutes: number;
+  }): number | null {
+    if (t.durationMinutes == null) return null;
+    return t.durationMinutes + (t.bufferMinutes ?? 0) + t.delayMinutes;
+  }
+
+  async function measureLeg(
     from: { lat: number; lng: number; spotId: string | null; kind: TravelLeg["from"] },
     to: { lat: number; lng: number; spotId: string | null; kind: TravelLeg["to"] },
     departureAt: string,
@@ -213,6 +233,20 @@ export async function buildPlan(input: {
       departureAt,
     });
     evidence.push(t.evidence);
+    const label =
+      from.kind === "MEET"
+        ? `集合→${to.spotId ? spots[to.spotId]?.name ?? "最初" : "最初"}`
+        : to.kind === "END"
+          ? `${from.spotId ? spots[from.spotId]?.name ?? "最後" : "最後"}→解散`
+          : `${from.spotId ? spots[from.spotId]?.name ?? "区間" : "区間"}→${to.spotId ? spots[to.spotId]?.name ?? "次" : "次"}`;
+    if (t.durationMinutes == null) {
+      travelNotes.push(`${label}: 未検証（${t.evidence.note ?? "Routes 失敗"}）`);
+    }
+    if (t.departureAdjusted && t.requestedDepartureAt && t.effectiveDepartureAt) {
+      travelNotes.push(
+        `${label}: 予定出発 ${t.requestedDepartureAt} → 実リクエスト ${t.effectiveDepartureAt}（過去・直近のみ補正。未来の予定は置き換えていない）`,
+      );
+    }
     return {
       id: newId("leg"),
       from: from.kind,
@@ -223,6 +257,10 @@ export async function buildPlan(input: {
       departureAt,
       durationMinutes: fact(t.durationMinutes, [t.evidence.id]),
       distanceMeters: fact(t.distanceMeters, [t.evidence.id]),
+      bufferMinutes: t.bufferMinutes,
+      cachedAt: t.cached ? t.evidence.fetchedAt : null,
+      requestedDepartureAt: t.requestedDepartureAt,
+      effectiveDepartureAt: t.effectiveDepartureAt,
       delayMinutesInjected: t.delayMinutes > 0 ? t.delayMinutes : null,
       evidenceIds: [t.evidence.id],
     };
@@ -230,64 +268,82 @@ export async function buildPlan(input: {
 
   if (items[0]) {
     const first = spots[items[0].spotId];
-    const meetLeg = await legBetween(
+    let meetLeg = await measureLeg(
       { lat: meet.lat, lng: meet.lng, spotId: meet.spotId, kind: "MEET" },
       { lat: first.lat, lng: first.lng, spotId: first.id, kind: "SPOT" },
       start,
     );
-    legs.push(meetLeg);
-    const travel = (meetLeg.durationMinutes.value ?? 0) + (meetLeg.delayMinutesInjected ?? 0);
-    if (!items[0].locked) {
+    const travel = blockMinutes({
+      durationMinutes: meetLeg.durationMinutes.value,
+      bufferMinutes: meetLeg.bufferMinutes,
+      delayMinutes: meetLeg.delayMinutesInjected ?? 0,
+    });
+    if (travel != null && !isProtected(items[0])) {
+      const stay = stayOf(items[0]);
       items[0].startAt = addMinutes(start, travel);
-      const stay = minutesBetween(items[0].startAt, items[0].endAt);
-      const originalStay = stay > 0 && stay <= 80 ? stay : 50;
-      items[0].endAt = addMinutes(items[0].startAt, originalStay);
+      items[0].endAt = addMinutes(items[0].startAt, stay);
     }
+    legs.push(meetLeg);
   }
 
   for (let i = 0; i < items.length - 1; i++) {
     const a = spots[items[i].spotId];
     const b = spots[items[i + 1].spotId];
-    const preview = await estimateTravel(input.ctx, {
-      from: { lat: a.lat, lng: a.lng, spotId: a.id },
-      to: { lat: b.lat, lng: b.lng, spotId: b.id },
-      mode,
-      departureAt: items[i].endAt,
+    let departureAt = items[i].endAt;
+    let leg = await measureLeg(
+      { lat: a.lat, lng: a.lng, spotId: a.id, kind: "SPOT" },
+      { lat: b.lat, lng: b.lng, spotId: b.id, kind: "SPOT" },
+      departureAt,
+    );
+    const travel = blockMinutes({
+      durationMinutes: leg.durationMinutes.value,
+      bufferMinutes: leg.bufferMinutes,
+      delayMinutes: leg.delayMinutesInjected ?? 0,
     });
-    const travel = (preview.durationMinutes ?? 0) + preview.delayMinutes;
-    if (items[i + 1].locked) {
-      const mustEnd = addMinutes(items[i + 1].startAt, -travel);
-      const minEnd = addMinutes(items[i].startAt, 25);
-      if (new Date(items[i].endAt) > new Date(mustEnd) && new Date(mustEnd) >= new Date(minEnd)) {
-        items[i].endAt = mustEnd;
-      }
-    } else {
-      const startAt = addMinutes(items[i].endAt, travel);
-      if (new Date(startAt) > new Date(items[i + 1].startAt)) {
-        const rawStay = minutesBetween(items[i + 1].startAt, items[i + 1].endAt);
-        const stay = rawStay > 0 && rawStay <= 80 ? rawStay : 40;
-        items[i + 1].startAt = startAt;
-        items[i + 1].endAt = addMinutes(startAt, stay);
+    if (travel != null) {
+      if (isProtected(items[i + 1])) {
+        const mustEnd = addMinutes(items[i + 1].startAt, -travel);
+        const minEnd = addMinutes(items[i].startAt, 25);
+        if (!isProtected(items[i]) && new Date(items[i].endAt) > new Date(mustEnd) && new Date(mustEnd) >= new Date(minEnd)) {
+          items[i].endAt = mustEnd;
+        }
+      } else {
+        const startAt = addMinutes(items[i].endAt, travel);
+        if (new Date(startAt) > new Date(items[i + 1].startAt)) {
+          const stay = stayOf(items[i + 1]);
+          items[i + 1].startAt = startAt;
+          items[i + 1].endAt = addMinutes(startAt, stay);
+        }
       }
     }
-    legs.push(
-      await legBetween(
+    if (mode === "TRANSIT" && items[i].endAt !== departureAt) {
+      leg = await measureLeg(
         { lat: a.lat, lng: a.lng, spotId: a.id, kind: "SPOT" },
         { lat: b.lat, lng: b.lng, spotId: b.id, kind: "SPOT" },
         items[i].endAt,
-      ),
-    );
+      );
+    } else {
+      leg = { ...leg, departureAt: items[i].endAt };
+    }
+    legs.push(leg);
   }
 
   if (items.length) {
     const last = spots[items[items.length - 1].spotId];
-    legs.push(
-      await legBetween(
+    let endDeparture = items[items.length - 1].endAt;
+    let endLeg = await measureLeg(
+      { lat: last.lat, lng: last.lng, spotId: last.id, kind: "SPOT" },
+      { lat: endPoint.lat, lng: endPoint.lng, spotId: endPoint.spotId, kind: "END" },
+      endDeparture,
+    );
+    if (mode === "TRANSIT" && items[items.length - 1].endAt !== endDeparture) {
+      endLeg = await measureLeg(
         { lat: last.lat, lng: last.lng, spotId: last.id, kind: "SPOT" },
         { lat: endPoint.lat, lng: endPoint.lng, spotId: endPoint.spotId, kind: "END" },
         items[items.length - 1].endAt,
-      ),
-    );
+      );
+    }
+    legs.push(endLeg);
   }
 
   const openings: OpeningAssessment[] = [];
@@ -310,7 +366,7 @@ export async function buildPlan(input: {
     });
   }
 
-  const assumptions: string[] = [];
+  const assumptions: string[] = [...travelNotes];
   for (const item of items) {
     const opening = openings.find((o) => o.spotId === item.spotId);
     if (opening?.state === "UNKNOWN") {
@@ -408,10 +464,15 @@ function uniqueInfluences(list: Plan["memoryInfluences"]): Plan["memoryInfluence
 }
 
 function reasonFor(spot: Spot, input: PlanningInput): string {
-  const matches = preferenceMatchIds(spot, input.preferences);
-  if (matches.length) {
-    const texts = input.preferences.filter((p) => matches.includes(p.id)).map((p) => p.content);
-    return `希望「${texts.join(" / ")}」に合う実在スポット`;
+  const notes = input.preferences.flatMap((pref) =>
+    explainWishMatches(spot, pref.content)
+      .filter((match) => match.confidence === "type")
+      .map((match) => match.note),
+  );
+  const rest = input.preferences.some((pref) => /ゆっくり|休憩|のんびり/.test(pref.content));
+  if (rest && spot.restEase.value === "EASY") {
+    notes.push("休憩しやすい場所として記憶・希望を反映");
   }
-  return "動線と時間の都合で採用";
+  if (notes.length) return notes.join(" / ");
+  return "集合からの移動を考慮して採用";
 }
