@@ -15,15 +15,9 @@ import type {
 import { newId } from "@/lib/ids";
 import { realNowIso, toTokyoParts } from "@/lib/time";
 import { getCatalogSpot, MOCK_CATALOG, searchCatalog, type CatalogSpot } from "./catalog";
-import type { ScenarioOverlay } from "@/domain/schemas";
+import type { ProviderCtx } from "./types";
 
-export type ProviderCtx = {
-  runId: string;
-  overlays: ScenarioOverlay[];
-  cache: Map<string, { at: string; value: unknown; stale: boolean }>;
-  httpAttempts: number;
-  onHttp: (info: { provider: string; cacheHit: boolean; attempt: number }) => void | Promise<void>;
-};
+export type { ProviderCtx } from "./types";
 
 function evidence(partial: Omit<Evidence, "id"> & { id?: string }): Evidence {
   return { id: partial.id ?? newId("ev"), ...partial };

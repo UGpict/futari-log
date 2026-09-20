@@ -1,0 +1,335 @@
+import { getEnv } from "@/config/env";
+import type { Evidence, Spot } from "@/domain/schemas";
+import { newId } from "@/lib/ids";
+import { realNowIso } from "@/lib/time";
+import type { ProviderCtx } from "./types";
+
+export type GroundedImage = {
+  spotId: string;
+  imageUrl: string;
+  imageSourceUrl: string;
+  provider: "gemini-grounding" | "places";
+};
+
+export type SpotImageResult = {
+  spots: Record<string, Spot>;
+  evidence: Record<string, Evidence>;
+  queries: string[];
+  searchEntryPointHtml: string | null;
+};
+
+const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
+
+export function groundingToolForModel(model: string): Record<string, unknown> {
+  return /1\.5/.test(model)
+    ? {
+        google_search_retrieval: {
+          dynamic_retrieval_config: { mode: "MODE_DYNAMIC", dynamic_threshold: 0.3 },
+        },
+      }
+    : { google_search: {} };
+}
+
+export function parseModelJson(text: string): { spots?: { id?: string; name?: string; imageUrl?: string; pageUrl?: string }[] } {
+  const trimmed = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  try {
+    return JSON.parse(trimmed) as { spots?: { id?: string; name?: string; imageUrl?: string; pageUrl?: string }[] };
+  } catch {
+    const start = trimmed.indexOf("{");
+    const end = trimmed.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      try {
+        return JSON.parse(trimmed.slice(start, end + 1)) as {
+          spots?: { id?: string; name?: string; imageUrl?: string; pageUrl?: string }[];
+        };
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  }
+}
+
+export function extractOgImage(html: string, pageUrl: string): string | null {
+  const patterns = [
+    /<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)["']/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image(?::secure_url)?["']/i,
+    /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i,
+  ];
+  for (const re of patterns) {
+    const match = html.match(re);
+    const raw = match?.[1]?.trim();
+    if (!raw) continue;
+    const resolved = resolveHttpUrl(raw, pageUrl);
+    if (resolved) return resolved;
+  }
+  return null;
+}
+
+export function resolveHttpUrl(raw: string, base?: string): string | null {
+  try {
+    const url = new URL(raw, base);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    if (url.protocol === "http:") url.protocol = "https:";
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function evidenceOf(partial: Omit<Evidence, "id"> & { id?: string }): Evidence {
+  return { id: partial.id ?? newId("ev"), ...partial };
+}
+
+export async function attachSpotImages(args: {
+  ctx: ProviderCtx;
+  spots: Record<string, Spot>;
+  areaName: string;
+  signal?: AbortSignal;
+}): Promise<SpotImageResult> {
+  const spots: Record<string, Spot> = { ...args.spots };
+  const evidence: Record<string, Evidence> = {};
+  let queries: string[] = [];
+  let searchEntryPointHtml: string | null = null;
+
+  const env = getEnv();
+  const targets = Object.values(spots).slice(0, 4);
+  if (env.geminiApiKey && targets.length) {
+    const grounded = await groundedFromGemini({
+      ctx: args.ctx,
+      spots: targets,
+      areaName: args.areaName,
+      apiKey: env.geminiApiKey,
+      model: env.geminiModel,
+      signal: args.signal,
+    });
+    queries = grounded.queries;
+    searchEntryPointHtml = grounded.searchEntryPointHtml;
+    for (const ev of grounded.evidence) evidence[ev.id] = ev;
+    for (const img of grounded.images) {
+      const spot = spots[img.spotId];
+      if (!spot) continue;
+      spots[img.spotId] = {
+        ...spot,
+        imageUrl: img.imageUrl,
+        imageSourceUrl: img.imageSourceUrl,
+        imageProvider: img.provider,
+      };
+    }
+  }
+
+  if (env.googleMapsApiKey) {
+    for (const spot of Object.values(spots)) {
+      if (spot.imageUrl || spot.id.startsWith("mock:")) continue;
+      const photo = await placesPhotoUrl(args.ctx, env.googleMapsApiKey, spot.id, args.signal);
+      if (!photo) continue;
+      spots[spot.id] = {
+        ...spot,
+        imageUrl: photo.imageUrl,
+        imageSourceUrl: photo.imageSourceUrl,
+        imageProvider: "places",
+      };
+      const ev = evidenceOf({
+        kind: "API",
+        provider: "places",
+        sourceRef: spot.id,
+        sourceField: "photos.media",
+        fetchedAt: realNowIso(),
+        validFor: null,
+        note: "Places photo media の公開 URL。Gemini グラウディング未取得時のフォールバック",
+      });
+      evidence[ev.id] = ev;
+    }
+  }
+
+  return { spots, evidence, queries, searchEntryPointHtml };
+}
+
+async function groundedFromGemini(args: {
+  ctx: ProviderCtx;
+  spots: Spot[];
+  areaName: string;
+  apiKey: string;
+  model: string;
+  signal?: AbortSignal;
+}): Promise<{
+  images: GroundedImage[];
+  evidence: Evidence[];
+  queries: string[];
+  searchEntryPointHtml: string | null;
+}> {
+  const lines = args.spots.map((s) => `- id=${s.id} name=${s.name} url=${s.officialUrl ?? ""}`).join("\n");
+  const prompt = [
+    `${args.areaName} の実在スポットについて、Google 検索で公式または観光案内のページを探し、そのページに載っている代表写真の URL を返す。`,
+    "画像を生成しない。検索で見つかった公開写真だけ。不明なら imageUrl は空文字。",
+    'JSON object だけ返す: {"spots":[{"id":"","name":"","imageUrl":"","pageUrl":""}]}',
+    lines,
+  ].join("\n");
+
+  args.ctx.httpAttempts += 1;
+  await args.ctx.onHttp({ provider: "gemini-grounding", cacheHit: false, attempt: args.ctx.httpAttempts });
+
+  const res = await fetch(`${GEMINI_ENDPOINT}/${encodeURIComponent(args.model)}:generateContent`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": args.apiKey,
+    },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      tools: [groundingToolForModel(args.model)],
+      generationConfig: { temperature: 0.1 },
+    }),
+    signal: args.signal ?? AbortSignal.timeout(20000),
+  });
+
+  const fetchedAt = realNowIso();
+  if (!res.ok) {
+    return {
+      images: [],
+      queries: [],
+      searchEntryPointHtml: null,
+      evidence: [
+        evidenceOf({
+          kind: "API",
+          provider: "gemini-grounding",
+          sourceRef: args.model,
+          sourceField: "generateContent",
+          fetchedAt,
+          validFor: null,
+          note: `Gemini grounding HTTP ${res.status}。gemini-1.5-flash は 2025-09 廃止。GEMINI_MODEL 既定は後継 Flash`,
+        }),
+      ],
+    };
+  }
+
+  const json = (await res.json()) as {
+    candidates?: {
+      content?: { parts?: { text?: string }[] };
+      groundingMetadata?: {
+        webSearchQueries?: string[];
+        searchEntryPoint?: { renderedContent?: string };
+        groundingChunks?: { web?: { uri?: string; title?: string } }[];
+      };
+    }[];
+  };
+  const candidate = json.candidates?.[0];
+  const text = candidate?.content?.parts?.map((p) => p.text ?? "").join("\n") ?? "";
+  const parsed = parseModelJson(text);
+  const queries = candidate?.groundingMetadata?.webSearchQueries ?? [];
+  const searchEntryPointHtml = candidate?.groundingMetadata?.searchEntryPoint?.renderedContent ?? null;
+  const chunkUrls = (candidate?.groundingMetadata?.groundingChunks ?? [])
+    .map((c) => resolveHttpUrl(c.web?.uri ?? ""))
+    .filter((u): u is string => Boolean(u));
+
+  const images: GroundedImage[] = [];
+  let pageFetches = 0;
+  for (const spot of args.spots) {
+    const row = parsed.spots?.find((s) => s.id === spot.id) ?? parsed.spots?.find((s) => s.name === spot.name);
+    const modelImage = row?.imageUrl ? resolveHttpUrl(row.imageUrl) : null;
+    const pageCandidates = [
+      row?.pageUrl ? resolveHttpUrl(row.pageUrl) : null,
+      spot.officialUrl ? resolveHttpUrl(spot.officialUrl) : null,
+      ...chunkUrls,
+    ].filter((u): u is string => Boolean(u));
+
+    let imageUrl = modelImage;
+    let source = pageCandidates[0] ?? null;
+    if (!imageUrl || !looksLikeImagePath(imageUrl)) {
+      imageUrl = null;
+      for (const page of pageCandidates.slice(0, 2)) {
+        if (pageFetches >= 8) break;
+        pageFetches += 1;
+        args.ctx.httpAttempts += 1;
+        await args.ctx.onHttp({ provider: "gemini-og-image", cacheHit: false, attempt: args.ctx.httpAttempts });
+        const og = await fetchOgImage(page, args.signal);
+        if (og) {
+          imageUrl = og;
+          source = page;
+          break;
+        }
+      }
+    }
+    if (!imageUrl || !source) continue;
+    images.push({
+      spotId: spot.id,
+      imageUrl,
+      imageSourceUrl: source,
+      provider: "gemini-grounding",
+    });
+  }
+
+  return {
+    images,
+    queries,
+    searchEntryPointHtml,
+    evidence: [
+      evidenceOf({
+        kind: "API",
+        provider: "gemini-grounding",
+        sourceRef: queries.join(" | ") || args.model,
+        sourceField: "searchEntryPoint",
+        fetchedAt,
+        validFor: null,
+        note: searchEntryPointHtml,
+      }),
+    ],
+  };
+}
+
+function looksLikeImagePath(url: string): boolean {
+  return /\.(avif|gif|jpe?g|png|webp)(\?|#|$)/i.test(url) || /googleusercontent|ggpht|fbcdn|cloudinary|wikipedia/.test(url);
+}
+
+async function fetchOgImage(pageUrl: string, signal?: AbortSignal): Promise<string | null> {
+  try {
+    const res = await fetch(pageUrl, {
+      headers: { Accept: "text/html", "User-Agent": "FutariLog/0.6 (grounded-image)" },
+      redirect: "follow",
+      signal: signal ?? AbortSignal.timeout(6000),
+    });
+    if (!res.ok) return null;
+    const type = res.headers.get("content-type") ?? "";
+    if (type.startsWith("image/")) return pageUrl;
+    if (!type.includes("html") && type.length > 0) return null;
+    const html = (await res.text()).slice(0, 400_000);
+    return extractOgImage(html, pageUrl);
+  } catch {
+    return null;
+  }
+}
+
+async function placesPhotoUrl(
+  ctx: ProviderCtx,
+  apiKey: string,
+  placeId: string,
+  signal?: AbortSignal,
+): Promise<{ imageUrl: string; imageSourceUrl: string } | null> {
+  ctx.httpAttempts += 1;
+  await ctx.onHttp({ provider: "places", cacheHit: false, attempt: ctx.httpAttempts });
+  const details = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`, {
+    headers: {
+      "X-Goog-Api-Key": apiKey,
+      "X-Goog-FieldMask": "id,photos.name,googleMapsUri",
+    },
+    signal: signal ?? AbortSignal.timeout(8000),
+  });
+  if (!details.ok) return null;
+  const body = (await details.json()) as { photos?: { name?: string }[]; googleMapsUri?: string };
+  const photoName = body.photos?.[0]?.name;
+  if (!photoName) return null;
+  ctx.httpAttempts += 1;
+  await ctx.onHttp({ provider: "places-photo", cacheHit: false, attempt: ctx.httpAttempts });
+  const media = await fetch(
+    `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=800&skipHttpRedirect=true`,
+    {
+      headers: { "X-Goog-Api-Key": apiKey },
+      signal: signal ?? AbortSignal.timeout(8000),
+    },
+  );
+  const mediaJson = (await media.json().catch(() => ({}))) as { photoUri?: string };
+  const photoUri = resolveHttpUrl(mediaJson.photoUri ?? "");
+  if (!photoUri) return null;
+  return { imageUrl: photoUri, imageSourceUrl: body.googleMapsUri ?? photoUri };
+}

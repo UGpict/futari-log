@@ -162,6 +162,14 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
                 ) : (
                   <p className="text-sm text-ink-soft">料金不明。予算内とは断定しません</p>
                 )}
+                {spot?.imageUrl ? (
+                  <img
+                    src={spot.imageUrl}
+                    alt={spot.name}
+                    className="mt-3 h-36 w-full rounded-xl object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : null}
                 {spot?.officialUrl ? (
                   <a className="text-sm text-rose underline" href={spot.officialUrl} target="_blank" rel="noreferrer">
                     公式サイト
@@ -185,6 +193,12 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
             );
           })}
         </ol>
+        {data.grounding?.searchEntryPointHtml ? (
+          <div
+            className="mt-3 text-xs"
+            dangerouslySetInnerHTML={{ __html: data.grounding.searchEntryPointHtml }}
+          />
+        ) : null}
         {data.plan?.validation.issues.length ? (
           <ul className="mt-4 space-y-1 text-sm">
             {data.plan.validation.issues.map((iss) => (
