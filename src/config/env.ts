@@ -54,15 +54,20 @@ const EMULATOR_PROJECT = "demo-futari-log";
 
 export function getEnv() {
   const useEmulator = readBool("USE_FIREBASE_EMULATOR", false);
-  const authEmulatorHost =
-    read("FIREBASE_AUTH_EMULATOR_HOST") ?? (useEmulator ? EMULATOR_AUTH_HOST : null);
-  const firestoreEmulatorHost =
-    read("FIRESTORE_EMULATOR_HOST") ?? (useEmulator ? EMULATOR_FIRESTORE_HOST : null);
-  const emulator = Boolean(authEmulatorHost && firestoreEmulatorHost);
+  const authEmulatorHost = useEmulator
+    ? (read("FIREBASE_AUTH_EMULATOR_HOST") ?? EMULATOR_AUTH_HOST)
+    : null;
+  const firestoreEmulatorHost = useEmulator
+    ? (read("FIRESTORE_EMULATOR_HOST") ?? EMULATOR_FIRESTORE_HOST)
+    : null;
+  const emulator = useEmulator && Boolean(authEmulatorHost && firestoreEmulatorHost);
 
   if (emulator) {
     process.env.FIREBASE_AUTH_EMULATOR_HOST ??= authEmulatorHost!;
     process.env.FIRESTORE_EMULATOR_HOST ??= firestoreEmulatorHost!;
+  } else {
+    delete process.env.FIREBASE_AUTH_EMULATOR_HOST;
+    delete process.env.FIRESTORE_EMULATOR_HOST;
   }
 
   const firebaseProjectId =
