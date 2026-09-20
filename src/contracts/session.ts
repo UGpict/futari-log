@@ -211,6 +211,9 @@ export const spotDtoSchema = z.object({
   imageUrl: z.string().nullable().optional(),
   imageSourceUrl: z.string().nullable().optional(),
   imageProvider: z.string().nullable().optional(),
+  imageAttributions: z
+    .array(z.object({ displayName: z.string(), uri: z.string().nullable() }))
+    .optional(),
 });
 export type SpotDto = z.infer<typeof spotDtoSchema>;
 
