@@ -249,12 +249,15 @@ export async function executeRun(runId: string): Promise<void> {
       [...walk.spots, ...exhibit.spots, ...sweets.spots].map((s) => s.id),
     );
     const selected: string[] = [];
+    for (const id of lockedIds) {
+      if (!selected.includes(id)) selected.push(id);
+    }
     for (const id of llm.data?.selectedSpotIds ?? mockAction.selected) {
       if (!known.has(id) && !getCatalogSpot(id) && !id.startsWith("mock:")) {
         await appendEvent(runId, "CANDIDATE_REJECTED", `未知ID ${id} は採用しない`);
         continue;
       }
-      selected.push(id);
+      if (!selected.includes(id)) selected.push(id);
     }
     for (const r of llm.data?.rejected ?? []) {
       await appendEvent(runId, "CANDIDATE_REJECTED", `${r.spotId}: ${r.reason}`);
