@@ -8,7 +8,7 @@ import styles from "./rive-mascot.module.css";
 const scenes = {
   weather: { src: "/animations/planning-weather.riv?v=1", poster: "/animations/planning-weather-static.svg", machine: "Weather", autoBind: false },
   memo: { src: "/animations/futari-memo.riv?v=bold-face-1", poster: "/animations/futari-memo-static.svg?v=bold-face-1", machine: "Memo", autoBind: true },
-  suggestion: { src: "/animations/futari-suggestion.riv?v=gentle-2", poster: "/animations/futari-suggestion-static.svg?v=gentle-2", machine: "Suggestion", autoBind: false },
+  suggestion: { src: "/animations/futari-suggestion.riv?v=gentle-2", poster: "/animations/futari-suggestion-static.svg?v=centered-3", machine: "Suggestion", autoBind: false },
 };
 
 export function RiveMascot({ variant, nextCue = 0, active = true }: {
@@ -111,7 +111,7 @@ export function RiveMascot({ variant, nextCue = 0, active = true }: {
   return (
     <span className={`${styles.mascot} ${styles[variant]}`} aria-hidden="true">
       <Image src={scene.poster} alt="" width={500} height={500}
-        unoptimized loading={variant === "suggestion" ? "eager" : "lazy"} className={`${styles.visual} ${!failed && (ready || variant === "suggestion") ? styles.hidden : ""}`} />
+        unoptimized loading={variant === "suggestion" ? "eager" : "lazy"} className={`${styles.visual} ${ready && !failed ? styles.hidden : ""}`} />
       <canvas ref={canvas} className={`${styles.visual} ${styles.animation} ${ready && !failed ? "" : styles.hidden}`} />
     </span>
   );

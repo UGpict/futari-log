@@ -39,6 +39,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 test-results/
+/video/
 
 # local mock store, emulator logs, and secrets
 .data/
