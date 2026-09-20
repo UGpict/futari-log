@@ -3,6 +3,7 @@ import {
   CACHE_TTL_MS,
   PLACES_FIELD_MASK_DETAILS,
   PLACES_FIELD_MASK_SEARCH,
+  PLACES_FIELD_MASK_TEXT,
   ROUTES_FIELD_MASK,
 } from "@/config/settings";
 import type {
@@ -15,7 +16,7 @@ import type {
 import { placeTypeList } from "@/contracts/spotKinds";
 import { newId } from "@/lib/ids";
 import { realNowIso, toTokyoParts } from "@/lib/time";
-import { getCatalogSpot, MOCK_CATALOG, searchCatalog, type CatalogSpot } from "./catalog";
+import { getCatalogSpot, MOCK_CATALOG, searchCatalog, searchCatalogByName, type CatalogSpot } from "./catalog";
 import { getEvent, getVenue } from "@/server/catalog/repo";
 import { catalogEventToSpot, venueHours } from "@/server/catalog/toSpot";
 import type { ScenarioOverlay } from "@/domain/schemas";
@@ -732,6 +733,87 @@ function estimateStanding(types: string[]): Spot["standingBurden"] {
     return { value: "HIGH", evidenceIds: [] };
   }
   return { value: null, evidenceIds: [] };
+}
+
+export async function searchPlacesByText(args: {
+  query: string;
+  lat?: number;
+  lng?: number;
+}): Promise<{
+  query: string;
+  state: "ok" | "empty" | "failed";
+  places: { id: string; name: string; lat: number; lng: number; address: string | null }[];
+  error: string | null;
+}> {
+  const q = args.query.trim();
+  if (q.length < 2) {
+    return { query: q, state: "empty", places: [], error: null };
+  }
+  const env = getEnv();
+  if (env.runtime === "LIVE" && env.googleMapsApiKey) {
+    try {
+      const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": env.googleMapsApiKey,
+          "X-Goog-FieldMask": PLACES_FIELD_MASK_TEXT,
+        },
+        body: JSON.stringify({
+          textQuery: q,
+          languageCode: "ja",
+          maxResultCount: 8,
+          ...(args.lat != null && args.lng != null
+            ? {
+                locationBias: {
+                  circle: {
+                    center: { latitude: args.lat, longitude: args.lng },
+                    radius: 30000,
+                  },
+                },
+              }
+            : {}),
+        }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!res.ok) {
+        return { query: q, state: "failed", places: [], error: `places searchText ${res.status}` };
+      }
+      const data = (await res.json()) as {
+        places?: {
+          id: string;
+          displayName?: { text: string };
+          formattedAddress?: string;
+          location?: { latitude: number; longitude: number };
+        }[];
+      };
+      const places = (data.places ?? [])
+        .filter((p) => p.location?.latitude != null && p.location?.longitude != null)
+        .map((p) => ({
+          id: p.id,
+          name: p.displayName?.text ?? p.id,
+          lat: p.location!.latitude,
+          lng: p.location!.longitude,
+          address: p.formattedAddress ?? null,
+        }));
+      return { query: q, state: places.length ? "ok" : "empty", places, error: null };
+    } catch (error) {
+      return {
+        query: q,
+        state: "failed",
+        places: [],
+        error: error instanceof Error ? error.message : "search failed",
+      };
+    }
+  }
+  const places = searchCatalogByName(q).map((s) => ({
+    id: s.id,
+    name: s.name,
+    lat: s.lat,
+    lng: s.lng,
+    address: s.name,
+  }));
+  return { query: q, state: places.length ? "ok" : "empty", places, error: null };
 }
 
 export function listMockSpots(): Spot[] {

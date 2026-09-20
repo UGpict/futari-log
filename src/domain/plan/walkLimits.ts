@@ -10,6 +10,19 @@ export type WalkLimitResult = {
   exceeds: boolean;
 };
 
+/** Cache/display jitter must not by itself revoke a session consent. */
+export const WALK_ACK_SLACK_MINUTES = 2;
+
+export type WalkAckScope = {
+  dateTokyo: string;
+  travelMode: string;
+  meetSpotId: string | null;
+  endSpotId: string | null;
+  routeSpotIds: string[];
+  longestLegMinutes: number;
+  totalMinutes: number;
+};
+
 export function evaluateWalkLimits(
   mode: TravelMode,
   legs: Pick<TravelLeg, "mode" | "durationMinutes">[],
@@ -33,6 +46,55 @@ export function evaluateWalkLimits(
   };
 }
 
+export function encodeWalkAckScope(scope: WalkAckScope): string {
+  return JSON.stringify({
+    dateTokyo: scope.dateTokyo,
+    travelMode: scope.travelMode,
+    meetSpotId: scope.meetSpotId ?? "",
+    endSpotId: scope.endSpotId ?? "",
+    routeSpotIds: scope.routeSpotIds,
+    longestLegMinutes: scope.longestLegMinutes,
+    totalMinutes: scope.totalMinutes,
+  });
+}
+
+export function parseWalkAckScope(raw: string | null | undefined): WalkAckScope | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<WalkAckScope> & { spotIds?: string[] };
+    if (parsed && typeof parsed.dateTokyo === "string") {
+      return {
+        dateTokyo: parsed.dateTokyo,
+        travelMode: String(parsed.travelMode ?? ""),
+        meetSpotId: parsed.meetSpotId ? String(parsed.meetSpotId) : null,
+        endSpotId: parsed.endSpotId ? String(parsed.endSpotId) : null,
+        routeSpotIds: Array.isArray(parsed.routeSpotIds)
+          ? parsed.routeSpotIds.map(String)
+          : Array.isArray(parsed.spotIds)
+            ? parsed.spotIds.map(String)
+            : [],
+        longestLegMinutes: Number(parsed.longestLegMinutes) || 0,
+        totalMinutes: Number(parsed.totalMinutes) || 0,
+      };
+    }
+  } catch {
+    // Fall through to the previous pipe encoding.
+  }
+  const parts = raw.split("|");
+  if (parts.length >= 4 && /^\d{4}-\d{2}-\d{2}$/.test(parts[0])) {
+    return {
+      dateTokyo: parts[0],
+      travelMode: parts[1],
+      meetSpotId: parts[2] || null,
+      endSpotId: parts[3] || null,
+      routeSpotIds: parts[4] ? parts[4].split(",").filter(Boolean) : [],
+      longestLegMinutes: Number(parts[5]) || 0,
+      totalMinutes: Number(parts[6]) || 0,
+    };
+  }
+  return null;
+}
+
 export function walkAckFingerprint(input: {
   dateTokyo: string;
   travelMode: string;
@@ -42,12 +104,15 @@ export function walkAckFingerprint(input: {
   longestLegMinutes: number;
   totalMinutes: number;
 }): string {
-  return [
-    input.dateTokyo,
-    input.travelMode,
-    input.meetSpotId ?? "",
-    input.endSpotId ?? "",
-  ].join("|");
+  return encodeWalkAckScope({
+    dateTokyo: input.dateTokyo,
+    travelMode: input.travelMode,
+    meetSpotId: input.meetSpotId,
+    endSpotId: input.endSpotId,
+    routeSpotIds: input.spotIds,
+    longestLegMinutes: input.longestLegMinutes,
+    totalMinutes: input.totalMinutes,
+  });
 }
 
 export function walkAckFingerprintFromPlan(
@@ -66,11 +131,45 @@ export function walkAckFingerprintFromPlan(
   });
 }
 
+export function walkAckScopeFromAck(ack: WalkLongAck | null | undefined): WalkAckScope | null {
+  if (!ack) return null;
+  if (ack.dateTokyo) {
+    return {
+      dateTokyo: ack.dateTokyo,
+      travelMode: ack.travelMode ?? "",
+      meetSpotId: ack.meetSpotId ?? null,
+      endSpotId: ack.endSpotId ?? null,
+      routeSpotIds: ack.routeSpotIds ?? [],
+      longestLegMinutes: ack.longestLegMinutes ?? 0,
+      totalMinutes: ack.totalMinutes ?? 0,
+    };
+  }
+  return parseWalkAckScope(ack.fingerprint);
+}
+
+export function walkLongAckCovers(
+  ack: WalkLongAck | null | undefined,
+  current: WalkAckScope,
+): boolean {
+  const acked = walkAckScopeFromAck(ack);
+  if (!acked) return false;
+  if (acked.dateTokyo !== current.dateTokyo) return false;
+  if (acked.travelMode !== current.travelMode) return false;
+  if ((acked.meetSpotId ?? "") !== (current.meetSpotId ?? "")) return false;
+  if ((acked.endSpotId ?? "") !== (current.endSpotId ?? "")) return false;
+  return (
+    current.longestLegMinutes <= acked.longestLegMinutes + WALK_ACK_SLACK_MINUTES &&
+    current.totalMinutes <= acked.totalMinutes + WALK_ACK_SLACK_MINUTES
+  );
+}
+
 export function walkLongAckMatches(
   ack: WalkLongAck | null | undefined,
   fingerprint: string,
 ): boolean {
-  return Boolean(ack?.fingerprint && ack.fingerprint === fingerprint);
+  const current = parseWalkAckScope(fingerprint);
+  if (!current) return false;
+  return walkLongAckCovers(ack, current);
 }
 
 /** @deprecated Prefer walkLongAckMatches. Global flags and memories are not session consent. */

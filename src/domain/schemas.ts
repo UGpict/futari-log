@@ -424,6 +424,13 @@ export type SessionStatus = z.infer<typeof sessionStatusSchema>;
 export const walkLongAckSchema = z.object({
   fingerprint: z.string(),
   at: z.string(),
+  dateTokyo: z.string().optional(),
+  travelMode: z.string().optional(),
+  meetSpotId: z.string().nullable().optional(),
+  endSpotId: z.string().nullable().optional(),
+  routeSpotIds: z.array(z.string()).optional(),
+  longestLegMinutes: z.number().optional(),
+  totalMinutes: z.number().optional(),
 });
 export type WalkLongAck = z.infer<typeof walkLongAckSchema>;
 

@@ -7,3 +7,4 @@ export * from "./replay";
 export * from "./catalog";
 export * from "./spotKinds";
 export * from "./calendar";
+export * from "./places";

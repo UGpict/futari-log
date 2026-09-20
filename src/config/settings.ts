@@ -21,6 +21,11 @@ export const LIMITS = {
   sourceFetchMaxBytes: 512_000,
 } as const;
 
+export const WALK_LIMITS = {
+  legMinutes: 25,
+  totalMinutes: 45,
+} as const;
+
 export const DEADLINES_MS = {
   INITIAL_PLAN: 60_000,
   REPLAN: 30_000,
@@ -60,5 +65,8 @@ export const PLACES_FIELD_MASK_SEARCH =
 
 export const PLACES_FIELD_MASK_DETAILS =
   "id,displayName,location,types,primaryType,websiteUri,googleMapsUri,regularOpeningHours,currentOpeningHours,priceLevel,priceRange,businessStatus";
+
+export const PLACES_FIELD_MASK_TEXT =
+  "places.id,places.displayName,places.formattedAddress,places.location";
 
 export const ROUTES_FIELD_MASK = "routes.duration,routes.distanceMeters";
