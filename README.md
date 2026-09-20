@@ -14,6 +14,9 @@ npm run dev                  # Auth/Firestore Emulator + Next.js + worker
 
 http://localhost:3000
 
+UI 担当が API なしで画面を触る場合は `docs/ui-handoff.md` と `npm run dev:ui`。
+担当境界はルートの `AGENTS.md`。契約変更は `src/contracts/`（両担当の確認）。
+
 - Web: `next dev`
 - worker: PENDING の run を lease して処理。サーバーレスの応答終了後に作業を続けません。
 - 保存先: Firestore Emulator（`DATA_BACKEND=file` で以前の JSON ファイルにも戻せます）
@@ -67,11 +70,14 @@ Firebase 匿名 Auth の許可ドメインは、手元 PC でプロジェクト�
 
 ## デプロイ（Cloud Run）
 
-公開そのものは手元 PC で行います（Google ログインが必要なため）。リポジトリ側の準備は完了しています。
+Cloud Agent からは公開できません（Google ログインなし）。gcloud 済みの手元 PC で:
 
-- `Dockerfile` … Next.js と worker を `PORT` で起動
-- `cloudbuild.yaml` … Artifact Registry へ build/push し Cloud Run へ deploy
-- 手順と IAM / Secret / 許可ドメイン: **`docs/cloud-run.md`**
+```bash
+npm run deploy:cloudrun          # プロジェクト futari-log-agent
+# DEPLOY_RUNTIME=LIVE npm run deploy:cloudrun
+```
+
+URL が表示されたらブラウザで開く。詳細は **`docs/cloud-run.md`**。
 
 ```bash
 npm run build

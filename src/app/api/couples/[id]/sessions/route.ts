@@ -8,8 +8,8 @@ export async function POST(
   const auth = await requireUid(request);
   if ("error" in auth) return auth.error;
   const { id } = await ctx.params;
-  const body = await request.json();
-  const result = await createSession(auth.uid, id, body);
+  const raw = await request.json().catch(() => null);
+  const result = await createSession(auth.uid, id, raw);
   if (!result.ok) return json({ error: result.error }, result.status);
   return json({ sessionId: result.id, input: result.input }, 201);
 }
