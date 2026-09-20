@@ -2,7 +2,7 @@
 
 import { Button, IconButton } from "@/components/button";
 
-import { useEffect, useRef, useState, type FormEvent, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type FormEvent, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import Link from "next/link";
 import { ArrowRight, Check, ChevronLeft, ChevronRight, NotebookPen, CalendarHeart, MapPin } from "lucide-react";
 import { useCalendarPlans } from "@/client/hooks/use-calendar-plans";
@@ -148,7 +148,11 @@ export function HomeScreen() {
   const createPromptRef = useRef<HTMLDivElement>(null);
   const createTriggerRef = useRef<HTMLButtonElement>(null);
   const eventSectionRef = useRef<HTMLElement>(null);
+  const eventCarouselRef = useRef<HTMLDivElement>(null);
+  const eventDragRef = useRef({ active: false, moved: false, startX: 0, scrollLeft: 0 });
   const [eventsBehindCreateButton, setEventsBehindCreateButton] = useState(false);
+  const [eventScroll, setEventScroll] = useState({ left: false, right: true });
+  const [draggingEvents, setDraggingEvents] = useState(false);
   useEffect(() => {
     const section = eventSectionRef.current;
     if (!section) return;
@@ -156,6 +160,38 @@ export function HomeScreen() {
     observer.observe(section);
     return () => observer.disconnect();
   }, [isFixture]);
+  function updateEventScroll() {
+    const carousel = eventCarouselRef.current;
+    if (!carousel) return;
+    setEventScroll({ left: carousel.scrollLeft > 2, right: carousel.scrollLeft + carousel.clientWidth < carousel.scrollWidth - 2 });
+  }
+  function scrollEvents(direction: -1 | 1) {
+    const carousel = eventCarouselRef.current;
+    if (!carousel) return;
+    carousel.scrollBy({ left: direction * Math.max(240, carousel.clientWidth * .78), behavior: "smooth" });
+  }
+  function startEventDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.pointerType !== "mouse" || event.button !== 0) return;
+    eventDragRef.current = { active: true, moved: false, startX: event.clientX, scrollLeft: event.currentTarget.scrollLeft };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+  function moveEventDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = eventDragRef.current;
+    if (!drag.active) return;
+    const distance = event.clientX - drag.startX;
+    if (Math.abs(distance) > 4) {
+      drag.moved = true;
+      setDraggingEvents(true);
+    }
+    if (drag.moved) event.currentTarget.scrollLeft = drag.scrollLeft - distance;
+  }
+  function endEventDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!eventDragRef.current.active) return;
+    eventDragRef.current.active = false;
+    setDraggingEvents(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    if (eventDragRef.current.moved) window.setTimeout(() => { eventDragRef.current.moved = false; }, 0);
+  }
   useEffect(() => {
     if (!showCreatePrompt) return;
     function dismissOutside(event: PointerEvent) {
@@ -265,7 +301,18 @@ export function HomeScreen() {
         {plans.length > 0 && <p className={styles.calendarLegend}><span><MoodSticker mood="happy" /></span>淡いシールは予定。デートのあとに、気持ちを貼ろう。</p>}
         {isFixture && <section ref={eventSectionRef} className={styles.nearbyEvents} aria-labelledby="nearby-events-title">
           <header><div><h2 id="nearby-events-title">近くのイベントから探す</h2></div><small><MapPin size={11} aria-hidden="true" />東京周辺</small></header>
-          <div className={styles.eventCarousel} aria-label="近隣イベント" tabIndex={0}>
+          <button type="button" className={`${styles.carouselButton} ${styles.carouselPrevious}`} aria-label="前のイベントを見る" disabled={!eventScroll.left} onClick={() => scrollEvents(-1)}><ChevronLeft aria-hidden="true" /></button>
+          <div ref={eventCarouselRef} className={styles.eventCarousel} data-dragging={draggingEvents} aria-label="近隣イベント" tabIndex={0} onScroll={updateEventScroll} onPointerDown={startEventDrag} onPointerMove={moveEventDrag} onPointerUp={endEventDrag} onPointerCancel={endEventDrag} onClickCapture={(event) => {
+            if (!eventDragRef.current.moved) return;
+            event.preventDefault();
+            event.stopPropagation();
+            eventDragRef.current.moved = false;
+          }} onWheel={(event) => {
+            const carousel = event.currentTarget;
+            if (Math.abs(event.deltaY) <= Math.abs(event.deltaX) || carousel.scrollWidth <= carousel.clientWidth) return;
+            event.preventDefault();
+            carousel.scrollLeft += event.deltaY;
+          }}>
             {nearbyEvents.map((event) => <button type="button" key={event.id} className={styles.eventBanner} data-theme={event.theme} onClick={() => openPlan(event.date, event.wish)} aria-label={`${event.title}、${event.dateLabel}、${event.area}。このイベントでデートをつくる`}>
               <span className={styles.eventArtwork} aria-hidden="true"><span className={styles.eventShade} /></span>
               <span className={styles.eventDetails}>
@@ -275,6 +322,7 @@ export function HomeScreen() {
               </span>
             </button>)}
           </div>
+          <button type="button" className={`${styles.carouselButton} ${styles.carouselNext}`} aria-label="次のイベントを見る" disabled={!eventScroll.right} onClick={() => scrollEvents(1)}><ChevronRight aria-hidden="true" /></button>
           <p className={styles.eventDisclosure}>イベント情報はUI確認用のサンプルです。</p>
         </section>}
       </main>
