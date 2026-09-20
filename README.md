@@ -70,11 +70,14 @@ Firebase 匿名 Auth の許可ドメインは、手元 PC でプロジェクト�
 
 ## デプロイ（Cloud Run）
 
-公開そのものは手元 PC で行います（Google ログインが必要なため）。リポジトリ側の準備は完了しています。
+Cloud Agent からは公開できません（Google ログインなし）。gcloud 済みの手元 PC で:
 
-- `Dockerfile` … Next.js と worker を `PORT` で起動
-- `cloudbuild.yaml` … Artifact Registry へ build/push し Cloud Run へ deploy
-- 手順と IAM / Secret / 許可ドメイン: **`docs/cloud-run.md`**
+```bash
+npm run deploy:cloudrun          # プロジェクト futari-log-agent
+# DEPLOY_RUNTIME=LIVE npm run deploy:cloudrun
+```
+
+URL が表示されたらブラウザで開く。詳細は **`docs/cloud-run.md`**。
 
 ```bash
 npm run build

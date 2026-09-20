@@ -21,7 +21,8 @@
     "demo:live": "tsx scripts/live-demo.ts",
     "demo:five": "tsx scripts/live-demo.ts --five",
     "demo:reset": "tsx scripts/demo-reset.ts",
-    "replay:export": "tsx scripts/replay-export.ts"
+    "replay:export": "tsx scripts/replay-export.ts",
+    "deploy:cloudrun": "bash scripts/deploy-cloud-run.sh"
   },
   "dependencies": {
     "firebase-admin": "^14.4.0",
