@@ -1,6 +1,6 @@
 "use client";
 
-import { FX } from "@/config/settings";
+import { FX } from "@/config/public";
 
 export function CostBadge(props: {
   llmJpy: number | null;

@@ -1,4 +1,4 @@
-import { TIME_ZONE } from "@/config/settings";
+import { TIME_ZONE } from "@/config/public";
 
 export function realNowIso(): string {
   return new Date().toISOString();

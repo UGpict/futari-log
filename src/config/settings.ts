@@ -1,10 +1,10 @@
+export { TIME_ZONE, FX } from "./public";
+
 export const APP_NAME = "ふたりログ";
 export const SCHEMA_VERSION = "0.5.0";
 export const PROMPT_VERSION = "0.5.0";
 export const TOOL_VERSION = "0.5.0";
 export const MODEL_SETTINGS_VERSION = "0.5.0";
-
-export const TIME_ZONE = "Asia/Tokyo";
 
 export const LIMITS = {
   maxDecisionSteps: 8,
@@ -36,12 +36,6 @@ export const WORKER = {
   pollMs: 400,
   leaseMs: 30_000,
   heartbeatMs: 5_000,
-} as const;
-
-export const FX = {
-  usdJpy: 148.5,
-  asOf: "2026-09-01",
-  note: "アプリ設定の固定換算。日次相場ではない",
 } as const;
 
 /** 版付き料金表。実請求は OrcaRouter の usage.cost_usd を優先する */

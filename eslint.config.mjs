@@ -5,9 +5,45 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
-  // Override default ignores of eslint-config-next.
+  {
+    files: [
+      "src/features/**/*.{ts,tsx}",
+      "src/components/**/*.{ts,tsx}",
+      "src/client/**/*.{ts,tsx}",
+      "src/fixtures/**/*.{ts,tsx}",
+      "src/app/**/*.tsx",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/server", "@/server/*"],
+              message: "UI must not import server modules",
+            },
+            {
+              group: ["@/worker", "@/worker/*"],
+              message: "UI must not import the worker",
+            },
+            {
+              group: ["@/domain", "@/domain/*"],
+              message: "UI must use @/contracts, not domain/store types",
+            },
+            {
+              group: ["@/config/env", "@/config/settings"],
+              message: "UI may import @/config/public only",
+            },
+            {
+              group: ["firebase-admin"],
+              message: "Admin SDK is server-only",
+            },
+          ],
+        },
+      ],
+    },
+  },
   globalIgnores([
-    // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
     "build/**",

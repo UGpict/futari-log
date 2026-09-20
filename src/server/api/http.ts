@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { ZodType } from "zod";
 import { verifyToken } from "@/server/auth";
 
 export function json(data: unknown, status = 200) {
@@ -23,4 +24,17 @@ export async function requireUid(
 
 export function idempotencyKey(request: Request): string | null {
   return request.headers.get("idempotency-key");
+}
+
+export async function readJson<T>(
+  request: Request,
+  schema: ZodType<T>,
+): Promise<{ data: T } | { error: NextResponse }> {
+  const raw = await request.json().catch(() => null);
+  const parsed = schema.safeParse(raw ?? {});
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return { error: json({ error: issue?.message ?? "invalid" }, 400) };
+  }
+  return { data: parsed.data };
 }

@@ -1,7 +1,7 @@
-import { json, requireUid, idempotencyKey } from "@/server/api/http";
+import { json, requireUid, idempotencyKey, readJson } from "@/server/api/http";
 import { startRun } from "@/server/api/actions";
 import { sha256 } from "@/lib/ids";
-import type { RunKind } from "@/domain/schemas";
+import { startRunRequestSchema } from "@/contracts/session";
 
 export async function POST(
   request: Request,
@@ -10,15 +10,17 @@ export async function POST(
   const auth = await requireUid(request);
   if ("error" in auth) return auth.error;
   const { id } = await ctx.params;
-  const body = (await request.json()) as { kind?: RunKind; trigger?: string };
-  const kind = body.kind ?? "INITIAL_PLAN";
+  const body = await readJson(request, startRunRequestSchema);
+  if ("error" in body) return body.error;
+  const kind = body.data.kind ?? "INITIAL_PLAN";
+  const trigger = body.data.trigger ?? null;
   const result = await startRun({
     uid: auth.uid,
     sessionId: id,
     kind,
-    trigger: body.trigger ?? null,
+    trigger,
     idempotencyKey: idempotencyKey(request),
-    bodyHash: sha256(JSON.stringify({ kind, trigger: body.trigger ?? null })),
+    bodyHash: sha256(JSON.stringify({ kind, trigger })),
   });
   if (!result.ok) return json({ error: result.error }, result.status);
   return json({ runId: result.runId }, 202);
