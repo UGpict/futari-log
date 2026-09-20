@@ -1,0 +1,38 @@
+{
+  "name": "futari-log",
+  "version": "0.5.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx scripts/dev.ts",
+    "dev:web": "next dev",
+    "dev:worker": "tsx src/worker/index.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint",
+    "test": "tsx --test tests/plan.test.ts tests/privacy.test.ts tests/security.test.ts",
+    "build": "next build",
+    "start": "tsx scripts/start.ts",
+    "doctor": "tsx scripts/doctor.ts",
+    "demo:live": "tsx scripts/live-demo.ts",
+    "demo:five": "tsx scripts/live-demo.ts --five",
+    "demo:reset": "tsx scripts/demo-reset.ts",
+    "replay:export": "tsx scripts/replay-export.ts"
+  },
+  "dependencies": {
+    "lucide-react": "^1.47.0",
+    "next": "16.3.5",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.5",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.13",
+    "typescript": "^5"
+  }
+}
