@@ -11,7 +11,7 @@ import { newId } from "@/lib/ids";
 import { realNowIso } from "@/lib/time";
 import { callLLM, llmActionSchema } from "@/server/llm";
 import type { ProviderCtx } from "@/server/providers";
-import { findRun, withStore } from "@/server/repositories/store";
+import { appendRunEvent, getRun, nextEventSeq, patchRunDoc, withApproval, withRun } from "@/server/repositories/store";
 import { heartbeat, claimRun, WORKER_ID } from "./lease";
 import { orchestrateGather, orchestratePlanning } from "./orchestrate";
 import { canReadMemory } from "@/domain/memory";
@@ -23,35 +23,27 @@ async function appendEvent(
   summary: string,
   extra: Partial<AppEvent> = {},
 ) {
-  await withStore((db) => {
-    const found = findRun(db, runId);
-    if (!found) return;
-    const seq = Object.keys(found.bundle.events).length;
-    const event: AppEvent = {
-      eventId: newId("evt"),
-      runId,
-      seq,
-      at: realNowIso(),
-      type,
-      summary,
-      evidenceIds: extra.evidenceIds ?? [],
-      model: extra.model ?? null,
-      pool: extra.pool ?? null,
-      requestedModel: extra.requestedModel ?? null,
-      actualModel: extra.actualModel ?? null,
-      usage: extra.usage ?? null,
-      payload: extra.payload ?? null,
-    };
-    found.bundle.events[event.eventId] = event;
-  });
+  const seq = await nextEventSeq(runId);
+  const event: AppEvent = {
+    eventId: newId("evt"),
+    runId,
+    seq,
+    at: realNowIso(),
+    type,
+    summary,
+    evidenceIds: extra.evidenceIds ?? [],
+    model: extra.model ?? null,
+    pool: extra.pool ?? null,
+    requestedModel: extra.requestedModel ?? null,
+    actualModel: extra.actualModel ?? null,
+    usage: extra.usage ?? null,
+    payload: extra.payload ?? null,
+  };
+  await appendRunEvent(runId, event);
 }
 
 async function patchRun(runId: string, patch: Partial<Run>) {
-  await withStore((db) => {
-    const found = findRun(db, runId);
-    if (!found) return;
-    Object.assign(found.run, patch);
-  });
+  await patchRunDoc(runId, patch);
 }
 
 function agentLog(runId: string): (agent: AgentId, type: EventType, summary: string, extra?: Partial<AppEvent>) => Promise<void> {
@@ -71,7 +63,7 @@ export async function executeRun(
   const env = getEnv();
   const claimed = await claimRun(runId, phase === "all" ? WORKER_ID : "workflow");
   if (!claimed) return;
-  const loaded = await withStore((db) => findRun(db, runId));
+  const loaded = await getRun(runId);
   if (!loaded) return;
   const { run, bundle, couple } = loaded;
   const session = bundle.session;
@@ -147,10 +139,14 @@ export async function executeRun(
       await appendEvent(runId, "INPUT_REQUIRED", planned.waitingQuestion.prompt, {
         payload: { agent: "planner" },
       });
-      await patchRun(runId, {
-        status: "WAITING_INPUT",
-        waitingQuestion: planned.waitingQuestion,
-        leaseOwner: null,
+      await withRun(runId, (found) => {
+        if (!found) return;
+        found.run.status = "WAITING_INPUT";
+        found.run.waitingQuestion = planned.waitingQuestion;
+        found.run.leaseOwner = null;
+        if (planned.walkAckFingerprint) {
+          found.bundle.session.pendingWalkAckFingerprint = planned.walkAckFingerprint;
+        }
       });
       return;
     }
@@ -159,6 +155,16 @@ export async function executeRun(
       return;
     }
     const { built, llm } = planned;
+    if (built.plan.validation.state === "FAIL") {
+      await appendEvent(runId, "VALIDATION_FAILED", "FAIL の行程は確定結果として保存しない");
+      await patchRun(runId, {
+        status: "FAILED",
+        error: built.plan.validation.issues.map((i) => i.code).join(","),
+        finishedAt: realNowIso(),
+        leaseOwner: null,
+      });
+      return;
+    }
     const mode = overlays.length ? "LIVE_SCENARIO" : planned.mode;
 
     await appendEvent(runId, "MODEL_SELECTED", `${llm.pool} / ${llm.actualModel}`, {
@@ -176,8 +182,7 @@ export async function executeRun(
       },
       payload: llm.error ? { error: llm.error, agent: "planner" } : { agent: "planner" },
     });
-    await withStore((db) => {
-      const found = findRun(db, runId);
+    await withRun(runId, (found) => {
       if (!found) return;
       const billed = llm.actualModel !== "deterministic/planner";
       if (billed) {
@@ -204,8 +209,7 @@ export async function executeRun(
       return;
     }
 
-    await withStore((db) => {
-      const found = findRun(db, runId);
+    await withRun(runId, (found) => {
       if (!found) return;
       found.run.displayRuntime = env.runtime === "MOCK" ? "MOCK" : display;
       found.run.mode = mode === "LIVE_SCENARIO" ? "LIVE_SCENARIO" : found.run.mode;
@@ -232,8 +236,7 @@ export async function executeRun(
         expectedBaseVersion: run.basePlanVersion ?? current.version,
       });
       if (auto.apply) {
-        await withStore((db) => {
-          const found = findRun(db, runId);
+        await withRun(runId, (found) => {
           if (!found) return;
           found.bundle.session.currentPlanVersion = built.plan.version;
           found.run.status = "SUCCEEDED";
@@ -247,8 +250,7 @@ export async function executeRun(
         return;
       }
       const approvalId = newId("appr");
-      await withStore((db) => {
-        const found = findRun(db, runId);
+      await withRun(runId, (found) => {
         if (!found) return;
         found.couple.approvals[approvalId] = {
           id: approvalId,
@@ -274,8 +276,7 @@ export async function executeRun(
       return;
     }
 
-    await withStore((db) => {
-      const found = findRun(db, runId);
+    await withRun(runId, (found) => {
       if (!found) return;
       found.bundle.session.currentPlanVersion = built.plan.version;
       if (found.bundle.session.status === "DRAFT" && run.kind !== "REPLAN") {
@@ -303,15 +304,11 @@ export async function executeRun(
 }
 
 async function runReflection(runId: string, signal: AbortSignal) {
-  const loaded = await withStore((db) => findRun(db, runId));
+  const loaded = await getRun(runId);
   if (!loaded) return;
   const note = (loaded.run as Run & { reflectionNote?: string }).waitingQuestion
     ? null
-    : await withStore((db) => {
-        const found = findRun(db, runId);
-        const payload = found?.run as Run;
-        return payload.waitingQuestion;
-      });
+    : loaded.run.waitingQuestion;
 
   if (!loaded.run.waitingQuestion) {
     const question = {
@@ -355,34 +352,33 @@ export async function applyApproval(input: {
   uid: string;
   decision: "APPROVE" | "REJECT";
 }) {
-  return withStore((db) => {
-    for (const couple of Object.values(db.couples)) {
-      if (couple.couple.ownerUid !== input.uid) continue;
-      const approval = couple.approvals[input.approvalId];
-      if (!approval) continue;
-      if (approval.status !== "PENDING") {
-        return { ok: false as const, status: 409, error: "already consumed" };
-      }
-      const bundle = couple.sessions[approval.sessionId];
-      if (!bundle) return { ok: false as const, status: 404, error: "session" };
-      if (bundle.session.currentPlanVersion !== approval.planVersionFrom) {
-        return { ok: false as const, status: 409, error: "stale version" };
-      }
-      approval.status = input.decision === "APPROVE" ? "CONSUMED" : "REJECTED";
-      approval.consumedAt = realNowIso();
-      const run = bundle.runs[approval.runId];
-      if (input.decision === "APPROVE") {
-        bundle.session.currentPlanVersion = approval.planVersionTo;
-        if (run) {
-          run.status = "SUCCEEDED";
-          run.finishedAt = realNowIso();
-        }
-      } else if (run) {
-        run.status = "CANCELLED";
+  return withApproval(input.approvalId, (found) => {
+    if (!found) return { ok: false as const, status: 404, error: "not found" };
+    if (found.couple.couple.ownerUid !== input.uid) {
+      return { ok: false as const, status: 404, error: "not found" };
+    }
+    const approval = found.approval;
+    if (approval.status !== "PENDING") {
+      return { ok: false as const, status: 409, error: "already consumed" };
+    }
+    const bundle = found.couple.sessions[approval.sessionId];
+    if (!bundle) return { ok: false as const, status: 404, error: "session" };
+    if (bundle.session.currentPlanVersion !== approval.planVersionFrom) {
+      return { ok: false as const, status: 409, error: "stale version" };
+    }
+    approval.status = input.decision === "APPROVE" ? "CONSUMED" : "REJECTED";
+    approval.consumedAt = realNowIso();
+    const run = bundle.runs[approval.runId];
+    if (input.decision === "APPROVE") {
+      bundle.session.currentPlanVersion = approval.planVersionTo;
+      if (run) {
+        run.status = "SUCCEEDED";
         run.finishedAt = realNowIso();
       }
-      return { ok: true as const, approval };
+    } else if (run) {
+      run.status = "CANCELLED";
+      run.finishedAt = realNowIso();
     }
-    return { ok: false as const, status: 404, error: "not found" };
+    return { ok: true as const, approval };
   });
 }

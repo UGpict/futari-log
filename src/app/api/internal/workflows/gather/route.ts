@@ -3,7 +3,7 @@ import { json, readJson } from "@/server/api/http";
 import { getEnv } from "@/config/env";
 import { executeRun } from "@/server/agent/execute";
 import { workflowHeaderOk } from "@/server/workflows/auth";
-import { findRun, readStore } from "@/server/repositories/store";
+import { getRun } from "@/server/repositories/store";
 
 const bodySchema = z.object({ runId: z.string().min(1) });
 
@@ -19,6 +19,6 @@ export async function POST(request: Request) {
   const body = await readJson(request, bodySchema);
   if ("error" in body) return body.error;
   await executeRun(body.data.runId, "gather");
-  const run = await readStore((db) => findRun(db, body.data.runId)?.run ?? null);
-  return json({ ok: true, step: "gather", status: run?.status ?? null });
+  const found = await getRun(body.data.runId);
+  return json({ ok: true, step: "gather", status: found?.run.status ?? null });
 }

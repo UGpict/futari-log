@@ -1,4 +1,3 @@
-import { DEADLINES_MS, SCHEMA_VERSION, PROMPT_VERSION, TOOL_VERSION, MODEL_SETTINGS_VERSION } from "@/config/settings";
 import { getEnv, publicBlockers } from "@/config/env";
 import {
   planningInputSchema,
@@ -13,17 +12,29 @@ import { demoAllowed } from "@/server/auth";
 import { newId, sha256 } from "@/lib/ids";
 import { realNowIso, tokyoDateTime } from "@/lib/time";
 import {
-  findApproval,
-  findMemory,
-  findRun,
-  findSession,
-  withStore,
-  readStore,
+  demoResetStore,
+  emptyCoupleBundle,
+  getReplayFromStore,
+  getRun,
+  getSession,
+  insertPendingRun,
+  listCalendarRows,
+  loadCouple,
+  ownerCoupleIdFromStore,
+  putCouple,
+  withApproval,
+  withCouple,
+  withMemory,
+  withRun,
+  withSession,
   type CoupleBundle,
   type SessionBundle,
 } from "@/server/repositories/store";
 import { getCatalogSpot } from "@/server/providers/catalog";
+import { searchPlacesByText } from "@/server/providers";
 import { presentMemoryList, presentReplay, presentRunView, presentSessionSnapshot } from "@/server/api/presenters";
+import { calendarListResponseSchema } from "@/contracts/calendar";
+import { placeSearchResponseSchema } from "@/contracts/places";
 
 function gitSha(): string | null {
   return process.env.GIT_COMMIT ?? process.env.VERCEL_GIT_COMMIT_SHA ?? null;
@@ -60,29 +71,37 @@ export function snapshotOf(couple: CoupleBundle, bundle: SessionBundle) {
 
 export async function createCouple(uid: string, isDemo: boolean) {
   const id = newId("cpl");
-  await withStore((db) => {
-    db.couples[id] = {
-      couple: { id, ownerUid: uid, isDemo, createdAt: realNowIso() },
-      memories: {},
-      memoryCandidates: {},
-      reflections: {},
-      approvals: {},
-      sessions: {},
-      replays: {},
-      agentMemories: {},
-    };
-  });
+  await putCouple(
+    emptyCoupleBundle({ id, ownerUid: uid, isDemo, createdAt: realNowIso() }),
+  );
   return { id };
 }
 
 export async function createSession(uid: string, coupleId: string, raw: unknown) {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
+    return { ok: false as const, status: 400, error: "invalid json" };
+  }
   const parsed = planningInputSchema.safeParse(raw);
   if (!parsed.success) {
-    return { ok: false as const, status: 400, error: parsed.error.message };
+    const detail = parsed.error.issues
+      .slice(0, 8)
+      .map((issue) => `${issue.path.length ? issue.path.join(".") : "body"}: ${issue.message}`)
+      .join("; ");
+    return { ok: false as const, status: 400, error: detail || "invalid" };
   }
-  const input = resolveFixedSpot(parsed.data);
-  return withStore((db) => {
-    const couple = db.couples[coupleId];
+  const env = getEnv();
+  if (env.runtime === "LIVE") {
+    for (const point of [parsed.data.meet, parsed.data.end]) {
+      if (!point.spotId) {
+        return { ok: false as const, status: 400, error: "集合・解散は候補から選んでください。座標の補完はしません" };
+      }
+      if (point.spotId.startsWith("mock:")) {
+        return { ok: false as const, status: 400, error: "LIVE ではモック地点を使えません" };
+      }
+    }
+  }
+  const input = env.runtime === "MOCK" ? resolveFixedSpot(parsed.data) : parsed.data;
+  return withCouple(coupleId, (couple) => {
     if (!couple) return { ok: false as const, status: 404, error: "couple not found" };
     if (couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
     const id = newId("ses");
@@ -98,6 +117,8 @@ export async function createSession(uid: string, coupleId: string, raw: unknown)
         scheduleNow: null,
         isDemo: couple.couple.isDemo,
         createdAt: realNowIso(),
+        walkLongAck: null,
+        pendingWalkAckFingerprint: null,
       },
       planHistory: {},
       runs: {},
@@ -149,128 +170,60 @@ export async function startRun(input: {
   idempotencyKey?: string | null;
   bodyHash: string;
 }) {
-  return withStore((db) => {
-    if (input.idempotencyKey) {
-      const prev = db.idempotency[input.idempotencyKey];
-      if (prev) {
-        if (prev.uid !== input.uid || prev.bodyHash !== input.bodyHash || prev.op !== "startRun") {
-          return { ok: false as const, status: 409, error: "idempotency conflict" };
-        }
-        return { ok: true as const, duplicated: true, ...(prev.response as { runId: string }) };
-      }
-    }
-    const found = findSession(db, input.sessionId);
-    if (!found) return { ok: false as const, status: 404, error: "session not found" };
-    if (found.couple.couple.ownerUid !== input.uid) {
-      return { ok: false as const, status: 403, error: "forbidden" };
-    }
-    const active = Object.values(found.bundle.runs).filter((r) =>
-      ["PENDING", "RUNNING", "WAITING_INPUT", "WAITING_APPROVAL"].includes(r.status),
-    );
-    if (active.length >= 1 && input.kind !== "REFLECTION") {
-      return {
-        ok: false as const,
-        status: 409,
-        error: `concurrent run: ${active.map((r) => `${r.id}:${r.status}:${r.kind}`).join(",")}`,
-      };
-    }
-    const today = realNowIso().slice(0, 10);
-    const countToday = Object.values(found.couple.sessions).reduce((n, b) => {
-      return (
-        n +
-        Object.values(b.runs).filter((r) => r.createdAt.startsWith(today)).length
-      );
-    }, 0);
-    if (countToday >= 20) return { ok: false as const, status: 429, error: "daily cap" };
-
-    const env = getEnv();
-    const id = newId("run");
-    const kind = input.kind;
-    found.bundle.runs[id] = {
-      id,
-      coupleId: found.couple.couple.id,
-      sessionId: found.bundle.session.id,
-      ownerUid: input.uid,
-      kind,
-      status: "PENDING",
-      mode: env.runtime === "MOCK" ? "LIVE" : "LIVE",
-      displayRuntime: env.runtime === "MOCK" ? "MOCK" : "LIVE",
-      createdAt: realNowIso(),
-      startedAt: null,
-      finishedAt: null,
-      deadlineAt: new Date(Date.now() + DEADLINES_MS[kind]).toISOString(),
-      leaseOwner: null,
-      leaseExpiresAt: null,
-      heartbeatAt: null,
-      trigger: input.trigger ?? null,
-      basePlanVersion: found.bundle.session.currentPlanVersion,
-      resultPlanVersion: null,
-      waitingQuestion: null,
-      waitingApprovalId: null,
-      error: null,
-      cost: {
-        llmUsd: env.runtime === "MOCK" ? 0 : null,
-        llmJpy: env.runtime === "MOCK" ? 0 : null,
-        apiJpy: env.runtime === "MOCK" ? 0 : null,
-        mundaneCalls: 0,
-        hardCalls: 0,
-        unaccountedCalls: 0,
-      },
-      versions: {
-        schema: SCHEMA_VERSION,
-        prompt: PROMPT_VERSION,
-        tool: TOOL_VERSION,
-        modelSettings: MODEL_SETTINGS_VERSION,
-        git: gitSha(),
-      },
-    };
-    const response = { runId: id };
-    if (input.idempotencyKey) {
-      db.idempotency[input.idempotencyKey] = {
-        key: input.idempotencyKey,
-        uid: input.uid,
-        target: input.sessionId,
-        op: "startRun",
-        bodyHash: input.bodyHash,
-        status: 202,
-        response,
-      };
-    }
-    return { ok: true as const, duplicated: false, runId: id };
-  });
+  return insertPendingRun(input);
 }
 
 export async function getSessionSnapshot(uid: string, sessionId: string) {
-  return readStore((db) => {
-    const found = findSession(db, sessionId);
-    if (!found) return { ok: false as const, status: 404, error: "not found" };
-    if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
-    return { ok: true as const, data: presentSessionSnapshot(snapshotOf(found.couple, found.bundle)) };
-  });
+  const found = await getSession(sessionId);
+  if (!found) return { ok: false as const, status: 404, error: "not found" };
+  if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
+  return { ok: true as const, data: presentSessionSnapshot(snapshotOf(found.couple, found.bundle)) };
+}
+
+export async function listCalendarPlans(
+  uid: string,
+  coupleId: string,
+  range: { from?: string | null; to?: string | null },
+) {
+  const result = await listCalendarRows(uid, coupleId, range);
+  if (!result.ok) return result;
+  return {
+    ok: true as const,
+    data: calendarListResponseSchema.parse({
+      plans: result.plans,
+      from: range.from ?? null,
+      to: range.to ?? null,
+      state: result.plans.length ? "ok" : "empty",
+      draftPolicy: "listed_when_plan_exists",
+    }),
+  };
+}
+
+export async function searchPlaces(uid: string, query: string, lat?: number, lng?: number) {
+  void uid;
+  const result = await searchPlacesByText({ query, lat, lng });
+  return { ok: true as const, data: placeSearchResponseSchema.parse(result) };
 }
 
 export async function getRunView(uid: string, runId: string) {
-  return readStore((db) => {
-    const found = findRun(db, runId);
-    if (!found) return { ok: false as const, status: 404, error: "not found" };
-    if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
-    const events = Object.values(found.bundle.events)
-      .filter((e) => e.runId === runId)
-      .sort((a, b) => a.seq - b.seq);
-    return {
-      ok: true as const,
-      ...presentRunView({
-        ok: true,
-        run: found.run,
-        events,
-      }),
-    };
-  });
+  const found = await getRun(runId);
+  if (!found) return { ok: false as const, status: 404, error: "not found" };
+  if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
+  const events = Object.values(found.bundle.events)
+    .filter((e) => e.runId === runId)
+    .sort((a, b) => a.seq - b.seq);
+  return {
+    ok: true as const,
+    ...presentRunView({
+      ok: true,
+      run: found.run,
+      events,
+    }),
+  };
 }
 
 export async function answerQuestion(uid: string, runId: string, questionId: string, answer: string) {
-  const result = await withStore((db) => {
-    const found = findRun(db, runId);
+  const result = await withRun(runId, (found) => {
     if (!found) return { ok: false as const, status: 404, error: "not found", restart: false };
     if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden", restart: false };
     if (found.run.status !== "WAITING_INPUT" || found.run.waitingQuestion?.id !== questionId) {
@@ -289,6 +242,54 @@ export async function answerQuestion(uid: string, runId: string, questionId: str
       found.run.waitingQuestion = null;
       found.run.leaseOwner = null;
       found.run.error = "selected event unavailable; user cancelled";
+      return { ok: true as const, restart: false };
+    }
+    if (questionId === "q_unsupported_wish" && answer === "対応できる範囲で続ける") {
+      found.bundle.session.input = { ...found.bundle.session.input, unsupportedWishAcknowledged: true };
+      found.run.status = "PENDING";
+      found.run.waitingQuestion = null;
+      found.run.leaseOwner = null;
+      return { ok: true as const, restart: true, sessionId: found.bundle.session.id };
+    }
+    if (questionId === "q_unsupported_wish" || questionId === "q_plan_unmet" || questionId === "q_no_candidates") {
+      found.run.status = "CANCELLED";
+      found.run.finishedAt = realNowIso();
+      found.run.waitingQuestion = null;
+      found.run.leaseOwner = null;
+      found.run.error = answer;
+      return { ok: true as const, restart: false };
+    }
+    if (questionId === "q_long_walk") {
+      if (answer === "このまま徒歩で続ける") {
+        const fingerprint =
+          found.bundle.session.pendingWalkAckFingerprint ??
+          [
+            found.bundle.session.input.dateTokyo,
+            found.bundle.session.input.travelMode,
+            found.bundle.session.input.meet.spotId ?? "",
+            found.bundle.session.input.end.spotId ?? "",
+          ].join("|");
+        found.bundle.session.walkLongAck = { fingerprint, at: realNowIso() };
+        found.bundle.session.pendingWalkAckFingerprint = null;
+        found.run.status = "PENDING";
+        found.run.waitingQuestion = null;
+        found.run.leaseOwner = null;
+        return { ok: true as const, restart: true, sessionId: found.bundle.session.id };
+      }
+      if (answer === "公共交通を使う") {
+        found.bundle.session.input = { ...found.bundle.session.input, travelMode: "TRANSIT" };
+        found.bundle.session.walkLongAck = null;
+        found.bundle.session.pendingWalkAckFingerprint = null;
+        found.run.status = "PENDING";
+        found.run.waitingQuestion = null;
+        found.run.leaseOwner = null;
+        return { ok: true as const, restart: true, sessionId: found.bundle.session.id };
+      }
+      found.run.status = "CANCELLED";
+      found.run.finishedAt = realNowIso();
+      found.run.waitingQuestion = null;
+      found.run.leaseOwner = null;
+      found.run.error = answer;
       return { ok: true as const, restart: false };
     }
     const reflectionId = newId("ref");
@@ -350,8 +351,7 @@ export async function answerQuestion(uid: string, runId: string, questionId: str
 }
 
 export async function decideApproval(uid: string, approvalId: string, decision: "APPROVE" | "REJECT") {
-  return withStore((db) => {
-    const found = findApproval(db, approvalId);
+  return withApproval(approvalId, (found) => {
     if (!found) return { ok: false as const, status: 404, error: "not found" };
     if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
     const approval = found.approval;
@@ -416,11 +416,18 @@ export async function updateProgress(
     status?: "CONFIRMED" | "IN_PROGRESS" | "DONE";
   },
 ) {
-  return withStore((db) => {
-    const found = findSession(db, sessionId);
+  return withSession(sessionId, (found) => {
     if (!found) return { ok: false as const, status: 404, error: "not found" };
     if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
-    if (body.confirm || body.status === "CONFIRMED") found.bundle.session.status = "CONFIRMED";
+    if (body.confirm || body.status === "CONFIRMED") {
+      const version = found.bundle.session.currentPlanVersion;
+      const plan = version ? found.bundle.planHistory[String(version)] : null;
+      if (!plan) return { ok: false as const, status: 409, error: "確定できる行程がありません" };
+      if (plan.validation.state === "FAIL") {
+        return { ok: false as const, status: 409, error: "検証 FAIL の行程は確定できません" };
+      }
+      found.bundle.session.status = "CONFIRMED";
+    }
     if (body.status) found.bundle.session.status = body.status;
     if (body.location) found.bundle.session.currentLocation = body.location;
     if (body.scheduleNow !== undefined) found.bundle.session.scheduleNow = body.scheduleNow;
@@ -451,8 +458,7 @@ export async function injectScenario(
   if (!allowed.includes(body.kind)) {
     return { ok: false as const, status: 400, error: "kind not on allow-list" };
   }
-  return withStore((db) => {
-    const found = findSession(db, sessionId);
+  return withSession(sessionId, (found) => {
     if (!found) return { ok: false as const, status: 404, error: "not found" };
     if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
     const id = newId("scen");
@@ -480,8 +486,7 @@ export async function injectScenario(
 
 export async function reviseMemory(uid: string, memoryId: string, content: string) {
   const masked = maskPii(content);
-  return withStore((db) => {
-    const found = findMemory(db, memoryId);
+  return withMemory(memoryId, (found) => {
     if (!found) return { ok: false as const, status: 404, error: "not found" };
     if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
     const cid = newId("mc");
@@ -520,8 +525,7 @@ export async function reviseMemory(uid: string, memoryId: string, content: strin
 }
 
 export async function deactivateMemory(uid: string, memoryId: string) {
-  return withStore((db) => {
-    const found = findMemory(db, memoryId);
+  return withMemory(memoryId, (found) => {
     if (!found) return { ok: false as const, status: 404, error: "not found" };
     if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
     found.memory.active = false;
@@ -530,8 +534,7 @@ export async function deactivateMemory(uid: string, memoryId: string) {
 }
 
 export async function messageDraft(uid: string, sessionId: string) {
-  return withStore((db) => {
-    const found = findSession(db, sessionId);
+  return withSession(sessionId, (found) => {
     if (!found) return { ok: false as const, status: 404, error: "not found" };
     if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
     const plan = found.bundle.session.currentPlanVersion
@@ -555,8 +558,7 @@ export async function messageDraft(uid: string, sessionId: string) {
 }
 
 export async function exportReplay(uid: string, runId: string) {
-  return withStore((db) => {
-    const found = findRun(db, runId);
+  return withRun(runId, (found) => {
     if (!found) return { ok: false as const, status: 404, error: "not found" };
     if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
     const id = newId("rep");
@@ -587,58 +589,35 @@ export async function exportReplay(uid: string, runId: string) {
 
 export async function demoReset(uid: string, keepReplays = true) {
   if (!demoAllowed(uid)) return { ok: false as const, status: 403, error: "demo controls disabled" };
-  return withStore((db) => {
-    for (const [id, couple] of Object.entries(db.couples)) {
-      if (couple.couple.ownerUid !== uid || !couple.couple.isDemo) continue;
-      const replays = keepReplays ? couple.replays : {};
-      db.couples[id] = {
-        couple: couple.couple,
-        memories: {},
-        memoryCandidates: {},
-        reflections: {},
-        approvals: {},
-        sessions: {},
-        replays,
-      };
-    }
-    return { ok: true as const };
-  });
+  await demoResetStore(uid, keepReplays);
+  return { ok: true as const };
 }
 
 export async function listMemory(uid: string, coupleId: string) {
-  return readStore((db) => {
-    const couple = db.couples[coupleId];
-    if (!couple) return { ok: false as const, status: 404, error: "not found" };
-    if (couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
-    return {
-      ok: true as const,
-      ...presentMemoryList({
-        ok: true,
-        memories: Object.values(couple.memories),
-        candidates: Object.values(couple.memoryCandidates),
-      }),
-    };
-  });
+  const couple = await loadCouple(coupleId);
+  if (!couple) return { ok: false as const, status: 404, error: "not found" };
+  if (couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
+  return {
+    ok: true as const,
+    ...presentMemoryList({
+      ok: true,
+      memories: Object.values(couple.memories),
+      candidates: Object.values(couple.memoryCandidates),
+    }),
+  };
 }
 
 export async function getReplay(uid: string, replayId: string) {
-  return readStore((db) => {
-    for (const couple of Object.values(db.couples)) {
-      if (couple.couple.ownerUid !== uid) continue;
-      const replay = couple.replays[replayId];
-      if (!replay) continue;
-      return {
-        ok: true as const,
-        ...presentReplay({ ok: true, replay }),
-      };
-    }
-    return { ok: false as const, status: 404 as const, error: "not found" };
-  });
+  const found = await getReplayFromStore(uid, replayId);
+  if (!found) return { ok: false as const, status: 404 as const, error: "not found" };
+  return {
+    ok: true as const,
+    ...presentReplay({ ok: true, replay: found.replay }),
+  };
 }
 
 export async function selectSessionEvents(uid: string, sessionId: string, eventIds: string[]) {
-  return withStore((db) => {
-    const found = findSession(db, sessionId);
+  return withSession(sessionId, (found) => {
     if (!found) return { ok: false as const, status: 404, error: "not found" };
     if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
     found.bundle.session.input = {
@@ -655,10 +634,7 @@ export async function selectSessionEvents(uid: string, sessionId: string, eventI
 }
 
 export async function ownerCoupleId(uid: string): Promise<string | null> {
-  return readStore((db) => {
-    const hit = Object.values(db.couples).find((c) => c.couple.ownerUid === uid);
-    return hit?.couple.id ?? null;
-  });
+  return ownerCoupleIdFromStore(uid);
 }
 
 export { sha256, tokyoDateTime };

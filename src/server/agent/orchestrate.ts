@@ -2,14 +2,16 @@ import { LIMITS } from "@/config/settings";
 import { getEnv } from "@/config/env";
 import { loadSelectedEventSpots } from "@/server/catalog/planAttach";
 import type { Memory, Plan, Run, Session, Spot } from "@/domain/schemas";
+import { evaluateWalkLimits, longWalkQuestion, walkAckFingerprintFromPlan, walkLongAckMatches } from "@/domain/plan/walkLimits";
 import type { LlmCallResult } from "@/server/llm";
 import type { ProviderCtx } from "@/server/providers";
-import { findRun, withStore, type CoupleBundle } from "@/server/repositories/store";
+import { withRun, type CoupleBundle } from "@/server/repositories/store";
 import { dailyFresh, readMemories, remember, writeMemories } from "./memory";
 import { buildPlan, type BuiltPlan } from "./buildPlan";
 import { runPlace } from "./place";
 import { runPlanner } from "./planner";
 import { runScout } from "./scout";
+import { scoutJobsForPreferences } from "./scoutJobs";
 import { noteTravelPass } from "./travel";
 import type { AgentLog, AgentMemories } from "./types";
 import { runWeather } from "./weather";
@@ -17,6 +19,7 @@ import { runWeather } from "./weather";
 export type OrchestratedPlan = {
   built: BuiltPlan | null;
   waitingQuestion?: { id: string; prompt: string; options: string[] };
+  walkAckFingerprint?: string;
   llm: LlmCallResult<{
     think?: string;
     selectedSpotIds: string[];
@@ -25,6 +28,23 @@ export type OrchestratedPlan = {
   }>;
   mode: Plan["dataMode"];
 };
+
+function noneLlm(): OrchestratedPlan["llm"] {
+  return {
+    data: { selectedSpotIds: [], rejected: [], assumptions: [] },
+    ok: true,
+    requestedModel: "none",
+    actualModel: "none",
+    pool: "mundane",
+    promptTokens: null,
+    completionTokens: null,
+    costUsd: null,
+    costJpy: null,
+    latencyMs: 0,
+    repaired: false,
+    error: null,
+  };
+}
 
 export async function orchestratePlanning(input: {
   runId: string;
@@ -47,12 +67,27 @@ export async function orchestratePlanning(input: {
     lng: input.session.input.areaLng,
     name: input.session.input.areaName,
   };
+  const wish = scoutJobsForPreferences(input.session.input.preferences);
+  if (wish.unsupported.length && !input.session.input.unsupportedWishAcknowledged) {
+    return {
+      waitingQuestion: {
+        id: "q_unsupported_wish",
+        prompt: `「${wish.unsupported.join("、")}」はまだ候補検索に対応していません。対応できる範囲で続けますか？`,
+        options: ["対応できる範囲で続ける", "中断する"],
+      },
+      built: null,
+      llm: noneLlm(),
+      mode,
+    };
+  }
   const scout = await runScout({
     ctx: input.ctx,
     log: input.log,
     memories,
     area,
     radiusMeters: input.session.input.radiusMeters,
+    jobs: wish.jobs,
+    jobKey: wish.key,
   });
   const catalog = await loadSelectedEventSpots({
     enabled: env.enableEventCatalog,
@@ -75,20 +110,7 @@ export async function orchestratePlanning(input: {
         options: ["施設の候補で続ける", "中断する"],
       },
       built: null,
-      llm: {
-        data: { selectedSpotIds: [], rejected: [], assumptions: [] },
-        ok: true,
-        requestedModel: "none",
-        actualModel: "none",
-        pool: "mundane",
-        promptTokens: null,
-        completionTokens: null,
-        costUsd: null,
-        costJpy: null,
-        latencyMs: 0,
-        repaired: false,
-        error: null,
-      },
+      llm: noneLlm(),
       mode,
     };
   }
@@ -133,6 +155,21 @@ export async function orchestratePlanning(input: {
     startTime: input.session.input.startTime,
     endTime: input.session.input.endTime,
   });
+  if (env.runtime === "LIVE") {
+    planned.selected = planned.selected.filter((id) => !id.startsWith("mock:"));
+  }
+  if (!planned.selected.length) {
+    return {
+      waitingQuestion: {
+        id: "q_no_candidates",
+        prompt: "この場所と希望では実在候補を行程に載せられません。場所か希望を変えますか？",
+        options: ["条件を変える", "中断する"],
+      },
+      built: null,
+      llm: planned.llm,
+      mode,
+    };
+  }
 
   const spotMap: Record<string, Spot> = {};
   for (const s of [...scout.walk, ...exhibit, ...scout.sweets, ...scout.other, ...catalog.spots]) {
@@ -195,11 +232,12 @@ export async function orchestratePlanning(input: {
         )
         .map((item) => item.spotId),
     );
-    const retryIds = planned.selected.filter((id) => !closedSpotIds.has(id));
+    const retryIds = planned.selected.filter((id) => !closedSpotIds.has(id) && !(env.runtime === "LIVE" && id.startsWith("mock:")));
     const pool = [...scout.walk, ...exhibit, ...scout.sweets, ...scout.other];
     for (const spot of pool) {
       if (retryIds.length >= 3) break;
       if (retryIds.includes(spot.id) || closedSpotIds.has(spot.id)) continue;
+      if (env.runtime === "LIVE" && spot.id.startsWith("mock:")) continue;
       if (rain && spot.environment.value === "OUTDOOR") continue;
       retryIds.push(spot.id);
     }
@@ -223,8 +261,39 @@ export async function orchestratePlanning(input: {
     await input.log("planner", "SELF_CORRECTED", "検証エラーを見て候補を差し替えた");
   }
 
-  await withStore((db) => {
-    const found = findRun(db, input.runId);
+  if (built.plan.validation.state === "FAIL") {
+    const reason = built.plan.validation.issues[0]?.message ?? "制約を満たせません";
+    return {
+      waitingQuestion: {
+        id: "q_plan_unmet",
+        prompt: `実在候補では確定プランを作れません（${reason}）。条件を変えますか？検証は緩めていません。`,
+        options: ["条件を変える", "中断する"],
+      },
+      built: null,
+      llm: planned.llm,
+      mode,
+    };
+  }
+
+  const walkCheck = evaluateWalkLimits(input.session.input.travelMode, built.plan.legs);
+  const fingerprint = walkAckFingerprintFromPlan(input.session, built.plan, walkCheck);
+  if (walkCheck.exceeds && !walkLongAckMatches(input.session.walkLongAck, fingerprint)) {
+    await withRun(input.runId, (found) => {
+      if (!found) return;
+      found.bundle.session.pendingWalkAckFingerprint = fingerprint;
+      persistTravelCache(input.ctx, memories);
+      writeMemories(found.couple, memories);
+    });
+    return {
+      waitingQuestion: longWalkQuestion(walkCheck),
+      walkAckFingerprint: fingerprint,
+      built: null,
+      llm: planned.llm,
+      mode,
+    };
+  }
+
+  await withRun(input.runId, (found) => {
     if (!found) return;
     persistTravelCache(input.ctx, memories);
     writeMemories(found.couple, memories);
@@ -241,6 +310,7 @@ export async function orchestrateGather(input: {
   session: Session;
 }): Promise<{ rain: boolean; cached: boolean }> {
   const memories = readMemories(input.couple);
+  const wish = scoutJobsForPreferences(input.session.input.preferences);
   const area = {
     lat: input.session.input.areaLat,
     lng: input.session.input.areaLng,
@@ -256,6 +326,8 @@ export async function orchestrateGather(input: {
     memories,
     area,
     radiusMeters: input.session.input.radiusMeters,
+    jobs: wish.jobs,
+    jobKey: wish.key,
   });
   const weather = await runWeather({
     ctx: input.ctx,
@@ -265,8 +337,7 @@ export async function orchestrateGather(input: {
     lng: input.session.input.areaLng,
     at: `${input.session.input.dateTokyo}T${input.session.input.startTime}:00+09:00`,
   });
-  await withStore((db) => {
-    const found = findRun(db, input.runId);
+  await withRun(input.runId, (found) => {
     if (!found) return;
     writeMemories(found.couple, memories);
   });

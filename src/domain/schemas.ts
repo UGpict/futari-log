@@ -135,6 +135,10 @@ export const travelLegSchema = z.object({
   departureAt: z.string(),
   durationMinutes: factSchema(z.number()),
   distanceMeters: factSchema(z.number()),
+  bufferMinutes: z.number().optional(),
+  cachedAt: z.string().nullable().optional(),
+  requestedDepartureAt: z.string().nullable().optional(),
+  effectiveDepartureAt: z.string().nullable().optional(),
   delayMinutesInjected: z.number().nullable(),
   evidenceIds: z.array(z.string()),
 });
@@ -417,6 +421,12 @@ export const sessionStatusSchema = z.enum([
 ]);
 export type SessionStatus = z.infer<typeof sessionStatusSchema>;
 
+export const walkLongAckSchema = z.object({
+  fingerprint: z.string(),
+  at: z.string(),
+});
+export type WalkLongAck = z.infer<typeof walkLongAckSchema>;
+
 export const sessionSchema = z.object({
   id: z.string(),
   coupleId: z.string(),
@@ -434,6 +444,8 @@ export const sessionSchema = z.object({
   scheduleNow: z.string().nullable(),
   isDemo: z.boolean(),
   createdAt: z.string(),
+  walkLongAck: walkLongAckSchema.nullable().optional(),
+  pendingWalkAckFingerprint: z.string().nullable().optional(),
 });
 export type Session = z.infer<typeof sessionSchema>;
 

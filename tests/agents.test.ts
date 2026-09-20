@@ -63,9 +63,15 @@ describe("agent memory", () => {
     assert.equal(memories.scout?.facts.area, 1);
   });
 
-  it("treats same Tokyo calendar day as fresh", () => {
-    assert.equal(sameTokyoDate(new Date().toISOString()), true);
-    assert.equal(dailyFresh("2000-01-01T00:00:00.000Z"), false);
+  it("does not treat walkLongAcknowledged as a protected couple fact", () => {
+    const memories: AgentMemories = { travel: emptyMemory("travel") };
+    remember(memories, "travel", { factKey: "walkLongAcknowledged", factValue: true });
+    remember(memories, "travel", { factKey: "daily", factValue: { fetchedAt: new Date().toISOString() } });
+    for (let i = 0; i < 90; i += 1) {
+      remember(memories, "travel", { factKey: `travel:pad:${i}`, factValue: i });
+    }
+    assert.equal(memories.travel?.facts.daily != null, true);
+    assert.equal(memories.travel?.facts.walkLongAcknowledged, undefined);
   });
 });
 
@@ -89,7 +95,7 @@ describe("scout daily snapshot", () => {
       factKey: "daily",
       factValue: {
         fetchedAt: new Date().toISOString(),
-        areaKey: scoutAreaKey(area, 2500),
+        areaKey: `${scoutAreaKey(area, 2500)}:default`,
         walk: [spot],
         exhibit: [],
         sweets: [],

@@ -31,5 +31,15 @@ service cloud.firestore {
     match /catalogIngestRuns/{id} {
       allow read, write: if false;
     }
+
+    match /lookups/{id} {
+      allow read, write: if false;
+    }
+    match /idempotency/{id} {
+      allow read, write: if false;
+    }
+    match /sys/{document=**} {
+      allow read, write: if false;
+    }
   }
 }

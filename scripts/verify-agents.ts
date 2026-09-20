@@ -1,6 +1,6 @@
 import { createCouple, createSession, startRun } from "../src/server/api/actions";
 import { executeRun } from "../src/server/agent/execute";
-import { findRun, withStore } from "../src/server/repositories/store";
+import { getRun } from "../src/server/repositories/store";
 import { sha256 } from "../src/lib/ids";
 import { getEnv } from "../src/config/env";
 
@@ -62,7 +62,7 @@ async function main() {
 
   await executeRun(started.runId);
 
-  const found = await withStore((db) => findRun(db, started.runId));
+  const found = await getRun(started.runId);
   if (!found) throw new Error("run missing");
   const events = Object.values(found.bundle.events)
     .sort((a, b) => a.seq - b.seq)

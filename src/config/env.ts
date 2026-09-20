@@ -166,6 +166,7 @@ export function getEnv() {
     timeZone: TIME_ZONE,
     onCloudRun,
     uiFixtures,
+    firestoreNamespace: read("FIRESTORE_NAMESPACE"),
   };
 }
 
