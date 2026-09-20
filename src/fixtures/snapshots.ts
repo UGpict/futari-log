@@ -318,6 +318,20 @@ export const fixtureApproval = baseSnapshot("fx-approval", {
       createdAt: now,
     },
   ],
+  proposedPlan: {
+    ...fixtureSuccess.plan!,
+    version: 2,
+    items: [
+      {
+        ...planItems()[0],
+        id: "it_new",
+        spotId: "ChIJ_museum",
+        reason: "雨のため屋内へ",
+      },
+      planItems()[1],
+      planItems()[2],
+    ],
+  },
   overlays: ["WEATHER"],
 });
 

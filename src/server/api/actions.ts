@@ -6,6 +6,7 @@ import {
   type ScenarioKind,
 } from "@/domain/schemas";
 import { candidateToMemory } from "@/domain/memory";
+import { parseWalkAckScope } from "@/domain/plan/walkLimits";
 import { maskPii } from "@/server/privacy/mask";
 import { draftShareMessage } from "@/server/privacy/dto";
 import { demoAllowed } from "@/server/auth";
@@ -48,6 +49,8 @@ export function snapshotOf(couple: CoupleBundle, bundle: SessionBundle) {
   const runs = Object.values(bundle.runs).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const events = Object.values(bundle.events).sort((a, b) => a.seq - b.seq);
   const approvals = Object.values(couple.approvals).filter((a) => a.sessionId === bundle.session.id);
+  const pendingApply = approvals.find((item) => item.status === "PENDING" && item.kind === "PLAN_APPLY");
+  const proposedPlan = pendingApply ? bundle.planHistory[String(pendingApply.planVersionTo)] ?? null : null;
   return {
     runtime: env.runtime,
     emulator: env.emulator,
@@ -57,6 +60,7 @@ export function snapshotOf(couple: CoupleBundle, bundle: SessionBundle) {
     couple: couple.couple,
     session: bundle.session,
     plan,
+    proposedPlan,
     spots: bundle.spots,
     evidence: bundle.evidence,
     runs,
@@ -167,6 +171,9 @@ export async function startRun(input: {
   sessionId: string;
   kind: RunKind;
   trigger?: string | null;
+  instruction?: string | null;
+  targetPlanItemId?: string | null;
+  basePlanVersion?: number | null;
   idempotencyKey?: string | null;
   bodyHash: string;
 }) {
@@ -251,7 +258,7 @@ export async function answerQuestion(uid: string, runId: string, questionId: str
       found.run.leaseOwner = null;
       return { ok: true as const, restart: true, sessionId: found.bundle.session.id };
     }
-    if (questionId === "q_unsupported_wish" || questionId === "q_plan_unmet" || questionId === "q_no_candidates") {
+    if (questionId === "q_unsupported_wish" || questionId === "q_plan_unmet" || questionId === "q_no_candidates" || questionId === "q_replan_no_change") {
       found.run.status = "CANCELLED";
       found.run.finishedAt = realNowIso();
       found.run.waitingQuestion = null;
@@ -261,15 +268,22 @@ export async function answerQuestion(uid: string, runId: string, questionId: str
     }
     if (questionId === "q_long_walk") {
       if (answer === "このまま徒歩で続ける") {
-        const fingerprint =
-          found.bundle.session.pendingWalkAckFingerprint ??
-          [
-            found.bundle.session.input.dateTokyo,
-            found.bundle.session.input.travelMode,
-            found.bundle.session.input.meet.spotId ?? "",
-            found.bundle.session.input.end.spotId ?? "",
-          ].join("|");
-        found.bundle.session.walkLongAck = { fingerprint, at: realNowIso() };
+        const fingerprint = found.bundle.session.pendingWalkAckFingerprint;
+        const scope = parseWalkAckScope(fingerprint);
+        if (!fingerprint || !scope) {
+          return { ok: false as const, status: 409, error: "walk ack scope missing" };
+        }
+        found.bundle.session.walkLongAck = {
+          fingerprint,
+          at: realNowIso(),
+          dateTokyo: scope.dateTokyo,
+          travelMode: scope.travelMode,
+          meetSpotId: scope.meetSpotId,
+          endSpotId: scope.endSpotId,
+          routeSpotIds: scope.routeSpotIds,
+          longestLegMinutes: scope.longestLegMinutes,
+          totalMinutes: scope.totalMinutes,
+        };
         found.bundle.session.pendingWalkAckFingerprint = null;
         found.run.status = "PENDING";
         found.run.waitingQuestion = null;

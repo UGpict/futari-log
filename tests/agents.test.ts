@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { assessHours, parsePlaceHours, parseYenRange } from "../src/server/providers/placeFacts";
 import { remember, emptyMemory, dailyFresh } from "../src/server/agent/memory";
-import { pickFromCandidates, runPlanner } from "../src/server/agent/planner";
+import { pickFromCandidates, pickReplacementCandidate, runPlanner } from "../src/server/agent/planner";
 import { runScout, scoutAreaKey } from "../src/server/agent/scout";
 import type { AgentMemories } from "../src/server/agent/types";
 import { sameTokyoDate } from "../src/lib/time";
-import { checkOpen, type ProviderCtx } from "../src/server/providers";
+import { checkOpen, travelCacheKey, type ProviderCtx } from "../src/server/providers";
 import { searchCatalog } from "../src/server/providers/catalog";
 
 function parts(iso: string) {
@@ -72,6 +72,31 @@ describe("agent memory", () => {
     }
     assert.equal(memories.travel?.facts.daily != null, true);
     assert.equal(memories.travel?.facts.walkLongAcknowledged, undefined);
+  });
+
+  it("keeps travel API facts bounded and separate from consent", () => {
+    const memories: AgentMemories = { travel: emptyMemory("travel") };
+    const now = new Date().toISOString();
+    remember(memories, "travel", { factKey: "walkLongAcknowledged", factValue: true });
+    remember(memories, "travel", { factKey: "leg:a->b:WALK", factValue: { durationMinutes: 10 } });
+    remember(memories, "travel", {
+      factKey: "travel:a:b:WALK:2026-09-20T13",
+      factValue: { fetchedAt: now, payload: { durationMinutes: 12 } },
+    });
+    remember(memories, "travel", {
+      factKey: "travel:a:b:WALK:2026-09-19T13",
+      factValue: { fetchedAt: "2026-09-19T00:00:00.000Z", payload: { durationMinutes: 12 } },
+    });
+    for (let i = 0; i < 90; i += 1) {
+      remember(memories, "travel", {
+        factKey: `travel:pad:${i}:WALK:2026-09-20T13`,
+        factValue: { fetchedAt: now, payload: i },
+      });
+    }
+    assert.equal(memories.travel?.facts.walkLongAcknowledged, undefined);
+    assert.equal(memories.travel?.facts["leg:a->b:WALK"], undefined);
+    assert.equal(memories.travel?.facts["travel:a:b:WALK:2026-09-19T13"], undefined);
+    assert.ok(Object.keys(memories.travel?.facts ?? {}).length <= 80);
   });
 });
 
@@ -156,6 +181,59 @@ describe("planner candidate pick", () => {
     assert.ok(picked.selected.includes("ChIJ-cafe"));
   });
 
+  it("excludes the original cafe when the wish is to replace it", () => {
+    const spot = (id: string) => ({
+      id,
+      name: id,
+      lat: 35.68,
+      lng: 139.76,
+      categories: ["cafe"],
+      environment: { value: "INDOOR" as const, evidenceIds: [] as string[] },
+      costForTwoJpy: { value: { min: 1000, max: 2000 }, evidenceIds: [] as string[] },
+      restEase: { value: "EASY" as const, evidenceIds: [] as string[] },
+      standingBurden: { value: "LOW" as const, evidenceIds: [] as string[] },
+      officialUrl: null,
+    });
+    const picked = pickFromCandidates({
+      walk: [],
+      exhibit: [],
+      sweets: [spot("mock:cafe-kitte"), spot("mock:cafe-gransta")],
+      other: [],
+      lockedIds: ["mock:imperial-palace-outer"],
+      rain: false,
+      avoidIds: ["mock:cafe-kitte"],
+      allowAvoidedFallback: false,
+    });
+    assert.equal(picked.selected.includes("mock:cafe-kitte"), false);
+    assert.ok(picked.selected.includes("mock:cafe-gransta"));
+    const replacement = pickReplacementCandidate({
+      currentSpotId: "mock:cafe-kitte",
+      currentCategories: ["cafe", "bakery"],
+      instruction: "このカフェを別のカフェにして",
+      walk: [],
+      exhibit: [],
+      sweets: [spot("mock:cafe-kitte"), spot("mock:cafe-gransta")],
+      other: [],
+      heldIds: ["mock:imperial-palace-outer"],
+      rain: false,
+    });
+    assert.equal(replacement, "mock:cafe-gransta");
+    assert.equal(
+      pickReplacementCandidate({
+        currentSpotId: "mock:cafe-kitte",
+        currentCategories: ["cafe"],
+        instruction: "このカフェを別のカフェにして",
+        walk: [],
+        exhibit: [],
+        sweets: [spot("mock:cafe-kitte")],
+        other: [],
+        heldIds: [],
+        rain: false,
+      }),
+      null,
+    );
+  });
+
   it("does not call an LLM for selection", async () => {
     const spot = (id: string) => ({
       id,
@@ -190,6 +268,35 @@ describe("planner candidate pick", () => {
   });
 });
 
+describe("travel cache keys", () => {
+  it("does not reuse walk results across hours or routes on the same date", () => {
+    const from = { lat: 35.17, lng: 136.88, spotId: "spot-a" };
+    const to = { lat: 35.18, lng: 136.89, spotId: "spot-b" };
+    const afternoon = travelCacheKey({
+      from,
+      to,
+      mode: "WALK",
+      departureAt: "2026-09-20T04:00:00.000Z",
+    });
+    const evening = travelCacheKey({
+      from,
+      to,
+      mode: "WALK",
+      departureAt: "2026-09-20T09:00:00.000Z",
+    });
+    const otherRoute = travelCacheKey({
+      from,
+      to: { ...to, spotId: "spot-c" },
+      mode: "WALK",
+      departureAt: "2026-09-20T04:00:00.000Z",
+    });
+    assert.notEqual(afternoon, evening);
+    assert.notEqual(afternoon, otherRoute);
+    assert.match(afternoon, /WALK:2026-09-20T13/);
+    assert.match(evening, /WALK:2026-09-20T18/);
+  });
+});
+
 describe("checkOpen with place agent hours", () => {
   it("uses ctx.placeHours instead of the mock catalog", async () => {
     const ctx: ProviderCtx = {
@@ -219,7 +326,8 @@ describe("mock catalog area filter", () => {
     const walk = searchCatalog("散歩-公園", tokyo, 2500);
     assert.equal(exhibit.some((s) => s.id.startsWith("mock:nagoya") || s.id.includes("aichi")), false);
     assert.ok(exhibit.some((s) => s.id === "mock:tokyo-station-gallery"));
-    assert.ok(sweets.some((s) => s.categories.includes("cafe")));
+    assert.ok(sweets.some((s) => s.id === "mock:cafe-kitte"));
+    assert.ok(sweets.some((s) => s.id === "mock:cafe-gransta"));
     assert.ok(walk.some((s) => s.categories.includes("park")));
     const nagoya = searchCatalog("展示-美術館", { lat: 35.170915, lng: 136.881537 }, 2500);
     assert.ok(nagoya.some((s) => s.id === "mock:aichi-art-museum"));

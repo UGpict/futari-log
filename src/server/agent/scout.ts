@@ -1,9 +1,8 @@
 import type { Spot } from "@/domain/schemas";
 import { searchSpots, type ProviderCtx } from "@/server/providers";
 import { dailyFresh, remember } from "./memory";
+import { DEFAULT_SCOUT_JOBS, type ScoutBucket, type ScoutJob } from "./scoutJobs";
 import type { AgentLog, AgentMemories } from "./types";
-
-type Bucket = "walk" | "exhibit" | "sweets" | "other";
 
 type ScoutDaily = {
   fetchedAt: string;
@@ -13,22 +12,6 @@ type ScoutDaily = {
   sweets: Spot[];
   other: Spot[];
 };
-
-const JOBS: {
-  bucket: Bucket;
-  category: string;
-  includedTypes: string[];
-  rankPreference: "POPULARITY" | "DISTANCE";
-}[] = [
-  { bucket: "walk", category: "散歩-公園", includedTypes: ["park"], rankPreference: "DISTANCE" },
-  { bucket: "walk", category: "散歩-名所", includedTypes: ["tourist_attraction"], rankPreference: "POPULARITY" },
-  { bucket: "exhibit", category: "展示-博物館", includedTypes: ["museum"], rankPreference: "POPULARITY" },
-  { bucket: "exhibit", category: "展示-美術館", includedTypes: ["art_gallery"], rankPreference: "DISTANCE" },
-  { bucket: "sweets", category: "甘味-カフェ", includedTypes: ["cafe"], rankPreference: "DISTANCE" },
-  { bucket: "sweets", category: "甘味-菓子", includedTypes: ["bakery"], rankPreference: "POPULARITY" },
-  { bucket: "other", category: "寄り道-書店", includedTypes: ["bookstore"], rankPreference: "POPULARITY" },
-  { bucket: "other", category: "寄り道-買い物", includedTypes: ["shopping_mall"], rankPreference: "DISTANCE" },
-];
 
 export function scoutAreaKey(area: { lat: number; lng: number; name: string }, radiusMeters: number): string {
   return `${area.name}:${area.lat.toFixed(4)}:${area.lng.toFixed(4)}:${radiusMeters}`;
@@ -68,9 +51,14 @@ export async function runScout(input: {
   memories: AgentMemories;
   area: { lat: number; lng: number; name: string };
   radiusMeters: number;
+  jobs?: ScoutJob[];
+  jobKey?: string;
+  persist?: boolean;
 }): Promise<{ walk: Spot[]; exhibit: Spot[]; sweets: Spot[]; other: Spot[] }> {
-  const areaKey = scoutAreaKey(input.area, input.radiusMeters);
-  const cached = input.memories.scout?.facts.daily as ScoutDaily | undefined;
+  const jobs = input.jobs?.length ? input.jobs : DEFAULT_SCOUT_JOBS;
+  const persist = input.persist !== false;
+  const areaKey = `${scoutAreaKey(input.area, input.radiusMeters)}:${input.jobKey ?? "default"}`;
+  const cached = persist ? (input.memories.scout?.facts.daily as ScoutDaily | undefined) : undefined;
   if (
     cached &&
     cached.areaKey === areaKey &&
@@ -92,9 +80,9 @@ export async function runScout(input: {
   }
 
   await input.log("scout", "TOOL_STARTED", "周辺の実在候補を広く探す");
-  const buckets: Record<Bucket, Spot[]> = { walk: [], exhibit: [], sweets: [], other: [] };
-  const half = Math.ceil(JOBS.length / 2);
-  for (const slice of [JOBS.slice(0, half), JOBS.slice(half)]) {
+  const buckets: Record<ScoutBucket, Spot[]> = { walk: [], exhibit: [], sweets: [], other: [] };
+  const half = Math.ceil(jobs.length / 2);
+  for (const slice of [jobs.slice(0, half), jobs.slice(half)]) {
     const results = await Promise.all(
       slice.map((job) =>
         searchSpots(input.ctx, {
@@ -120,18 +108,20 @@ export async function runScout(input: {
       mergeUnique(buckets[job.bucket], res.spots);
     }
   }
-  remember(input.memories, "scout", {
-    note: `${input.area.name} 散歩${buckets.walk.length}/展示${buckets.exhibit.length}/甘味${buckets.sweets.length}/寄り道${buckets.other.length}`,
-    factKey: "daily",
-    factValue: {
-      fetchedAt: new Date().toISOString(),
-      areaKey,
-      walk: buckets.walk,
-      exhibit: buckets.exhibit,
-      sweets: buckets.sweets,
-      other: buckets.other,
-    } satisfies ScoutDaily,
-  });
+  if (persist) {
+    remember(input.memories, "scout", {
+      note: `${input.area.name} 散歩${buckets.walk.length}/展示${buckets.exhibit.length}/甘味${buckets.sweets.length}/寄り道${buckets.other.length}`,
+      factKey: "daily",
+      factValue: {
+        fetchedAt: new Date().toISOString(),
+        areaKey,
+        walk: buckets.walk,
+        exhibit: buckets.exhibit,
+        sweets: buckets.sweets,
+        other: buckets.other,
+      } satisfies ScoutDaily,
+    });
+  }
   await input.log(
     "scout",
     "TOOL_COMPLETED",

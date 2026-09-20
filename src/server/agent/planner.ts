@@ -29,9 +29,13 @@ export function pickFromCandidates(args: {
   dateTokyo?: string;
   startTime?: string;
   endTime?: string;
+  preferCheaper?: boolean;
+  preferRest?: boolean;
+  allowAvoidedFallback?: boolean;
 }): { selected: string[]; rejected: { spotId: string; reason: string }[] } {
   const rejected: { spotId: string; reason: string }[] = [];
   const selected: string[] = [];
+  const allowAvoidedFallback = args.allowAvoidedFallback !== false;
   const addId = (id?: string | null) => {
     if (id && !selected.includes(id)) selected.push(id);
   };
@@ -53,18 +57,65 @@ export function pickFromCandidates(args: {
     }
   }
   for (const id of args.lockedIds) addId(id);
-  const take = (list: Spot[]) => usable(list)[0] ?? usable(list, true)[0];
+  const rank = (list: Spot[]) => {
+    const copy = [...list];
+    if (args.preferCheaper) {
+      copy.sort((a, b) => (a.costForTwoJpy.value?.max ?? 9_999_999) - (b.costForTwoJpy.value?.max ?? 9_999_999));
+    }
+    if (args.preferRest) {
+      copy.sort((a, b) => Number(b.restEase.value === "EASY") - Number(a.restEase.value === "EASY"));
+    }
+    return copy;
+  };
+  const take = (list: Spot[]) =>
+    rank(usable(list))[0] ?? (allowAvoidedFallback ? rank(usable(list, true))[0] : undefined);
   addId(take(args.exhibit)?.id);
   addId(take(args.walk)?.id);
   addId(take(args.sweets)?.id);
   if (selected.length < 3) addId(take(args.other)?.id);
   if (selected.length < 3) {
     for (const s of [...args.exhibit, ...args.walk, ...args.sweets, ...args.other]) {
+      if (!allowAvoidedFallback && args.avoidIds.includes(s.id)) continue;
       addId(s.id);
       if (selected.length >= 3) break;
     }
   }
   return { selected: selected.slice(0, 4), rejected };
+}
+
+export function pickReplacementCandidate(args: {
+  currentSpotId: string;
+  currentCategories: string[];
+  instruction: string;
+  walk: Spot[];
+  exhibit: Spot[];
+  sweets: Spot[];
+  other: Spot[];
+  heldIds: string[];
+  rain: boolean;
+  dateTokyo?: string;
+  startTime?: string;
+  endTime?: string;
+}): string | null {
+  const avoid = new Set([args.currentSpotId, ...args.heldIds]);
+  const all = [...args.sweets, ...args.exhibit, ...args.walk, ...args.other];
+  const usable = (list: Spot[]) =>
+    list.filter((spot) => {
+      if (avoid.has(spot.id)) return false;
+      if (args.rain && spot.environment.value === "OUTDOOR") return false;
+      if (closedForSession(spot, args.dateTokyo, args.startTime, args.endTime)) return false;
+      return true;
+    });
+  const sameCategory = usable(all.filter((spot) => spot.categories.some((cat) => args.currentCategories.includes(cat))));
+  const pool = sameCategory.length ? sameCategory : usable(all);
+  const ranked = [...pool];
+  if (/予算|安|抑え/.test(args.instruction)) {
+    ranked.sort((a, b) => (a.costForTwoJpy.value?.max ?? 9_999_999) - (b.costForTwoJpy.value?.max ?? 9_999_999));
+  }
+  if (/ゆっくり|休憩/.test(args.instruction)) {
+    ranked.sort((a, b) => Number(b.restEase.value === "EASY") - Number(a.restEase.value === "EASY"));
+  }
+  return ranked[0]?.id ?? null;
 }
 
 function deterministicLlm(
@@ -114,6 +165,8 @@ export async function runPlanner(input: {
   dateTokyo?: string;
   startTime?: string;
   endTime?: string;
+  avoidIds?: string[];
+  instruction?: string | null;
 }): Promise<{
   selected: string[];
   rejected: { spotId: string; reason: string }[];
@@ -124,12 +177,17 @@ export async function runPlanner(input: {
     assumptions: string[];
   }>;
 }> {
-  await input.log("planner", "TOOL_STARTED", "候補から行程の核を選ぶ");
+  await input.log(
+    "planner",
+    "TOOL_STARTED",
+    input.instruction ? `希望「${input.instruction}」を候補選定に使う` : "候補から行程の核を選ぶ",
+  );
   const last = input.memories.planner?.facts[`last:${input.runId}`] as { selected?: string[] } | undefined;
-  const avoidIds = [
+  const avoidIds = input.avoidIds ?? [
     ...((input.memories.planner?.facts.lastSelected as string[] | undefined) ?? []),
     ...(last?.selected ?? []),
   ];
+  const instruction = input.instruction ?? "";
   const fallback = pickFromCandidates({
     walk: input.walk,
     exhibit: input.exhibit,
@@ -141,6 +199,9 @@ export async function runPlanner(input: {
     dateTokyo: input.dateTokyo,
     startTime: input.startTime,
     endTime: input.endTime,
+    preferCheaper: /予算|安|抑え/.test(instruction),
+    preferRest: /ゆっくり|休憩/.test(instruction),
+    allowAvoidedFallback: input.task !== "replan",
   });
   const liveOnly = getEnv().runtime === "LIVE";
   const known = new Set(
@@ -159,6 +220,7 @@ export async function runPlanner(input: {
   }
   if (selected.length < 3) {
     for (const id of fallback.selected) {
+      if (!known.has(id) || (liveOnly && id.startsWith("mock:"))) continue;
       if (!selected.includes(id)) selected.push(id);
       if (selected.length >= 3) break;
     }

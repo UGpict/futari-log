@@ -3,13 +3,18 @@ import { getEnv } from "@/config/env";
 import { loadSelectedEventSpots } from "@/server/catalog/planAttach";
 import type { Memory, Plan, Run, Session, Spot } from "@/domain/schemas";
 import { evaluateWalkLimits, longWalkQuestion, walkAckFingerprintFromPlan, walkLongAckMatches } from "@/domain/plan/walkLimits";
+import { composeReplanOrder, isProtectedPlanItem } from "@/domain/plan/replanOrder";
+import {
+  classifyReplanIntent,
+  replanNoChangeQuestion,
+} from "@/domain/plan/replanIntent";
 import type { LlmCallResult } from "@/server/llm";
 import type { ProviderCtx } from "@/server/providers";
 import { withRun, type CoupleBundle } from "@/server/repositories/store";
-import { dailyFresh, readMemories, remember, writeMemories } from "./memory";
+import { dailyFresh, pruneTravelFacts, readMemories, remember, writeMemories } from "./memory";
 import { buildPlan, type BuiltPlan } from "./buildPlan";
 import { runPlace } from "./place";
-import { runPlanner } from "./planner";
+import { pickReplacementCandidate, runPlanner } from "./planner";
 import { runScout } from "./scout";
 import { scoutJobsForPreferences } from "./scoutJobs";
 import { noteTravelPass } from "./travel";
@@ -132,10 +137,56 @@ export async function orchestratePlanning(input: {
     at: `${input.session.input.dateTokyo}T${input.session.input.startTime}:00+09:00`,
   });
   const rain = weather.injected || (weather.precipitationMm ?? 0) >= 2;
+  const current = input.session.currentPlanVersion
+    ? input.couple.sessions[input.session.id]?.planHistory[String(input.session.currentPlanVersion)]
+    : undefined;
+  const targetPlanItemId = input.run.targetPlanItemId ?? null;
+  const intent = classifyReplanIntent(input.run.instruction, targetPlanItemId);
+  const bundleSpots = input.couple.sessions[input.session.id]?.spots ?? {};
+  if (input.run.kind === "REPLAN" && current && intent === "replace_place") {
+    const extraWish = scoutJobsForPreferences([
+      ...input.session.input.preferences,
+      { content: input.run.instruction ?? "別の場所", priority: "PREFER" as const },
+    ]);
+    const extra = await runScout({
+      ctx: input.ctx,
+      log: input.log,
+      memories,
+      area,
+      radiusMeters: input.session.input.radiusMeters,
+      jobs: extraWish.jobs,
+      jobKey: `replan:${targetPlanItemId ?? "all"}:${extraWish.key}`,
+      persist: false,
+    });
+    for (const spot of extra.walk) {
+      if (!scout.walk.some((s) => s.id === spot.id)) scout.walk.push(spot);
+    }
+    for (const spot of extra.exhibit) {
+      if (!scout.exhibit.some((s) => s.id === spot.id)) scout.exhibit.push(spot);
+    }
+    for (const spot of extra.sweets) {
+      if (!scout.sweets.some((s) => s.id === spot.id)) scout.sweets.push(spot);
+    }
+    for (const spot of extra.other) {
+      if (!scout.other.some((s) => s.id === spot.id)) scout.other.push(spot);
+    }
+  }
+  const protectedItems = (current?.items ?? []).filter((item) => {
+    if (isProtectedPlanItem(item)) return true;
+    if (input.run.kind === "REPLAN" && targetPlanItemId && item.id !== targetPlanItemId) return true;
+    return false;
+  });
   const lockedIds = [
     ...input.session.input.fixedAppointments.map((a) => a.spotId).filter((x): x is string => Boolean(x)),
     ...catalog.spots.map((s) => s.id),
+    ...protectedItems.map((item) => item.spotId),
   ];
+  const avoidIds =
+    input.run.kind === "REPLAN" && current
+      ? targetPlanItemId
+        ? current.items.filter((item) => item.id === targetPlanItemId).map((item) => item.spotId)
+        : current.items.filter((item) => !isProtectedPlanItem(item)).map((item) => item.spotId)
+      : undefined;
 
   const planned = await runPlanner({
     log: input.log,
@@ -154,11 +205,13 @@ export async function orchestratePlanning(input: {
     dateTokyo: input.session.input.dateTokyo,
     startTime: input.session.input.startTime,
     endTime: input.session.input.endTime,
+    avoidIds,
+    instruction: input.run.instruction,
   });
   if (env.runtime === "LIVE") {
     planned.selected = planned.selected.filter((id) => !id.startsWith("mock:"));
   }
-  if (!planned.selected.length) {
+  if (!planned.selected.length && !(input.run.kind === "REPLAN" && current && intent === "adjust_same_place")) {
     return {
       waitingQuestion: {
         id: "q_no_candidates",
@@ -171,6 +224,77 @@ export async function orchestratePlanning(input: {
     };
   }
 
+  let orderedSpotIds = planned.selected;
+  let adjustmentReasons: string[] = [];
+  if (input.run.kind === "REPLAN" && current) {
+    if (intent === "adjust_same_place") {
+      orderedSpotIds = current.items.map((item) => item.spotId);
+    } else if (targetPlanItemId) {
+      const target = current.items.find((item) => item.id === targetPlanItemId);
+      if (!target) {
+        return {
+          waitingQuestion: replanNoChangeQuestion(),
+          built: null,
+          llm: planned.llm,
+          mode,
+        };
+      }
+      if (isProtectedPlanItem(target)) {
+        return {
+          waitingQuestion: replanNoChangeQuestion(
+            "固定・訪問中・完了済みの行程は変えられません。条件を変えますか？",
+          ),
+          built: null,
+          llm: planned.llm,
+          mode,
+        };
+      }
+      const targetSpot =
+        bundleSpots[target.spotId] ??
+        [...scout.walk, ...exhibit, ...scout.sweets, ...scout.other].find((spot) => spot.id === target.spotId);
+      const replacement = pickReplacementCandidate({
+        currentSpotId: target.spotId,
+        currentCategories: targetSpot?.categories ?? [],
+        instruction: input.run.instruction ?? "",
+        walk: scout.walk,
+        exhibit: [...exhibit, ...scout.exhibit.filter((spot) => !exhibit.some((item) => item.id === spot.id))],
+        sweets: scout.sweets,
+        other: scout.other,
+        heldIds: current.items.filter((item) => item.id !== target.id).map((item) => item.spotId),
+        rain,
+        dateTokyo: input.session.input.dateTokyo,
+        startTime: input.session.input.startTime,
+        endTime: input.session.input.endTime,
+      });
+      if (!replacement || (env.runtime === "LIVE" && replacement.startsWith("mock:"))) {
+        return {
+          waitingQuestion: replanNoChangeQuestion(),
+          built: null,
+          llm: planned.llm,
+          mode,
+        };
+      }
+      orderedSpotIds = current.items.map((item) => (item.id === target.id ? replacement : item.spotId));
+      adjustmentReasons = ["指定した行程だけ差し替え。前後は必要な範囲だけ時刻と移動を再計算する"];
+    } else {
+      const composed = composeReplanOrder({
+        currentItems: current.items,
+        candidates: planned.selected,
+        targetPlanItemId,
+      });
+      if (!composed.targetChanged) {
+        return {
+          waitingQuestion: replanNoChangeQuestion(),
+          built: null,
+          llm: planned.llm,
+          mode,
+        };
+      }
+      orderedSpotIds = composed.orderedSpotIds;
+      adjustmentReasons = composed.adjustmentReasons;
+    }
+  }
+
   const spotMap: Record<string, Spot> = {};
   for (const s of [...scout.walk, ...exhibit, ...scout.sweets, ...scout.other, ...catalog.spots]) {
     spotMap[s.id] = s;
@@ -180,25 +304,28 @@ export async function orchestratePlanning(input: {
     ctx: input.ctx,
     log: input.log,
     memories,
-    spotIds: planned.selected,
+    spotIds: [...new Set([...planned.selected, ...orderedSpotIds])],
     spots: spotMap,
   });
-
-  const current = input.session.currentPlanVersion
-    ? input.couple.sessions[input.session.id]?.planHistory[String(input.session.currentPlanVersion)]
-    : undefined;
 
   await input.log("travel", "TOOL_STARTED", "区間の移動時間を調べる");
   let built = await buildPlan({
     version: (current?.version ?? 0) + 1,
     input: input.session.input,
-    orderedSpotIds: planned.selected,
+    orderedSpotIds,
     spots: detailed.spots,
     memories: input.memories,
     ctx: input.ctx,
     dataMode: overlays.length ? "LIVE_SCENARIO" : env.runtime === "MOCK" ? "LIVE" : "LIVE",
     previousItems: current?.items,
   });
+  if (input.run.instruction) {
+    built.plan.assumptions = [
+      `希望「${input.run.instruction}」を反映する`,
+      ...adjustmentReasons,
+      ...built.plan.assumptions,
+    ];
+  }
 
   const travelUnknown = built.plan.validation.issues.filter((i) =>
     ["TRAVEL_UNKNOWN", "END_TRAVEL_UNKNOWN"].includes(i.code),
@@ -232,11 +359,14 @@ export async function orchestratePlanning(input: {
         )
         .map((item) => item.spotId),
     );
-    const retryIds = planned.selected.filter((id) => !closedSpotIds.has(id) && !(env.runtime === "LIVE" && id.startsWith("mock:")));
+    const protectedSpotIds = new Set(protectedItems.map((item) => item.spotId));
+    const retryIds = orderedSpotIds.filter(
+      (id) => protectedSpotIds.has(id) || (!closedSpotIds.has(id) && !(env.runtime === "LIVE" && id.startsWith("mock:"))),
+    );
     const pool = [...scout.walk, ...exhibit, ...scout.sweets, ...scout.other];
     for (const spot of pool) {
-      if (retryIds.length >= 3) break;
-      if (retryIds.includes(spot.id) || closedSpotIds.has(spot.id)) continue;
+      if (retryIds.length >= Math.max(3, orderedSpotIds.length)) break;
+      if (retryIds.includes(spot.id) || closedSpotIds.has(spot.id) || protectedSpotIds.has(spot.id)) continue;
       if (env.runtime === "LIVE" && spot.id.startsWith("mock:")) continue;
       if (rain && spot.environment.value === "OUTDOOR") continue;
       retryIds.push(spot.id);
@@ -258,6 +388,12 @@ export async function orchestratePlanning(input: {
       dataMode: built.plan.dataMode,
       previousItems: current?.items,
     });
+    if (input.run.instruction) {
+      built.plan.assumptions = [
+        "検証エラーのため、対象外の行程も必要な範囲だけ調整した",
+        ...built.plan.assumptions,
+      ];
+    }
     await input.log("planner", "SELF_CORRECTED", "検証エラーを見て候補を差し替えた");
   }
 
@@ -348,11 +484,12 @@ export async function orchestrateGather(input: {
 }
 
 function hydrateTravelCache(ctx: ProviderCtx, memories: AgentMemories) {
+  if (memories.travel) memories.travel.facts = pruneTravelFacts(memories.travel.facts);
   for (const [key, raw] of Object.entries(memories.travel?.facts ?? {})) {
     if (!key.startsWith("travel:") || !raw || typeof raw !== "object") continue;
     const wrapped = raw as { fetchedAt?: string; payload?: unknown };
-    if (!dailyFresh(wrapped.fetchedAt) || wrapped.payload == null) continue;
-    ctx.cache.set(key, { at: wrapped.fetchedAt!, value: wrapped.payload, stale: false });
+    if (!wrapped.fetchedAt || wrapped.payload == null) continue;
+    ctx.cache.set(key, { at: wrapped.fetchedAt, value: wrapped.payload, stale: false });
   }
 }
 
@@ -364,4 +501,5 @@ function persistTravelCache(ctx: ProviderCtx, memories: AgentMemories) {
       factValue: { fetchedAt: hit.at, payload: hit.value },
     });
   }
+  if (memories.travel) memories.travel.facts = pruneTravelFacts(memories.travel.facts);
 }

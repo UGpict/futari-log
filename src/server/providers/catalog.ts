@@ -204,6 +204,21 @@ export const MOCK_CATALOG: CatalogSpot[] = [
     walkRestHint: "座席中心のカフェ。休憩向き（カテゴリからの推定）",
   },
   {
+    id: "mock:cafe-gransta",
+    name: "カフェ グランスタ東京",
+    lat: 35.68105,
+    lng: 139.76735,
+    categories: ["cafe", "bakery"],
+    types: ["cafe", "bakery"],
+    environment: { value: "INDOOR", evidenceIds: ["ev-gran-env"] },
+    costForTwoJpy: { value: { min: 1600, max: 2600 }, evidenceIds: ["ev-gran-cost"] },
+    restEase: { value: "EASY", evidenceIds: ["ev-gran-rest"] },
+    standingBurden: { value: "LOW", evidenceIds: ["ev-gran-stand"] },
+    officialUrl: "https://gransta.jp/",
+    hours: [{ days: [0, 1, 2, 3, 4, 5, 6], open: "08:00", close: "22:00" }],
+    walkRestHint: "東京駅構内のカフェ。座席中心（カテゴリからの推定）",
+  },
+  {
     id: "mock:kitte-mall",
     name: "KITTE 丸の内",
     lat: 35.6799,
@@ -241,6 +256,12 @@ export const MOCK_EVIDENCE: Evidence[] = MOCK_CATALOG.flatMap((spot) => [
   ev(`${spot.restEase.evidenceIds[0]}`, "restEase", spot.walkRestHint ?? "推定根拠が弱い場合は UNKNOWN"),
   ev(`${spot.standingBurden.evidenceIds[0]}`, "standingBurden", spot.walkRestHint ?? "カテゴリからのESTIMATED"),
 ]);
+
+export function searchCatalogByName(query: string) {
+  const needle = query.trim().toLowerCase();
+  if (needle.length < 2) return [];
+  return MOCK_CATALOG.filter((s) => `${s.name} ${s.types.join(" ")}`.toLowerCase().includes(needle)).slice(0, 8);
+}
 
 export function getCatalogSpot(id: string): CatalogSpot | undefined {
   return MOCK_CATALOG.find((s) => s.id === id);
@@ -282,6 +303,18 @@ export function searchCatalog(
     }
     if (key.includes("買い物") || key.includes("mall")) {
       return s.categories.includes("shopping_mall") || s.types.includes("shopping_mall");
+    }
+    if (key.includes("食事") || key.includes("レストラン") || key.includes("restaurant")) {
+      return s.categories.includes("restaurant") || s.types.includes("restaurant") || s.categories.includes("cafe");
+    }
+    if (key.includes("温泉") || key.includes("spa")) {
+      return s.types.includes("spa") || blob.includes("温泉");
+    }
+    if (key.includes("水族館") || key.includes("aquarium")) {
+      return s.types.includes("aquarium") || blob.includes("水族館");
+    }
+    if (key.includes("映画") || key.includes("movie")) {
+      return s.types.includes("movie_theater") || blob.includes("映画");
     }
     return blob.includes(key);
   });

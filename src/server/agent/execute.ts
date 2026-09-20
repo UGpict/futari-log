@@ -7,6 +7,7 @@ import type {
 } from "@/domain/schemas";
 import { diffPlan } from "@/domain/plan/diffPlan";
 import { evaluateAutoApply } from "@/domain/plan/evaluateAutoApply";
+import { classifyReplanIntent, replanNoChangeQuestion, replanRequestSatisfied } from "@/domain/plan/replanIntent";
 import { newId } from "@/lib/ids";
 import { realNowIso } from "@/lib/time";
 import { callLLM, llmActionSchema } from "@/server/llm";
@@ -209,6 +210,37 @@ export async function executeRun(
       return;
     }
 
+    const current = session.currentPlanVersion
+      ? bundle.planHistory[String(session.currentPlanVersion)]
+      : undefined;
+
+    if (run.kind === "REPLAN" && current) {
+      const d = diffPlan(current, built.plan);
+      if (
+        run.instruction &&
+        !replanRequestSatisfied({
+          intent: classifyReplanIntent(run.instruction, run.targetPlanItemId),
+          previous: current,
+          next: built.plan,
+          diff: d,
+          targetPlanItemId: run.targetPlanItemId,
+        })
+      ) {
+        const question = replanNoChangeQuestion();
+        await appendEvent(runId, "INPUT_REQUIRED", question.prompt, {
+          payload: { agent: "planner", diff: d },
+        });
+        await withRun(runId, (found) => {
+          if (!found) return;
+          found.run.status = "WAITING_INPUT";
+          found.run.waitingQuestion = question;
+          found.run.waitingApprovalId = null;
+          found.run.leaseOwner = null;
+        });
+        return;
+      }
+    }
+
     await withRun(runId, (found) => {
       if (!found) return;
       found.run.displayRuntime = env.runtime === "MOCK" ? "MOCK" : display;
@@ -221,20 +253,19 @@ export async function executeRun(
       found.run.resultPlanVersion = built.plan.version;
     });
 
-    const current = session.currentPlanVersion
-      ? bundle.planHistory[String(session.currentPlanVersion)]
-      : undefined;
-
     if (run.kind === "REPLAN" && current) {
       const d = diffPlan(current, built.plan);
-      const auto = evaluateAutoApply({
-        previous: current,
-        next: built.plan,
-        diff: d,
-        policy: session.input.autoApply,
-        nowIso: realNowIso(),
-        expectedBaseVersion: run.basePlanVersion ?? current.version,
-      });
+      const userRequested = Boolean(run.instruction);
+      const auto = userRequested
+        ? { apply: false as const, reasons: ["変更希望の確認が必要です"] }
+        : evaluateAutoApply({
+            previous: current,
+            next: built.plan,
+            diff: d,
+            policy: session.input.autoApply,
+            nowIso: realNowIso(),
+            expectedBaseVersion: run.basePlanVersion ?? current.version,
+          });
       if (auto.apply) {
         await withRun(runId, (found) => {
           if (!found) return;
