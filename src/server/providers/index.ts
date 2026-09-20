@@ -12,6 +12,7 @@ import type {
   Spot,
   TravelMode,
 } from "@/domain/schemas";
+import { placeTypeList } from "@/contracts/spotKinds";
 import { newId } from "@/lib/ids";
 import { realNowIso, toTokyoParts } from "@/lib/time";
 import { getCatalogSpot, MOCK_CATALOG, searchCatalog, type CatalogSpot } from "./catalog";
@@ -83,7 +84,7 @@ function toSpot(c: CatalogSpot): Spot {
     name: c.name,
     lat: c.lat,
     lng: c.lng,
-    categories: c.categories,
+    categories: placeTypeList(c.categories, c.types),
     environment: {
       value: c.environment.value,
       evidenceIds: c.environment.evidenceIds,
@@ -470,7 +471,7 @@ async function liveSearch(
     name: p.displayName?.text ?? p.id,
     lat: p.location?.latitude ?? 0,
     lng: p.location?.longitude ?? 0,
-    categories: p.types ?? (p.primaryType ? [p.primaryType] : []),
+    categories: placeTypeList(p.primaryType, p.types),
     environment: { value: null, evidenceIds: [] },
     costForTwoJpy: { value: null, evidenceIds: [] },
     restEase: { value: null, evidenceIds: [] },
@@ -507,6 +508,7 @@ async function liveDetails(apiKey: string, spotId: string): Promise<SpotDetails>
     displayName?: { text: string };
     location?: { latitude: number; longitude: number };
     types?: string[];
+    primaryType?: string;
     websiteUri?: string;
     regularOpeningHours?: {
       periods?: {
@@ -520,7 +522,8 @@ async function liveDetails(apiKey: string, spotId: string): Promise<SpotDetails>
     };
   };
   const fetchedAt = realNowIso();
-  const envEst = estimateEnvironment(p.types ?? []);
+  const types = placeTypeList(p.primaryType, p.types);
+  const envEst = estimateEnvironment(types);
   const hours = parsePlaceHours(p.regularOpeningHours);
   const yen = parseYenRange(p.priceRange);
   const costEvidence = evidence({
@@ -539,11 +542,11 @@ async function liveDetails(apiKey: string, spotId: string): Promise<SpotDetails>
       name: p.displayName?.text ?? p.id,
       lat: p.location?.latitude ?? 0,
       lng: p.location?.longitude ?? 0,
-      categories: p.types ?? [],
+      categories: types,
       environment: envEst,
       costForTwoJpy: { value: yen, evidenceIds: yen ? [costEvidence.id] : [] },
-      restEase: estimateRest(p.types ?? []),
-      standingBurden: estimateStanding(p.types ?? []),
+      restEase: estimateRest(types),
+      standingBurden: estimateStanding(types),
       officialUrl: p.websiteUri ?? null,
     },
     evidence: [
