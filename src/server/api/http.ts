@@ -10,11 +10,13 @@ export function bearer(request: Request): string | null {
   if (header?.startsWith("Bearer ")) return header.slice(7);
   const cookie = request.headers.get("cookie") ?? "";
   const match = cookie.split(";").map((s) => s.trim()).find((s) => s.startsWith("futari_token="));
-  return match ? decodeURIComponent(match.split("=")[1] ?? "") : null;
+  return match ? decodeURIComponent(match.split("=").slice(1).join("=") ?? "") : null;
 }
 
-export function requireUid(request: Request): { uid: string } | { error: NextResponse } {
-  const uid = verifyToken(bearer(request));
+export async function requireUid(
+  request: Request,
+): Promise<{ uid: string } | { error: NextResponse }> {
+  const uid = await verifyToken(bearer(request));
   if (!uid) return { error: json({ error: "unauthorized" }, 401) };
   return { uid };
 }

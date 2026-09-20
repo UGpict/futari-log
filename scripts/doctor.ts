@@ -22,9 +22,39 @@ async function main() {
   rows.push(
     await check("env:firebase", async () => ({
       status: env.firebaseConfigured ? "PASS" : "BLOCKED",
-      detail: env.firebaseConfigured ? "configured" : "keys missing; mock auth in use",
+      detail: env.emulator
+        ? `emulator auth=${env.authEmulatorHost} firestore=${env.firestoreEmulatorHost}`
+        : env.firebaseConfigured
+          ? "configured"
+          : "keys missing; mock auth in use",
     })),
   );
+  rows.push(
+    await check("data-backend", async () => ({
+      status: "PASS",
+      detail: `${env.dataBackend} / auth=${env.authBackend}`,
+    })),
+  );
+  if (env.emulator) {
+    rows.push(
+      await check("auth emulator", async () => {
+        const res = await fetch(`http://${env.authEmulatorHost}`, { signal: AbortSignal.timeout(3000) });
+        return {
+          status: res.status < 500 ? "PASS" : "FAIL",
+          detail: `HTTP ${res.status}`,
+        };
+      }),
+    );
+    rows.push(
+      await check("firestore emulator", async () => {
+        const res = await fetch(`http://${env.firestoreEmulatorHost}`, { signal: AbortSignal.timeout(3000) });
+        return {
+          status: res.status < 500 ? "PASS" : "FAIL",
+          detail: `HTTP ${res.status}`,
+        };
+      }),
+    );
+  }
   rows.push(
     await check("env:orcarouter", async () => ({
       status: env.orcaConfigured ? "PASS" : "BLOCKED",

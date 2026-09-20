@@ -2,7 +2,7 @@ import { json, requireUid } from "@/server/api/http";
 import { demoReset } from "@/server/api/actions";
 
 export async function POST(request: Request) {
-  const auth = requireUid(request);
+  const auth = await requireUid(request);
   if ("error" in auth) return auth.error;
   const body = (await request.json().catch(() => ({}))) as { keepReplays?: boolean };
   const result = await demoReset(auth.uid, body.keepReplays !== false);

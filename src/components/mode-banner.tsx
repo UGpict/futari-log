@@ -19,6 +19,9 @@ export function ModeBanner(props: {
   mode?: string;
   overlays?: string[];
   replay?: boolean;
+  emulator?: boolean;
+  dataBackend?: string;
+  authBackend?: string;
 }) {
   if (props.replay) {
     return (
@@ -28,11 +31,20 @@ export function ModeBanner(props: {
     );
   }
   const live = props.runtime === "LIVE";
+  const backend =
+    props.emulator
+      ? "Auth / Firestore Emulator"
+      : props.dataBackend === "firestore"
+        ? "Firestore"
+        : props.authBackend === "firebase"
+          ? "Firebase Auth"
+          : null;
   return (
     <div
       className={`rounded-xl px-4 py-2 text-sm ${live ? "bg-moss-soft text-moss" : "bg-amber-soft text-amber"}`}
     >
       {live ? "LIVE" : "モック実行"}
+      {backend ? ` · ${backend}` : null}
       {props.mode === "LIVE_SCENARIO" || (props.overlays && props.overlays.length > 0)
         ? ` ＋シナリオ注入（${(props.overlays ?? []).join("、") || "あり"}）`
         : null}

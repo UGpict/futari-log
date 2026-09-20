@@ -5,7 +5,7 @@ export async function POST(
   request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const auth = requireUid(request);
+  const auth = await requireUid(request);
   if ("error" in auth) return auth.error;
   const { id } = await ctx.params;
   const body = (await request.json()) as { questionId?: string; answer?: string };

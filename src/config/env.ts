@@ -45,33 +45,82 @@ function readNumber(name: string, fallback: number): number {
 }
 
 export type RuntimeMode = "MOCK" | "LIVE";
+export type DataBackend = "file" | "firestore";
+export type AuthBackend = "mock" | "firebase";
+
+const EMULATOR_AUTH_HOST = "127.0.0.1:9099";
+const EMULATOR_FIRESTORE_HOST = "127.0.0.1:8080";
+const EMULATOR_PROJECT = "demo-futari-log";
 
 export function getEnv() {
-  const firebaseConfigured = Boolean(
-    read("NEXT_PUBLIC_FIREBASE_API_KEY") &&
-      read("NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN") &&
-      read("NEXT_PUBLIC_FIREBASE_PROJECT_ID") &&
-      read("NEXT_PUBLIC_FIREBASE_APP_ID"),
+  const useEmulator = readBool("USE_FIREBASE_EMULATOR", false);
+  const authEmulatorHost =
+    read("FIREBASE_AUTH_EMULATOR_HOST") ?? (useEmulator ? EMULATOR_AUTH_HOST : null);
+  const firestoreEmulatorHost =
+    read("FIRESTORE_EMULATOR_HOST") ?? (useEmulator ? EMULATOR_FIRESTORE_HOST : null);
+  const emulator = Boolean(authEmulatorHost && firestoreEmulatorHost);
+
+  if (emulator) {
+    process.env.FIREBASE_AUTH_EMULATOR_HOST ??= authEmulatorHost!;
+    process.env.FIRESTORE_EMULATOR_HOST ??= firestoreEmulatorHost!;
+  }
+
+  const firebaseProjectId =
+    read("FIREBASE_PROJECT_ID") ??
+    read("NEXT_PUBLIC_FIREBASE_PROJECT_ID") ??
+    (emulator ? EMULATOR_PROJECT : null);
+
+  const firebaseApiKey =
+    read("NEXT_PUBLIC_FIREBASE_API_KEY") ?? (emulator ? "fake-api-key-for-emulator" : null);
+  const firebaseAuthDomain =
+    read("NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN") ?? (emulator ? "localhost" : null);
+  const firebaseAppId =
+    read("NEXT_PUBLIC_FIREBASE_APP_ID") ?? (emulator ? "1:0:web:emulator" : null);
+
+  const firebasePublicConfigured = Boolean(
+    firebaseApiKey && firebaseAuthDomain && firebaseProjectId && firebaseAppId,
   );
+  const firebaseConfigured = emulator || firebasePublicConfigured;
   const orcaConfigured = Boolean(read("ORCAROUTER_API_KEY"));
   const mapsConfigured = Boolean(read("GOOGLE_MAPS_API_KEY"));
   const requested = (read("APP_RUNTIME") ?? "MOCK").toUpperCase();
-  const liveReady = firebaseConfigured && orcaConfigured && mapsConfigured;
-  const runtime: RuntimeMode =
-    requested === "LIVE" && liveReady ? "LIVE" : "MOCK";
+  const liveReady = firebaseConfigured && orcaConfigured && mapsConfigured && !emulator;
+  const runtime: RuntimeMode = requested === "LIVE" && liveReady ? "LIVE" : "MOCK";
+
+  const explicitBackend = read("DATA_BACKEND");
+  const dataBackend: DataBackend =
+    explicitBackend === "file"
+      ? "file"
+      : explicitBackend === "firestore"
+        ? "firestore"
+        : emulator || firebasePublicConfigured
+          ? "firestore"
+          : "file";
+
+  const authBackend: AuthBackend = emulator || firebasePublicConfigured ? "firebase" : "mock";
+  const onCloudRun = Boolean(read("K_SERVICE"));
 
   return {
     runtime,
     requestedRuntime: requested === "LIVE" ? ("LIVE" as const) : ("MOCK" as const),
     firebaseConfigured,
+    firebasePublicConfigured,
     orcaConfigured,
     mapsConfigured,
+    emulator,
+    authEmulatorHost,
+    firestoreEmulatorHost,
+    dataBackend,
+    authBackend,
     orcaBaseUrl: read("ORCAROUTER_BASE_URL") ?? "https://api.orcarouter.ai/v1",
     orcaApiKey: read("ORCAROUTER_API_KEY"),
     orcaMundaneModel: read("ORCAROUTER_MUNDANE_MODEL") ?? "orcarouter/mundane",
     orcaHardModel: read("ORCAROUTER_HARD_MODEL") ?? "orcarouter/hard",
     googleMapsApiKey: read("GOOGLE_MAPS_API_KEY"),
-    firebaseProjectId: read("FIREBASE_PROJECT_ID") ?? read("NEXT_PUBLIC_FIREBASE_PROJECT_ID"),
+    firebaseProjectId,
+    firebaseApiKey,
+    firebaseAuthDomain,
+    firebaseAppId,
     enableDemoControls: readBool("ENABLE_DEMO_CONTROLS", false),
     demoAllowedUids: (read("DEMO_ALLOWED_UIDS") ?? "")
       .split(",")
@@ -83,7 +132,10 @@ export function getEnv() {
     demoDate: read("DEMO_DATE") ?? "2026-09-19",
     workerConcurrency: Math.max(1, readNumber("WORKER_CONCURRENCY", 1)),
     mockAuthSecret: read("MOCK_AUTH_SECRET") ?? "dev-only-change-me",
+    cookieSecure: readBool("COOKIE_SECURE", onCloudRun),
+    port: readNumber("PORT", 3000),
     timeZone: TIME_ZONE,
+    onCloudRun,
   };
 }
 

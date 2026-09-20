@@ -80,7 +80,8 @@ async function onePass(): Promise<Report> {
 
   const auth = await fetch(`${BASE}/api/auth/anonymous`, { method: "POST" });
   const setCookie = auth.headers.get("set-cookie") ?? "";
-  const token = setCookie.match(/futari_token=([^;]+)/)?.[1];
+  const tokenRaw = setCookie.match(/futari_token=([^;]+)/)?.[1];
+  const token = tokenRaw ? decodeURIComponent(tokenRaw) : undefined;
   if (!token) throw new Error("no token");
   const me = await api("/api/me", { token });
   const couple = await api("/api/couples", {

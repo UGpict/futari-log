@@ -37,6 +37,9 @@ export function snapshotOf(couple: CoupleBundle, bundle: SessionBundle) {
   const approvals = Object.values(couple.approvals).filter((a) => a.sessionId === bundle.session.id);
   return {
     runtime: env.runtime,
+    emulator: env.emulator,
+    dataBackend: env.dataBackend,
+    authBackend: env.authBackend,
     blockers: publicBlockers(),
     couple: couple.couple,
     session: bundle.session,

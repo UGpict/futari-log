@@ -43,12 +43,12 @@ describe("privacy", () => {
 });
 
 describe("auth token", () => {
-  it("rejects tampered token", () => {
+  it("rejects tampered token", async () => {
     process.env.MOCK_AUTH_SECRET = "test-secret";
     const token = signToken("anon_a");
-    assert.equal(verifyToken(token), "anon_a");
-    assert.equal(verifyToken(token.replace(/[a-f0-9]{4}$/, "ffff")), null);
-    assert.equal(verifyToken("other.uid"), null);
+    assert.equal(await verifyToken(token), "anon_a");
+    assert.equal(await verifyToken(token.replace(/[a-f0-9]{4}$/, "ffff")), null);
+    assert.equal(await verifyToken("other.uid"), null);
   });
 });
 

@@ -19,6 +19,9 @@ export async function ensureAuth(): Promise<{
   uid: string;
   coupleId: string | null;
   runtime: string;
+  emulator?: boolean;
+  dataBackend?: string;
+  authBackend?: string;
   demoAreaName: string;
   demoDate: string;
   demoLat: number;

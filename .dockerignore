@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+.data
+.env
+.env.*
+!.env.example
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+pubsub-debug.log
+.firebase
+docs/reports/*.json
+coverage
+*.md
+!README.md

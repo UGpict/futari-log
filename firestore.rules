@@ -1,4 +1,5 @@
 rules_version = '2';
+// クライアントからの write は拒否。サーバー（Admin SDK / Cloud Run）だけが書き込む。
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() {

@@ -11,6 +11,9 @@ import { formatTokyoHm } from "@/lib/time";
 
 type Snapshot = {
   runtime: string;
+  emulator?: boolean;
+  dataBackend?: string;
+  authBackend?: string;
   couple: { id: string };
   session: {
     id: string;
@@ -140,6 +143,9 @@ export default function SessionPage() {
       <div className="mt-4">
         <ModeBanner
           runtime={data.runtime}
+          emulator={data.emulator}
+          dataBackend={data.dataBackend}
+          authBackend={data.authBackend}
           mode={latestRun?.mode}
           overlays={data.overlays}
         />

@@ -40,8 +40,13 @@ yarn-error.log*
 next-env.d.ts
 test-results/
 
-# local mock store and secrets
+# local mock store, emulator logs, and secrets
 .data/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+pubsub-debug.log
+.firebase/
 docs/reports/*.json
 !docs/reports/.gitkeep
 !docs/reports/demo-live.json

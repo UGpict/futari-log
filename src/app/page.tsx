@@ -10,6 +10,9 @@ type Me = {
   uid: string;
   coupleId: string | null;
   runtime: string;
+  emulator?: boolean;
+  dataBackend?: string;
+  authBackend?: string;
   demoAreaName: string;
   demoDate: string;
   demoLat: number;
@@ -154,7 +157,14 @@ export default function HomePage() {
           相手はこのアプリを使いません。
         </p>
       </header>
-      {me ? <ModeBanner runtime={me.runtime} /> : null}
+      {me ? (
+        <ModeBanner
+          runtime={me.runtime}
+          emulator={me.emulator}
+          dataBackend={me.dataBackend}
+          authBackend={me.authBackend}
+        />
+      ) : null}
       {me?.blockers.length ? (
         <ul className="rounded-2xl border border-line bg-card p-4 text-sm text-ink-soft">
           {me.blockers.map((b) => (

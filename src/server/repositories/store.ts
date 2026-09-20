@@ -1,5 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync, existsSync, unlinkSync, openSync, closeSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { getEnv } from "@/config/env";
+import { adminDb } from "@/server/firebase/admin";
 import type {
   Approval,
   AppEvent,
@@ -109,25 +111,58 @@ function writeDb(db: Db) {
   renameSync(tmp, STORE_PATH);
 }
 
-export async function withStore<T>(fn: (db: Db) => T | Promise<T>): Promise<T> {
+const ROOT_DOC = "sys/root";
+
+function parsePayload(raw: unknown): Db {
+  if (typeof raw !== "string" || !raw) return emptyDb();
+  try {
+    const parsed = JSON.parse(raw) as Db;
+    return {
+      couples: parsed.couples ?? {},
+      idempotency: parsed.idempotency ?? {},
+      tokens: parsed.tokens ?? {},
+    };
+  } catch {
+    return emptyDb();
+  }
+}
+
+async function withFirestore<T>(fn: (db: Db) => T | Promise<T>, persist: boolean): Promise<T> {
+  const ref = adminDb().doc(ROOT_DOC);
+  return adminDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const db = parsePayload(snap.data()?.payload);
+    const result = await fn(db);
+    if (persist) {
+      tx.set(ref, {
+        payload: JSON.stringify(db),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    return result;
+  });
+}
+
+async function withFile<T>(fn: (db: Db) => T | Promise<T>, persist: boolean): Promise<T> {
   const fd = await acquireLock();
   try {
     const db = readDb();
     const result = await fn(db);
-    writeDb(db);
+    if (persist) writeDb(db);
     return result;
   } finally {
     releaseLock(fd);
   }
 }
 
+export async function withStore<T>(fn: (db: Db) => T | Promise<T>): Promise<T> {
+  if (getEnv().dataBackend === "firestore") return withFirestore(fn, true);
+  return withFile(fn, true);
+}
+
 export async function readStore<T>(fn: (db: Db) => T | Promise<T>): Promise<T> {
-  const fd = await acquireLock();
-  try {
-    return await fn(readDb());
-  } finally {
-    releaseLock(fd);
-  }
+  if (getEnv().dataBackend === "firestore") return withFirestore(fn, false);
+  return withFile(fn, false);
 }
 
 export function findSession(

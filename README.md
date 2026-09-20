@@ -2,30 +2,32 @@
 
 二人の希望を調整し、予定が崩れたら組み直し、確かめた記憶を次のデートに活かす Web アプリです。計画する側の1人だけが使います。相手用アカウントはありません。
 
-このリポジトリの既定実行は **MOCK** です。Firebase / OrcaRouter / Google Maps のキーが無い状態でも、名古屋駅周辺の実在スポット・カタログと決定的プランナーで画面と API を通せます。LIVE 合格判定にはモックを使いません。
+このリポジトリの既定実行は **MOCK + Auth/Firestore Emulator** です。Google ログインは不要です。OrcaRouter / Google Maps のキーが無い状態でも、名古屋駅周辺の実在スポット・カタログと決定的プランナーで画面と API を通せます。LIVE 合格判定にはモックを使いません。
 
 ## 起動
 
 ```bash
-cp .env.example .env.local   # 秘密は入れない。ENABLE_DEMO_CONTROLS=true を確認
+cp .env.example .env.local   # 秘密は入れない。USE_FIREBASE_EMULATOR=true を確認
 npm install
-npm run dev                  # Next.js と worker を同時起動
+npm run dev                  # Auth/Firestore Emulator + Next.js + worker
 ```
 
 http://localhost:3000
 
 - Web: `next dev`
 - worker: PENDING の run を lease して処理。サーバーレスの応答終了後に作業を続けません。
+- 保存先: Firestore Emulator（`DATA_BACKEND=file` で以前の JSON ファイルにも戻せます）
 
 ```bash
 npm run typecheck
 npm run lint
-npm test
+npm test                 # ファイルストア前提の単体テスト
+npm run test:emulator    # 匿名 Auth と Firestore Emulator
 npm run build
-npm run doctor          # PASS / FAIL / BLOCKED。秘密は出さない
-npm run demo:live       # モック通し 1 回
-npm run demo:five       # 同一版で 5 回。失敗で停止
-npm run demo:reset      # 自分の isDemo データだけ。REPLAY は既定で残す
+npm run doctor           # PASS / FAIL / BLOCKED。秘密は出さない
+npm run demo:live        # モック通し 1 回（Emulator 起動中に）
+npm run demo:five        # 同一版で 5 回。失敗で停止
+npm run demo:reset       # 自分の isDemo データだけ。REPLAY は既定で残す
 npm run replay:export -- <runId>
 ```
 
@@ -35,15 +37,17 @@ npm run replay:export -- <runId>
 
 | 変数 | 用途 |
 |---|---|
-| `APP_RUNTIME` | `MOCK`（既定）または `LIVE`（キーが揃ったときだけ有効） |
+| `USE_FIREBASE_EMULATOR` | `true` で Auth / Firestore Emulator。Cloud Agent の既定 |
+| `DATA_BACKEND` | `firestore`（既定、Emulator または本番） / `file` |
+| `APP_RUNTIME` | `MOCK`（既定）または `LIVE`（実キーが揃い Emulator ではないときだけ有効） |
 | `ORCAROUTER_*` | [OrcaRouter](https://docs.orcarouter.ai/getting-started/quickstart) 実推論 |
 | `GOOGLE_MAPS_API_KEY` | Places New / Routes |
-| Firebase `NEXT_PUBLIC_*` / ADC | 匿名 Auth と Firestore。未設定時はモックトークン |
+| Firebase `NEXT_PUBLIC_*` | 本番の匿名 Auth。Emulator 時はプレースホルダでよい |
 | `ENABLE_DEMO_CONTROLS` | シナリオ注入。LIVE では `DEMO_ALLOWED_UIDS` に限定 |
 | `DEMO_AREA_NAME` / `DEMO_LAT` / `DEMO_LNG` / `DEMO_DATE` | 開発デモの集合エリア |
 | `WORKER_CONCURRENCY` | 既定 1 |
 
-Firebase 匿名 Auth の許可ドメインは、プロジェクトを立てたあと Firebase Console に追加し、ここに記録してください。未設定です。
+Firebase 匿名 Auth の許可ドメインは、手元 PC でプロジェクトを立てたあと Firebase Console に追加し、ここに記録してください。未設定です。手順は `docs/cloud-run.md`。
 
 ## 会場・日付
 
@@ -61,15 +65,19 @@ Firebase 匿名 Auth の許可ドメインは、プロジェクトを立てた�
 
 右下のコストは「概算¥xx・高性能n回／安価m回」。REPLAY は「収録時のコスト」で今回の課金に足しません。
 
-## デプロイ
+## デプロイ（Cloud Run）
 
-Web と常駐 worker を同じように起動できる環境を選んでください。公開先は未指定なので、このリポジトリからは公開しません。
+公開そのものは手元 PC で行います（Google ログインが必要なため）。リポジトリ側の準備は完了しています。
+
+- `Dockerfile` … Next.js と worker を `PORT` で起動
+- `cloudbuild.yaml` … Artifact Registry へ build/push し Cloud Run へ deploy
+- 手順と IAM / Secret / 許可ドメイン: **`docs/cloud-run.md`**
 
 ```bash
 npm run build
-npm run start
+npm run start            # ローカル本番相当。PORT 未指定なら 3000
 ```
 
 ## 未確認事項
 
-`docs/blockers.md` と `docs/provider-verification.md` を見てください。キー・会場・Named Router の実名が揃うまで LIVE デモは BLOCKED です。
+`docs/blockers.md` と `docs/provider-verification.md` を見てください。OrcaRouter キー・会場・Named Router の実名が揃うまで LIVE デモは BLOCKED です。Auth / Firestore は Emulator で通しています。

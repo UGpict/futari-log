@@ -3,7 +3,7 @@ import { getEnv, publicBlockers } from "@/config/env";
 import { ownerCoupleId } from "@/server/api/actions";
 
 export async function GET(request: Request) {
-  const auth = requireUid(request);
+  const auth = await requireUid(request);
   if ("error" in auth) return auth.error;
   const env = getEnv();
   const coupleId = await ownerCoupleId(auth.uid);
@@ -11,6 +11,9 @@ export async function GET(request: Request) {
     uid: auth.uid,
     coupleId,
     runtime: env.runtime,
+    authBackend: env.authBackend,
+    dataBackend: env.dataBackend,
+    emulator: env.emulator,
     demoControls: env.enableDemoControls,
     demoAreaName: env.demoAreaName,
     demoDate: env.demoDate,
