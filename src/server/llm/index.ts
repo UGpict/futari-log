@@ -78,9 +78,13 @@ export async function callLLM<T>(input: {
     };
   }
 
+  const messages = input.messages.some((m) => /json/i.test(m.content))
+    ? input.messages
+    : [{ role: "system" as const, content: "Respond with a JSON object." }, ...input.messages];
+
   const body = {
     model: requestedModel,
-    messages: input.messages,
+    messages,
     temperature: MODEL_PARAMS.temperature,
     max_tokens: MODEL_PARAMS.maxTokens,
     response_format: {
