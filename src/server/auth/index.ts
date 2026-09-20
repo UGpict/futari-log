@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { getEnv } from "@/config/env";
 import { hmacSha256, newId } from "@/lib/ids";
 import { realNowIso } from "@/lib/time";
@@ -34,16 +37,28 @@ export function verifyMockToken(token: string | null | undefined): string | null
   return uid;
 }
 
-async function signUpAnonymous(): Promise<{ uid: string; idToken: string }> {
+function identityToolkitUrl(path: string): string {
   const env = getEnv();
   const apiKey = env.firebaseApiKey ?? "fake-api-key-for-emulator";
-  const url = env.authEmulatorHost
-    ? `http://${env.authEmulatorHost}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=${encodeURIComponent(apiKey)}`
-    : `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${encodeURIComponent(apiKey)}`;
-  const res = await fetch(url, {
+  const suffix = `identitytoolkit.googleapis.com/v1/${path}?key=${encodeURIComponent(apiKey)}`;
+  return env.authEmulatorHost ? `http://${env.authEmulatorHost}/${suffix}` : `https://${suffix}`;
+}
+
+function hasAdminCredentials(): boolean {
+  const env = getEnv();
+  if (env.emulator || env.onCloudRun) return true;
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) return true;
+  const path = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (path && existsSync(path)) return true;
+  return existsSync(join(homedir(), ".config/gcloud/application_default_credentials.json"));
+}
+
+async function signUpAnonymous(): Promise<{ uid: string; idToken: string }> {
+  const res = await fetch(identityToolkitUrl("accounts:signUp"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ returnSecureToken: true }),
+    signal: AbortSignal.timeout(15000),
   });
   const body = (await res.json().catch(() => ({}))) as {
     localId?: string;
@@ -56,11 +71,33 @@ async function signUpAnonymous(): Promise<{ uid: string; idToken: string }> {
   return { uid: body.localId, idToken: body.idToken };
 }
 
+async function lookupUidByIdToken(idToken: string): Promise<string | null> {
+  try {
+    const res = await fetch(identityToolkitUrl("accounts:lookup"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const body = (await res.json().catch(() => ({}))) as {
+      users?: { localId?: string }[];
+    };
+    return body.users?.[0]?.localId ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function verifyToken(token: string | null | undefined): Promise<string | null> {
   if (!token) return null;
   if (token.startsWith("mock.")) return verifyMockToken(token);
   const env = getEnv();
   if (env.authBackend !== "firebase") return null;
+
+  const lookedUp = await lookupUidByIdToken(token);
+  if (lookedUp) return lookedUp;
+  if (!hasAdminCredentials()) return null;
+
   try {
     const decoded = await adminAuth().verifySessionCookie(token, true);
     return decoded.uid;
@@ -78,6 +115,7 @@ export async function issueAnonymous(): Promise<{ uid: string; token: string }> 
   const env = getEnv();
   if (env.authBackend === "firebase") {
     const { uid, idToken } = await signUpAnonymous();
+    if (!hasAdminCredentials()) return { uid, token: idToken };
     try {
       const token = await adminAuth().createSessionCookie(idToken, { expiresIn: SESSION_MS });
       return { uid, token };
