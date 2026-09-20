@@ -129,18 +129,33 @@ function parsePayload(raw: unknown): Db {
 
 async function withFirestore<T>(fn: (db: Db) => T | Promise<T>, persist: boolean): Promise<T> {
   const ref = adminDb().doc(ROOT_DOC);
-  return adminDb().runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    const db = parsePayload(snap.data()?.payload);
-    const result = await fn(db);
-    if (persist) {
-      tx.set(ref, {
-        payload: JSON.stringify(db),
-        updatedAt: new Date().toISOString(),
+  if (!persist) {
+    const snap = await ref.get();
+    return fn(parsePayload(snap.data()?.payload));
+  }
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    try {
+      return await adminDb().runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        const db = parsePayload(snap.data()?.payload);
+        const before = JSON.stringify(db);
+        const result = await fn(db);
+        const after = JSON.stringify(db);
+        if (after !== before) {
+          tx.set(ref, { payload: after, updatedAt: new Date().toISOString() });
+        }
+        return result;
       });
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes("ABORTED") && !message.includes("lock timeout")) throw error;
+      await sleep(40 * (attempt + 1));
     }
-    return result;
-  });
+  }
+  throw lastError;
 }
 
 async function withFile<T>(fn: (db: Db) => T | Promise<T>, persist: boolean): Promise<T> {
@@ -155,8 +170,19 @@ async function withFile<T>(fn: (db: Db) => T | Promise<T>, persist: boolean): Pr
   }
 }
 
+let firestoreWriteChain: Promise<unknown> = Promise.resolve();
+
+function enqueueFirestoreWrite<T>(work: () => Promise<T>): Promise<T> {
+  const done = firestoreWriteChain.then(work, work);
+  firestoreWriteChain = done.then(
+    () => undefined,
+    () => undefined,
+  );
+  return done;
+}
+
 export async function withStore<T>(fn: (db: Db) => T | Promise<T>): Promise<T> {
-  if (getEnv().dataBackend === "firestore") return withFirestore(fn, true);
+  if (getEnv().dataBackend === "firestore") return enqueueFirestoreWrite(() => withFirestore(fn, true));
   return withFile(fn, true);
 }
 

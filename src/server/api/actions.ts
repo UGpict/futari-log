@@ -18,6 +18,7 @@ import {
   findRun,
   findSession,
   withStore,
+  readStore,
   type CoupleBundle,
   type SessionBundle,
 } from "@/server/repositories/store";
@@ -237,7 +238,7 @@ export async function startRun(input: {
 }
 
 export async function getSessionSnapshot(uid: string, sessionId: string) {
-  return withStore((db) => {
+  return readStore((db) => {
     const found = findSession(db, sessionId);
     if (!found) return { ok: false as const, status: 404, error: "not found" };
     if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
@@ -246,7 +247,7 @@ export async function getSessionSnapshot(uid: string, sessionId: string) {
 }
 
 export async function getRunView(uid: string, runId: string) {
-  return withStore((db) => {
+  return readStore((db) => {
     const found = findRun(db, runId);
     if (!found) return { ok: false as const, status: 404, error: "not found" };
     if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
@@ -573,7 +574,7 @@ export async function demoReset(uid: string, keepReplays = true) {
 }
 
 export async function listMemory(uid: string, coupleId: string) {
-  return withStore((db) => {
+  return readStore((db) => {
     const couple = db.couples[coupleId];
     if (!couple) return { ok: false as const, status: 404, error: "not found" };
     if (couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
@@ -586,7 +587,7 @@ export async function listMemory(uid: string, coupleId: string) {
 }
 
 export async function ownerCoupleId(uid: string): Promise<string | null> {
-  return withStore((db) => {
+  return readStore((db) => {
     const hit = Object.values(db.couples).find((c) => c.couple.ownerUid === uid);
     return hit?.couple.id ?? null;
   });

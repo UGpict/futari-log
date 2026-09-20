@@ -114,14 +114,13 @@ export async function executeRun(runId: string): Promise<void> {
     overlays,
     cache,
     httpAttempts: 0,
-    onHttp: (info) => {
-      void appendEvent(
+    onHttp: (info) =>
+      appendEvent(
         runId,
         info.cacheHit ? "CACHE_HIT" : "HTTP_ATTEMPT",
         info.cacheHit ? `${info.provider} キャッシュ` : `${info.provider} HTTP #${info.attempt}`,
         { payload: info },
-      );
-    },
+      ),
   };
 
   await appendEvent(runId, "RUN_STARTED", `${run.kind} を開始`);

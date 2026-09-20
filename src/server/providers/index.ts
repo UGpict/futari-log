@@ -22,7 +22,7 @@ export type ProviderCtx = {
   overlays: ScenarioOverlay[];
   cache: Map<string, { at: string; value: unknown; stale: boolean }>;
   httpAttempts: number;
-  onHttp: (info: { provider: string; cacheHit: boolean; attempt: number }) => void;
+  onHttp: (info: { provider: string; cacheHit: boolean; attempt: number }) => void | Promise<void>;
 };
 
 function evidence(partial: Omit<Evidence, "id"> & { id?: string }): Evidence {
@@ -62,7 +62,7 @@ async function counted<T>(
   fn: () => Promise<T>,
 ): Promise<T> {
   ctx.httpAttempts += 1;
-  ctx.onHttp({ provider, cacheHit: false, attempt: ctx.httpAttempts });
+  await ctx.onHttp({ provider, cacheHit: false, attempt: ctx.httpAttempts });
   return fn();
 }
 
@@ -98,7 +98,7 @@ export async function searchSpots(
   const key = `search:${args.area.lat}:${args.area.lng}:${args.category}:${args.radiusMeters}`;
   const cached = cacheGet<{ spots: Spot[]; evidence: Evidence[] }>(ctx, key, CACHE_TTL_MS.spotBasics);
   if (cached) {
-    ctx.onHttp({ provider: env.runtime === "LIVE" ? "places" : "mock-places", cacheHit: true, attempt: ctx.httpAttempts });
+    await ctx.onHttp({ provider: env.runtime === "LIVE" ? "places" : "mock-places", cacheHit: true, attempt: ctx.httpAttempts });
     return cached;
   }
   if (env.runtime === "LIVE" && env.googleMapsApiKey) {
@@ -133,7 +133,7 @@ export async function getSpotDetails(
   const key = `details:${args.spotId}`;
   const cached = cacheGet<{ spot: Spot | null; evidence: Evidence[] }>(ctx, key, CACHE_TTL_MS.spotBasics);
   if (cached) {
-    ctx.onHttp({ provider: "places", cacheHit: true, attempt: ctx.httpAttempts });
+    await ctx.onHttp({ provider: "places", cacheHit: true, attempt: ctx.httpAttempts });
     return cached;
   }
   if (env.runtime === "LIVE" && env.googleMapsApiKey && !args.spotId.startsWith("mock:")) {
@@ -315,7 +315,7 @@ export async function estimateTravel(
     }
     cacheSet(ctx, key, base);
   } else {
-    ctx.onHttp({ provider: "routes", cacheHit: true, attempt: ctx.httpAttempts });
+    await ctx.onHttp({ provider: "routes", cacheHit: true, attempt: ctx.httpAttempts });
   }
 
   if (delayOverlay) {
@@ -344,7 +344,7 @@ export async function checkOpen(
   const key = `open:${args.spotId}:${args.startAt}:${args.endAt}`;
   const cached = cacheGet<OpeningAssessment>(ctx, key, CACHE_TTL_MS.opening);
   if (cached) {
-    ctx.onHttp({ provider: "places", cacheHit: true, attempt: ctx.httpAttempts });
+    await ctx.onHttp({ provider: "places", cacheHit: true, attempt: ctx.httpAttempts });
     return cached;
   }
   const full = ctx.overlays.find(

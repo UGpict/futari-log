@@ -1,21 +1,21 @@
 {
-  "at": "2026-09-20T01:41:09.827Z",
+  "at": "2026-09-20T02:34:38.590Z",
   "reports": [
     {
       "ok": true,
-      "git": "a3fa4cb",
+      "git": "3c88de0",
       "runIds": [
-        "run_e8942405129eeaf3",
-        "run_8b34889d653940cf",
-        "run_f3b27da7242f5d51",
-        "run_de662462ac7715fb",
-        "run_2983adb070a3bcee"
+        "run_01fde29078ee94ab",
+        "run_e63f68efe570fe2e",
+        "run_fde6d8015c22e5e2",
+        "run_bf236c5db22f7cb2",
+        "run_d73cfb43579891b1"
       ],
       "durationsMs": [
-        984,
-        330,
-        329,
-        652
+        1149,
+        652,
+        684,
+        669
       ],
       "costs": [
         {

@@ -7,11 +7,17 @@ const inflight = new Set<string>();
 async function loop() {
   const concurrency = 1;
   if (inflight.size >= concurrency) return;
-  const runId = await claimPendingRun();
+  let runId: string | null = null;
+  try {
+    runId = await claimPendingRun();
+  } catch (error) {
+    console.error("worker claim failed", error);
+    return;
+  }
   if (!runId) return;
   inflight.add(runId);
   const beat = setInterval(() => {
-    void heartbeat(runId);
+    void heartbeat(runId).catch((error) => console.error("worker heartbeat failed", runId, error));
   }, WORKER.heartbeatMs);
   try {
     await executeRun(runId);
@@ -25,7 +31,7 @@ async function loop() {
 
 export function startWorker() {
   setInterval(() => {
-    void loop();
+    void loop().catch((error) => console.error("worker loop failed", error));
   }, WORKER.pollMs);
 }
 
