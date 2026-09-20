@@ -178,9 +178,9 @@ export function estimateFromTable(
 }
 
 export const llmActionSchema = z.object({
-  think: z.string().max(200).optional(),
-  selectedSpotIds: z.array(z.string()),
-  rejected: z.array(z.object({ spotId: z.string(), reason: z.string() })),
-  assumptions: z.array(z.string()),
+  think: z.string().max(400).optional(),
+  selectedSpotIds: z.array(z.string()).default([]),
+  rejected: z.array(z.object({ spotId: z.string(), reason: z.string() })).default([]),
+  assumptions: z.array(z.string()).default([]),
 });
 export type LlmAction = z.infer<typeof llmActionSchema>;
