@@ -161,6 +161,14 @@ describe("validatePlan", () => {
     const result = validatePlan(plan, { spots, input });
     assert.equal(result.state, "FAIL");
   });
+
+  it("MUST_UNMET stays ERROR when no type-backed preference match is recorded", () => {
+    const plan = basePlan();
+    plan.items[0].matchesPreferenceIds = [];
+    const result = validatePlan(plan, { spots, input });
+    assert.equal(result.state, "FAIL");
+    assert.ok(result.issues.some((issue) => issue.code === "MUST_UNMET"));
+  });
 });
 
 describe("evaluateAutoApply", () => {

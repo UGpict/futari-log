@@ -1,3 +1,4 @@
+import { spotMatchesWish } from "@/contracts/spotKinds";
 import type {
   Plan,
   PlanItem,
@@ -282,36 +283,7 @@ function tokyoEnd(input: PlanningInput): string {
 }
 
 export function preferenceMatchIds(spot: Spot, prefs: Preference[]): string[] {
-  const ids: string[] = [];
-  for (const pref of prefs) {
-    const text = `${spot.name} ${spot.categories.join(" ")}`.toLowerCase();
-    const c = pref.content;
-    const walk = /散歩|歩く|散策|屋外/.test(c);
-    const exhibit = /展示|美術館|博物館|科学館/.test(c);
-    const sweet = /甘い|スイーツ|カフェ|デザート|ケーキ/.test(c);
-    if (walk && (spot.categories.includes("park") || spot.environment.value === "OUTDOOR")) {
-      ids.push(pref.id);
-    } else if (
-      exhibit &&
-      (spot.spotKind === "EVENT" ||
-        spot.categories.includes("exhibition") ||
-        spot.categories.includes("art_gallery") ||
-        spot.categories.includes("museum") ||
-        /美術館|科学館/.test(spot.name))
-    ) {
-      ids.push(pref.id);
-    } else if (
-      sweet &&
-      (spot.categories.includes("cafe") ||
-        spot.categories.includes("bakery") ||
-        /珈琲|カフェ|スイーツ/.test(spot.name))
-    ) {
-      ids.push(pref.id);
-    } else if (text.includes(c.toLowerCase())) {
-      ids.push(pref.id);
-    }
-  }
-  return ids;
+  return prefs.filter((pref) => spotMatchesWish(spot, pref.content)).map((pref) => pref.id);
 }
 
 export function doneItemsPreserved(prev: PlanItem[], next: PlanItem[]): boolean {

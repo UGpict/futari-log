@@ -9,6 +9,7 @@ import type {
   Spot,
   TravelLeg,
 } from "@/domain/schemas";
+import { explainWishMatches } from "@/contracts/spotKinds";
 import { preferenceMatchIds, validatePlan } from "@/domain/plan/validatePlan";
 import { newId } from "@/lib/ids";
 import { addMinutes, minutesBetween, tokyoDateTime } from "@/lib/time";
@@ -399,10 +400,11 @@ function uniqueInfluences(list: Plan["memoryInfluences"]): Plan["memoryInfluence
 }
 
 function reasonFor(spot: Spot, input: PlanningInput): string {
-  const matches = preferenceMatchIds(spot, input.preferences);
-  if (matches.length) {
-    const texts = input.preferences.filter((p) => matches.includes(p.id)).map((p) => p.content);
-    return `希望「${texts.join(" / ")}」に合う実在スポット`;
-  }
+  const notes = input.preferences.flatMap((pref) =>
+    explainWishMatches(spot, pref.content)
+      .filter((match) => match.confidence === "type")
+      .map((match) => match.note),
+  );
+  if (notes.length) return notes.join(" / ");
   return "動線と時間の都合で採用";
 }

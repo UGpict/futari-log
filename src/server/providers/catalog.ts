@@ -1,3 +1,4 @@
+import { normalizePlaceType, searchTypesForWishText } from "@/contracts/spotKinds";
 import type { Spot, Evidence } from "@/domain/schemas";
 import { realNowIso } from "@/lib/time";
 
@@ -284,39 +285,18 @@ export function searchCatalog(
   category: string,
   area?: { lat: number; lng: number },
   radiusMeters?: number,
+  includedTypes?: string[],
 ): CatalogSpot[] {
-  const key = category.toLowerCase();
+  const wanted = (includedTypes?.length ? includedTypes : searchTypesForWishText(category)).map(normalizePlaceType).filter(Boolean);
   return MOCK_CATALOG.filter((s) => {
     if (area && radiusMeters != null && haversineMeters(s, area) > radiusMeters) return false;
-    const blob = `${s.name} ${s.categories.join(" ")} ${s.types.join(" ")}`.toLowerCase();
-    if (key.includes("walk") || key.includes("park") || key.includes("散歩")) {
-      return s.categories.includes("park") || s.environment.value === "OUTDOOR";
+    const types = [...s.categories, ...s.types].map(normalizePlaceType);
+    if (wanted.length) {
+      const set = new Set(types);
+      return wanted.some((type) => set.has(type));
     }
-    if (key.includes("museum") || key.includes("art") || key.includes("展示") || key.includes("gallery")) {
-      return s.categories.includes("museum") || s.categories.includes("art_gallery");
-    }
-    if (key.includes("cafe") || key.includes("カフェ") || key.includes("sweet") || key.includes("甘い") || key.includes("甘味") || key.includes("bakery") || key.includes("菓子")) {
-      return s.categories.includes("cafe") || s.categories.includes("bakery");
-    }
-    if (key.includes("書店") || key.includes("book")) {
-      return s.categories.includes("bookstore") || s.types.includes("bookstore");
-    }
-    if (key.includes("買い物") || key.includes("mall")) {
-      return s.categories.includes("shopping_mall") || s.types.includes("shopping_mall");
-    }
-    if (key.includes("食事") || key.includes("レストラン") || key.includes("restaurant")) {
-      return s.categories.includes("restaurant") || s.types.includes("restaurant") || s.categories.includes("cafe");
-    }
-    if (key.includes("温泉") || key.includes("spa")) {
-      return s.types.includes("spa") || blob.includes("温泉");
-    }
-    if (key.includes("水族館") || key.includes("aquarium")) {
-      return s.types.includes("aquarium") || blob.includes("水族館");
-    }
-    if (key.includes("映画") || key.includes("movie")) {
-      return s.types.includes("movie_theater") || blob.includes("映画");
-    }
-    return blob.includes(key);
+    const blob = `${s.name} ${types.join(" ")}`.toLowerCase();
+    return blob.includes(category.toLowerCase());
   });
 }
 
