@@ -214,6 +214,12 @@ export const spotDtoSchema = z.object({
   restEase: z.object({ value: z.string().nullable(), evidenceIds: z.array(z.string()) }).optional(),
   standingBurden: z.object({ value: z.string().nullable(), evidenceIds: z.array(z.string()) }).optional(),
   officialUrl: z.string().nullable(),
+  imageUrl: z.string().nullable().optional(),
+  imageSourceUrl: z.string().nullable().optional(),
+  imageProvider: z.string().nullable().optional(),
+  imageAttributions: z
+    .array(z.object({ displayName: z.string(), uri: z.string().nullable() }))
+    .optional(),
 });
 export type SpotDto = z.infer<typeof spotDtoSchema>;
 
@@ -338,6 +344,13 @@ export const sessionSnapshotSchema = z.object({
   memoryCandidates: z.array(z.unknown()),
   scenarios: z.array(z.unknown()).optional(),
   overlays: z.array(z.string()),
+  grounding: z
+    .object({
+      queries: z.array(z.string()),
+      searchEntryPointHtml: z.string().nullable(),
+    })
+    .nullable()
+    .optional(),
 });
 export type SessionSnapshot = z.infer<typeof sessionSnapshotSchema>;
 

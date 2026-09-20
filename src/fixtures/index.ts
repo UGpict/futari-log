@@ -13,6 +13,7 @@ import {
 export { fixturesEnabled, snapshotFor, fixtureMe, fixtureSuccess, fixtureFailed, fixtureApproval, fixtureReplan };
 
 // Mutable only in the explicitly enabled UI fixture runtime.
+const inactiveMemoryIds = new Set<string>();
 const upcoming = structuredClone(fixtureSuccess);
 upcoming.session.id = "fx-upcoming";
 upcoming.session.input.dateTokyo = "2026-09-24";
@@ -111,6 +112,12 @@ export async function fixtureResponse<T>(path: string, init?: RequestInit): Prom
   if (/\/api\/runs\/[^/]+\/replay-export$/.test(url) && method === "POST") {
     return { replayId: "rep_fx" } as T;
   }
+  const deactivateMatch = url.match(/^\/api\/memory\/([^/]+)\/deactivate$/);
+  if (deactivateMatch && method === "POST") {
+    if (deactivateMatch[1] !== "mem_fx") throw new Error("メモが見つかりません");
+    inactiveMemoryIds.add(deactivateMatch[1]);
+    return { ok: true } as T;
+  }
   if (/\/api\/couples\/[^/]+\/memory$/.test(url) && method === "GET") {
     return {
       ok: true,
@@ -118,7 +125,7 @@ export async function fixtureResponse<T>(path: string, init?: RequestInit): Prom
         {
           id: "mem_fx",
           content: "長く立つのがしんどいと言っていた",
-          active: true,
+          active: !inactiveMemoryIds.has("mem_fx"),
           strength: "SOFT",
           sourceType: "PARTNER_STATEMENT_REPORTED",
           evidenceQuote: "長く立つのがしんどいと言っていた",

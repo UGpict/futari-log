@@ -70,5 +70,13 @@ export function useDateJournal(uid?: string) {
     window.dispatchEvent(new Event(updateEvent));
   }
 
-  return { records, save, today, isFixture };
+  function remove(date: string) {
+    const stored = getSnapshot();
+    const current = stored ? readRecords(stored) ?? records : records;
+    const next = current.filter((item) => item.date !== date);
+    window.localStorage.setItem(key, JSON.stringify(next));
+    window.dispatchEvent(new Event(updateEvent));
+  }
+
+  return { records, save, remove, today, isFixture };
 }

@@ -71,13 +71,13 @@ export const MODEL_PARAMS = {
 } as const;
 
 export const PLACES_FIELD_MASK_SEARCH =
-  "places.id,places.displayName,places.location,places.types,places.primaryType,places.googleMapsUri";
+  "places.id,places.displayName,places.location,places.types,places.primaryType,places.googleMapsUri,places.photos.name,places.photos.authorAttributions";
 
 export const PLACES_FIELD_MASK_TEXT =
   "places.id,places.displayName,places.location,places.formattedAddress,places.types";
 
 export const PLACES_FIELD_MASK_DETAILS =
-  "id,displayName,location,types,primaryType,websiteUri,googleMapsUri,regularOpeningHours,currentOpeningHours,priceLevel,priceRange,businessStatus";
+  "id,displayName,location,types,primaryType,websiteUri,googleMapsUri,regularOpeningHours,currentOpeningHours,priceLevel,priceRange,businessStatus,photos.name,photos.authorAttributions";
 
 /** 行程写真専用。プラン生成の Details マスクには載せない */
 export const PLACES_FIELD_MASK_PHOTOS = "id,googleMapsUri,photos";

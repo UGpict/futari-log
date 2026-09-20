@@ -107,6 +107,13 @@ export const spotSchema = z.object({
     })
     .nullable()
     .optional(),
+  imageUrl: z.string().nullable().optional(),
+  imageSourceUrl: z.string().nullable().optional(),
+  imageProvider: z.string().nullable().optional(),
+  imageAttributions: z
+    .array(z.object({ displayName: z.string(), uri: z.string().nullable() }))
+    .optional(),
+  photoName: z.string().nullable().optional(),
 });
 export type Spot = z.infer<typeof spotSchema>;
 

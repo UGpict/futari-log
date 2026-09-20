@@ -4,7 +4,7 @@ import { Button, IconButton } from "@/components/button";
 
 import { useEffect, useRef, useState, type FormEvent, type CSSProperties } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, ChevronLeft, ChevronRight, NotebookPen, CalendarHeart } from "lucide-react";
+import { ArrowRight, Check, ChevronLeft, ChevronRight, NotebookPen, CalendarHeart, MapPin } from "lucide-react";
 import { useCalendarPlans } from "@/client/hooks/use-calendar-plans";
 import { useMe } from "@/client/hooks/use-me";
 import { useDateJournal, type DateMemory } from "@/client/hooks/use-date-journal";
@@ -25,6 +25,17 @@ const ideas = [
   { mood: "happy" as const, title: "甘いものと、ゆっくり話す日", description: "カフェでひと息。ふたりのペースで。", wish: "カフェで甘いものを食べて、ゆっくり話したい" },
   { mood: "happy" as const, title: "いつもと違う道を、ふたりで", description: "公園さんぽと、小さな寄り道。", wish: "公園を散歩して、途中でカフェに寄りたい" },
   { mood: "relaxed" as const, title: "雨の日は、アートに会いに", description: "屋内で楽しむ、のんびりデート。", wish: "美術館や屋内の展示を、休憩を挟みながら楽しみたい" },
+];
+const homeSuggestion = {
+  title: "アートと夜カフェ",
+  area: "清澄白河",
+  wish: "清澄白河で美術館や展示を楽しんだあと、夜カフェでゆっくり話すデートにしたい",
+};
+const nearbyEvents = [
+  { id: "odd-exhibition", date: "2026-10-04", dateLabel: "10/4まで", area: "上野エリア", title: "ちょっと不思議なもの展", kicker: "会話が弾む、ユニークな企画展", theme: "exhibition", wish: "上野のちょっと不思議なもの展を見に行くデート", sponsored: false },
+  { id: "night-garden", date: "2026-09-23", dateLabel: "9/23–10/4", area: "清澄白河エリア", title: "夜の庭園ライトアップ", kicker: "秋の夜を、ゆっくり散歩", theme: "garden", wish: "清澄白河の夜の庭園ライトアップを組み込んだ、ゆっくり楽しめるデート", sponsored: false },
+  { id: "mystery-walk", date: "2026-09-27", dateLabel: "9/27まで", area: "下北沢・三軒茶屋", title: "ふたりで巡る、まち歩き謎解き", kicker: "寄り道しながら小さな謎を解こう", theme: "mystery", wish: "下北沢と三軒茶屋のまち歩き謎解きを中心にしたデート", sponsored: true },
+  { id: "ai-hack", date: "2026-09-23", dateLabel: "9/19–9/23", area: "東京都内・最終日", title: "AI HACK 2026", kicker: "賞金最大100万円、5日間のAIハッカソン", theme: "ai-hack", wish: "AI HACK 2026の最終日見学を組み込んだ、テクノロジーを楽しむデート", sponsored: false },
 ];
 
 function dateLabel(date: string) {
@@ -88,7 +99,7 @@ export function HomeScreen() {
   const { me } = useMe();
   const { plans, error: plansError } = useCalendarPlans(me?.coupleId);
   const [reflecting, setReflecting] = useState(false);
-  const { records, save, today, isFixture } = useDateJournal(me?.uid);
+  const { records, save, remove, today, isFixture } = useDateJournal(me?.uid);
   const [monthOverride, setMonthOverride] = useState<string | null>(null);
   const currentMonth = isFixture ? "2026-09" : today.slice(0, 7);
   const monthKey = monthOverride ?? currentMonth;
@@ -136,6 +147,15 @@ export function HomeScreen() {
   const showCreatePrompt = Boolean(selectedDate && today && selectedDate >= today && !selectedRecord && selectedPlans.length === 0);
   const createPromptRef = useRef<HTMLDivElement>(null);
   const createTriggerRef = useRef<HTMLButtonElement>(null);
+  const eventSectionRef = useRef<HTMLElement>(null);
+  const [eventsBehindCreateButton, setEventsBehindCreateButton] = useState(false);
+  useEffect(() => {
+    const section = eventSectionRef.current;
+    if (!section) return;
+    const observer = new IntersectionObserver(([entry]) => setEventsBehindCreateButton(entry.isIntersecting), { threshold: 0 });
+    observer.observe(section);
+    return () => observer.disconnect();
+  }, [isFixture]);
   useEffect(() => {
     if (!showCreatePrompt) return;
     function dismissOutside(event: PointerEvent) {
@@ -169,27 +189,45 @@ export function HomeScreen() {
             <div className={styles.brand}>
               <h1><HomeLogo className={styles.logo} /></h1>
             </div>
-            <IconButton  type="button" label="ふたりの記憶を開く" onClick={() => setPanel("memory")}><NotebookPen size={23} /></IconButton>
+            <div className={styles.headerActions}>
+              <DevelopmentLink onResetToday={() => { remove(today); setSelectedDate(null); setReflecting(false); setNotice("今日の記録を削除しました"); }} />
+              <IconButton type="button" label="ふたりの記憶を開く" onClick={() => setPanel("memory")}><NotebookPen size={23} /></IconButton>
+            </div>
           </div>
         </header>
 
-        <button
-          type="button"
-          className={styles.agentSuggestion}
-          onClick={() => openPlan(today, ideas[0].wish)}
-          aria-label={`AIからの提案：${ideas[0].title}。この提案でデートをつくる`}
-        >
-          <RiveMascot variant="suggestion" active={!panel && !selectedDate} />
-          <span className={styles.agentBubble}>
-            <span className={styles.suggestionCopy}><strong>次のデート、こんなのはどう？</strong><span>甘いものと、<br />ゆっくり話す日</span></span>
+        <section className={styles.agentSuggestion} aria-labelledby="ai-suggestion-title">
+          <h2 id="ai-suggestion-title" className={styles.suggestionHeading}>AIからの提案</h2>
+          <div className={styles.suggestionConversation}>
+            <span className={styles.suggestionMascot}><RiveMascot variant="suggestion" active={!panel && !selectedDate} /></span>
+            <div className={styles.suggestionSpeech}>
+              <p>アートのあとは、<br />カフェでひと息つかない？</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className={styles.suggestionCard}
+            onClick={() => openPlan(today, homeSuggestion.wish)}
+            aria-label={`${homeSuggestion.area}で、${homeSuggestion.title}。この案でプランをつくる`}
+            aria-haspopup="dialog"
+          >
             <span className={styles.suggestionPhoto} aria-hidden="true" />
-          </span>
-        </button>
+            <span className={styles.suggestionCopy}>
+              <span className={styles.suggestionArea}><MapPin size={12} aria-hidden="true" />{homeSuggestion.area}</span>
+              <strong>{homeSuggestion.title}</strong>
+              <span className={styles.suggestionRoute}>美術館・展示<ArrowRight size={12} aria-hidden="true" />夜カフェ</span>
+              <span className={styles.suggestionAction}>この案でプランをつくる<ArrowRight size={15} aria-hidden="true" /></span>
+            </span>
+          </button>
+        </section>
 
         <section className={styles.calendar} onKeyDown={(event) => { if (event.key === "Escape" && showCreatePrompt) setSelectedDate(null); }} aria-label={`${year}年${month}月のデートカレンダー`}>
           <div className={styles.calendarHeader}>
             <IconButton type="button" className={styles.monthButton} label="前の月" onClick={() => changeMonth(-1)}><ChevronLeft size={20} /></IconButton>
-            <h2 aria-live="polite"><span className={styles.yearLabel}>{year}年</span><span>{month}<small>月</small></span></h2>
+            <div className={styles.calendarMonth}>
+              <h2 aria-live="polite"><span className={styles.yearLabel}>{year}年</span><span>{month}<small>月</small></span></h2>
+              <button type="button" className={styles.returnToCurrentMonth} data-current={monthKey === currentMonth} disabled={monthKey === currentMonth} aria-label="今月にもどる" onClick={() => { setMonthOverride(null); setSelectedDate(null); setNotice("今月のカレンダーに戻りました"); }}>今月</button>
+            </div>
             <IconButton type="button" className={styles.monthButton} label="次の月" onClick={() => changeMonth(1)}><ChevronRight size={20} /></IconButton>
           </div>
           <div className={styles.weekdays} aria-hidden="true">{weekdays.map((day) => <span key={day}>{day}</span>)}</div>
@@ -225,13 +263,22 @@ export function HomeScreen() {
 
         {plansError && <p className={styles.localNote} role="alert">{plansError}</p>}
         {plans.length > 0 && <p className={styles.calendarLegend}><span><MoodSticker mood="happy" /></span>淡いシールは予定。デートのあとに、気持ちを貼ろう。</p>}
-        <div className={styles.pageFootnote}>
-          {monthKey !== currentMonth && <button type="button" onClick={() => { setMonthOverride(null); setNotice("今月のカレンダーに戻りました"); }}><CalendarHeart size={16} aria-hidden="true" />今月にもどる</button>}
-        </div>
+        {isFixture && <section ref={eventSectionRef} className={styles.nearbyEvents} aria-labelledby="nearby-events-title">
+          <header><div><h2 id="nearby-events-title">近くのイベントから探す</h2></div><small><MapPin size={11} aria-hidden="true" />東京周辺</small></header>
+          <div className={styles.eventCarousel} aria-label="近隣イベント" tabIndex={0}>
+            {nearbyEvents.map((event) => <button type="button" key={event.id} className={styles.eventBanner} data-theme={event.theme} onClick={() => openPlan(event.date, event.wish)} aria-label={`${event.title}、${event.dateLabel}、${event.area}。このイベントでデートをつくる`}>
+              <span className={styles.eventArtwork} aria-hidden="true"><span className={styles.eventShade} /></span>
+              <span className={styles.eventDetails}>
+                <span className={styles.eventMeta}><span>{event.dateLabel}</span><span><MapPin size={10} />{event.area}</span>{event.sponsored && <span>PR</span>}</span>
+                <span className={styles.eventCopy}><strong>{event.title}</strong><span>{event.kicker}</span></span>
+                <span className={styles.eventAction}>このイベントでプランをつくる <ArrowRight size={14} /></span>
+              </span>
+            </button>)}
+          </div>
+          <p className={styles.eventDisclosure}>イベント情報はUI確認用のサンプルです。</p>
+        </section>}
       </main>
-      {!panel && !selectedDate && <DevelopmentLink />}
-
-      {!panel && !selectedDate && <div className={styles.createDateFab}><DateCreateButton onClick={() => openPlan()} /></div>}
+      <div className={styles.createDateFab} data-over-events={eventsBehindCreateButton}><DateCreateButton onClick={() => openPlan()} /></div>
 
       <Toast message={notice} onDismiss={() => { setNotice(""); setStampedDate(null); }} />
 

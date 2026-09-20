@@ -84,6 +84,7 @@
 @media (prefers-reduced-motion: reduce) { .spotImageSkeleton { animation: none; } }
 .photoCredits { display: flex; flex-wrap: wrap; gap: 4px 10px; padding: 6px 12px; font-size: 10px; }
 .photoCredits a { color: inherit; text-decoration: underline; }
+.searchSources { width: 100%; border: 0; height: 100px; }
 .photoLabel { position: absolute; bottom: 7px; right: 8px; border-radius: 5px; padding: 2px 5px; color: white; background: #40323b70; font-size: 8px; }
 .photoLabel a { color: inherit; }
 .spotBody { padding: 11px 13px 0; }

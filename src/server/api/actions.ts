@@ -53,6 +53,9 @@ export function snapshotOf(couple: CoupleBundle, bundle: SessionBundle) {
   const approvals = Object.values(couple.approvals).filter((a) => a.sessionId === bundle.session.id);
   const pendingApply = approvals.find((item) => item.status === "PENDING" && item.kind === "PLAN_APPLY");
   const proposedPlan = pendingApply ? bundle.planHistory[String(pendingApply.planVersionTo)] ?? null : null;
+  const groundingEv = Object.values(bundle.evidence).find(
+    (e) => e.provider === "gemini-grounding" && e.sourceField === "searchEntryPoint",
+  );
   return {
     runtime: env.runtime,
     emulator: env.emulator,
@@ -72,6 +75,12 @@ export function snapshotOf(couple: CoupleBundle, bundle: SessionBundle) {
     memoryCandidates: Object.values(couple.memoryCandidates),
     scenarios: Object.values(bundle.scenarios),
     overlays: Object.values(bundle.scenarios).map((s) => s.kind),
+    grounding: groundingEv
+      ? {
+          queries: groundingEv.sourceRef ? groundingEv.sourceRef.split(" | ").filter(Boolean) : [],
+          searchEntryPointHtml: groundingEv.note,
+        }
+      : null,
   };
 }
 

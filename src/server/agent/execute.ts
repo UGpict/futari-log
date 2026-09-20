@@ -12,6 +12,7 @@ import { newId } from "@/lib/ids";
 import { realNowIso } from "@/lib/time";
 import { callLLM, llmActionSchema } from "@/server/llm";
 import type { ProviderCtx } from "@/server/providers";
+import { attachSpotImages } from "@/server/providers/geminiGrounding";
 import { appendRunEvent, getRun, nextEventSeq, patchRunDoc, withApproval, withRun } from "@/server/repositories/store";
 import { heartbeat, claimRun, WORKER_ID } from "./lease";
 import { orchestrateGather, orchestratePlanning } from "./orchestrate";
@@ -240,6 +241,27 @@ export async function executeRun(
         });
         return;
       }
+    }
+
+    if (!controller.signal.aborted && Date.now() - started < deadlineMs - 8000) {
+      const imaged = await attachSpotImages({
+        ctx,
+        spots: built.spots,
+        areaName: session.input.areaName,
+        signal: controller.signal,
+      });
+      built.spots = imaged.spots;
+      Object.assign(built.evidence, imaged.evidence);
+      await appendEvent(
+        runId,
+        "HTTP_ATTEMPT",
+        imaged.queries.length
+          ? `Gemini grounding でスポット画像 ${Object.values(imaged.spots).filter((s) => s.imageUrl).length} 件`
+          : "スポット画像（Gemini 未設定または未ヒット）",
+        {
+          payload: { queries: imaged.queries, providers: Object.values(imaged.spots).map((s) => s.imageProvider) },
+        },
+      );
     }
 
     await withRun(runId, (found) => {

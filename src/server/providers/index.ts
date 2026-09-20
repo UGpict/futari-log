@@ -15,6 +15,7 @@ import { newId } from "@/lib/ids";
 import { realNowIso, toTokyoParts } from "@/lib/time";
 import { includedTypesForCategory, placeTypeList } from "@/contracts/spotKinds";
 import { getCatalogSpot, MOCK_CATALOG, searchCatalog, searchCatalogByName, type CatalogSpot } from "./catalog";
+import { applyPhotoMeta, firstPhotoRef, resolvePhotoMedia } from "./placePhotos";
 import {
   computeLiveRoute,
   scheduleDriveDeparture,
@@ -23,24 +24,17 @@ import {
 } from "./routes";
 import { getEvent, getVenue } from "@/server/catalog/repo";
 import { catalogEventToSpot, venueHours } from "@/server/catalog/toSpot";
-import type { ScenarioOverlay } from "@/domain/schemas";
 import {
   assessHours,
   parsePlaceHours,
   parseYenRange,
   type PlaceHoursRule,
 } from "./placeFacts";
+import type { ProviderCtx } from "./types";
 
 export type { PlaceHoursRule };
 
-export type ProviderCtx = {
-  runId: string;
-  overlays: ScenarioOverlay[];
-  cache: Map<string, { at: string; value: unknown; stale: boolean }>;
-  httpAttempts: number;
-  onHttp: (info: { provider: string; cacheHit: boolean; attempt: number }) => void | Promise<void>;
-  placeHours?: Record<string, PlaceHoursRule[]>;
-};
+export type { ProviderCtx } from "./types";
 
 function evidence(partial: Omit<Evidence, "id"> & { id?: string }): Evidence {
   return { id: partial.id ?? newId("ev"), ...partial };
@@ -105,6 +99,11 @@ function toSpot(c: CatalogSpot): Spot {
       evidenceIds: c.standingBurden.evidenceIds.map((id) => id),
     },
     officialUrl: c.officialUrl,
+    imageUrl: c.imageUrl ?? null,
+    imageSourceUrl: c.imageSourceUrl ?? null,
+    imageProvider: c.imageProvider ?? null,
+    imageAttributions: c.imageAttributions ?? [],
+    photoName: c.photoName ?? null,
   };
 }
 
@@ -192,7 +191,7 @@ export async function getSpotDetails(
     return result;
   }
   if (env.runtime === "LIVE" && env.googleMapsApiKey && !args.spotId.startsWith("mock:")) {
-    const result = await counted(ctx, "places", () => liveDetails(env.googleMapsApiKey!, args.spotId));
+    const result = await counted(ctx, "places", () => liveDetails(ctx, env.googleMapsApiKey!, args.spotId));
     cacheSet(ctx, key, result);
     return result;
   }
@@ -538,21 +537,28 @@ async function liveSearch(
       types?: string[];
       primaryType?: string;
       googleMapsUri?: string;
+      photos?: { name?: string; authorAttributions?: { displayName?: string; uri?: string }[] }[];
     }[];
   };
   const fetchedAt = realNowIso();
-  const spots: Spot[] = (data.places ?? []).map((p) => ({
-    id: p.id,
-    name: p.displayName?.text ?? p.id,
-    lat: p.location?.latitude ?? 0,
-    lng: p.location?.longitude ?? 0,
-    categories: placeTypeList(p.primaryType, p.types),
-    environment: { value: null, evidenceIds: [] },
-    costForTwoJpy: { value: null, evidenceIds: [] },
-    restEase: { value: null, evidenceIds: [] },
-    standingBurden: { value: null, evidenceIds: [] },
-    officialUrl: null,
-  }));
+  const spots: Spot[] = (data.places ?? []).map((p) =>
+    applyPhotoMeta(
+      {
+        id: p.id,
+        name: p.displayName?.text ?? p.id,
+        lat: p.location?.latitude ?? 0,
+        lng: p.location?.longitude ?? 0,
+        categories: placeTypeList(p.primaryType, p.types),
+        environment: { value: null, evidenceIds: [] },
+        costForTwoJpy: { value: null, evidenceIds: [] },
+        restEase: { value: null, evidenceIds: [] },
+        standingBurden: { value: null, evidenceIds: [] },
+        officialUrl: null,
+      },
+      firstPhotoRef(p.photos),
+      p.googleMapsUri,
+    ),
+  );
   return {
     spots,
     evidence: [
@@ -560,16 +566,20 @@ async function liveSearch(
         kind: "API",
         provider: "places",
         sourceRef: "places:searchNearby",
-        sourceField: "places",
+        sourceField: "places.photos",
         fetchedAt,
         validFor: null,
-        note: "Places Nearby Search (New)。FieldMask 最小",
+        note: "Places Nearby Search (New)。photos.name / authorAttributions を店舗IDに紐づけて取得",
       }),
     ],
   };
 }
 
-async function liveDetails(apiKey: string, spotId: string): Promise<SpotDetails> {
+async function liveDetails(
+  ctx: ProviderCtx,
+  apiKey: string,
+  spotId: string,
+): Promise<SpotDetails> {
   const res = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(spotId)}`, {
     headers: {
       "X-Goog-Api-Key": apiKey,
@@ -585,6 +595,8 @@ async function liveDetails(apiKey: string, spotId: string): Promise<SpotDetails>
     types?: string[];
     primaryType?: string;
     websiteUri?: string;
+    googleMapsUri?: string;
+    photos?: { name?: string; authorAttributions?: { displayName?: string; uri?: string }[] }[];
     regularOpeningHours?: {
       periods?: {
         open?: { day?: number; hour?: number; minute?: number };
@@ -601,6 +613,8 @@ async function liveDetails(apiKey: string, spotId: string): Promise<SpotDetails>
   const envEst = estimateEnvironment(types);
   const hours = parsePlaceHours(p.regularOpeningHours);
   const yen = parseYenRange(p.priceRange);
+  const photo = firstPhotoRef(p.photos);
+  const imageUrl = photo ? await resolvePhotoMedia(ctx, apiKey, photo.name) : null;
   const costEvidence = evidence({
     kind: yen ? "API" : "UNKNOWN",
     provider: "places",
@@ -612,27 +626,34 @@ async function liveDetails(apiKey: string, spotId: string): Promise<SpotDetails>
   });
   return {
     hours,
-    spot: {
-      id: p.id,
-      name: p.displayName?.text ?? p.id,
-      lat: p.location?.latitude ?? 0,
-      lng: p.location?.longitude ?? 0,
-      categories: types,
-      environment: envEst,
-      costForTwoJpy: { value: yen, evidenceIds: yen ? [costEvidence.id] : [] },
-      restEase: estimateRest(types),
-      standingBurden: estimateStanding(types),
-      officialUrl: p.websiteUri ?? null,
-    },
+    spot: applyPhotoMeta(
+      {
+        id: p.id,
+        name: p.displayName?.text ?? p.id,
+        lat: p.location?.latitude ?? 0,
+        lng: p.location?.longitude ?? 0,
+        categories: types,
+        environment: envEst,
+        costForTwoJpy: { value: yen, evidenceIds: yen ? [costEvidence.id] : [] },
+        restEase: estimateRest(types),
+        standingBurden: estimateStanding(types),
+        officialUrl: p.websiteUri ?? null,
+        imageUrl,
+      },
+      photo,
+      p.googleMapsUri,
+    ),
     evidence: [
       evidence({
         kind: "API",
         provider: "places",
         sourceRef: p.id,
-        sourceField: "details",
+        sourceField: photo ? "photos.media" : "details",
         fetchedAt,
         validFor: null,
-        note: hours.length ? "Place Details (New)。営業時間あり" : "Place Details (New)。営業時間なし",
+        note: photo
+          ? `Place Details (New) + Place Photos。店舗IDの写真${hours.length ? "・営業時間あり" : "・営業時間なし"}`
+          : `Place Details (New)。photos なし${hours.length ? "・営業時間あり" : "・営業時間なし"}`,
       }),
       costEvidence,
     ],

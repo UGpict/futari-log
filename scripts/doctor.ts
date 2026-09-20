@@ -126,6 +126,15 @@ async function main() {
     rows.push({ name: "orcarouter hard", status: "BLOCKED", detail: "no key" });
   }
 
+  rows.push(
+    await check("env:gemini", async () => ({
+      status: env.geminiConfigured ? "PASS" : "BLOCKED",
+      detail: env.geminiConfigured
+        ? `via=${env.geminiVia} model=${env.geminiModel}`
+        : "ORCAROUTER_API_KEY missing; spot images stay empty unless Places photo fallback",
+    })),
+  );
+
   if (env.mapsConfigured) {
     rows.push(
       await check("places nearby", async () => {

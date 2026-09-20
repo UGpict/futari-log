@@ -67,13 +67,14 @@ export function assessTokyoPlan(points: AreaPoint[]): {
 export function searchRadiiFor(mode: TravelMode, opts?: { expand?: boolean }): number[] {
   const cfg = SEARCH_EXPAND[mode];
   if (opts?.expand === false) return [cfg.initialMeters];
-  const radii: number[] = [];
-  let meters = cfg.initialMeters;
-  for (let round = 0; round < cfg.maxRounds; round += 1) {
-    const next = Math.min(meters, cfg.maxMeters);
+  const radii: number[] = [cfg.initialMeters];
+  for (let round = 1; round < cfg.maxRounds; round += 1) {
+    const next =
+      round === cfg.maxRounds - 1
+        ? cfg.maxMeters
+        : Math.min(cfg.initialMeters + round * cfg.stepMeters, cfg.maxMeters);
     if (!radii.includes(next)) radii.push(next);
     if (next >= cfg.maxMeters) break;
-    meters += cfg.stepMeters;
   }
   return radii;
 }
