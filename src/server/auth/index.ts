@@ -136,5 +136,6 @@ export function demoAllowed(uid: string): boolean {
   const env = getEnv();
   if (!env.enableDemoControls) return false;
   if (env.runtime === "MOCK") return true;
+  if (env.demoAllowedUids.includes("*")) return true;
   return env.demoAllowedUids.includes(uid);
 }
