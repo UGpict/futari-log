@@ -1,4 +1,22 @@
 import { z } from "zod";
+import { planningInputSchema, travelModeSchema } from "@/contracts/planning";
+
+export {
+  preferenceSchema,
+  type Preference,
+  travelModeSchema,
+  type TravelMode,
+  fixedAppointmentSchema,
+  type FixedAppointment,
+  budgetSchema,
+  type Budget,
+  autoApplyPolicySchema,
+  type AutoApplyPolicy,
+  meetPointSchema,
+  planningInputSchema,
+  type PlanningInput,
+} from "@/contracts/planning";
+
 
 export const modeSchema = z.enum(["LIVE", "LIVE_SCENARIO", "REPLAY"]);
 export type Mode = z.infer<typeof modeSchema>;
@@ -37,15 +55,6 @@ export function factSchema<T extends z.ZodType>(value: T) {
   });
 }
 
-export const preferenceSchema = z.object({
-  id: z.string(),
-  subject: z.enum(["SELF", "PARTNER", "BOTH"]),
-  content: z.string().min(1).max(2000),
-  priority: z.enum(["MUST", "PREFER"]),
-  source: z.enum(["SELF_REPORT", "PARTNER_STATEMENT_REPORTED", "OBSERVATION"]),
-});
-export type Preference = z.infer<typeof preferenceSchema>;
-
 export const environmentSchema = z.enum(["INDOOR", "OUTDOOR", "MIXED"]);
 export const restEaseSchema = z.enum(["EASY", "LIMITED"]);
 export const standingBurdenSchema = z.enum(["LOW", "MEDIUM", "HIGH"]);
@@ -83,9 +92,6 @@ export const planItemSchema = z.object({
   evidenceIds: z.array(z.string()),
 });
 export type PlanItem = z.infer<typeof planItemSchema>;
-
-export const travelModeSchema = z.enum(["WALK", "TRANSIT", "DRIVE"]);
-export type TravelMode = z.infer<typeof travelModeSchema>;
 
 export const travelLegSchema = z.object({
   id: z.string(),
@@ -190,56 +196,6 @@ export const planDiffSchema = z.object({
   summary: z.string(),
 });
 export type PlanDiff = z.infer<typeof planDiffSchema>;
-
-export const fixedAppointmentSchema = z.object({
-  id: z.string(),
-  label: z.string(),
-  spotId: z.string().nullable(),
-  spotNameHint: z.string().nullable(),
-  startAt: z.string(),
-  endAt: z.string(),
-  kind: z.literal("TIME_FIXED"),
-});
-export type FixedAppointment = z.infer<typeof fixedAppointmentSchema>;
-
-export const budgetSchema = z.object({
-  mealsJpy: z.number().nullable(),
-  facilitiesJpy: z.number().nullable(),
-  transitJpy: z.number().nullable(),
-});
-export type Budget = z.infer<typeof budgetSchema>;
-
-export const autoApplyPolicySchema = z.object({
-  enabled: z.boolean(),
-  acknowledgedScope: z.string().nullable(),
-  validUntil: z.string().nullable(),
-});
-export type AutoApplyPolicy = z.infer<typeof autoApplyPolicySchema>;
-
-export const meetPointSchema = z.object({
-  name: z.string(),
-  lat: z.number(),
-  lng: z.number(),
-  spotId: z.string().nullable(),
-});
-
-export const planningInputSchema = z.object({
-  dateTokyo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  startTime: z.string().regex(/^\d{2}:\d{2}$/),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/),
-  meet: meetPointSchema,
-  end: meetPointSchema,
-  budget: budgetSchema,
-  preferences: z.array(preferenceSchema).min(1),
-  fixedAppointments: z.array(fixedAppointmentSchema),
-  autoApply: autoApplyPolicySchema,
-  travelMode: travelModeSchema.default("WALK"),
-  areaName: z.string(),
-  areaLat: z.number(),
-  areaLng: z.number(),
-  radiusMeters: z.number().default(2500),
-});
-export type PlanningInput = z.infer<typeof planningInputSchema>;
 
 export const memoryCandidateSchema = z.object({
   id: z.string(),

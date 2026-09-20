@@ -23,6 +23,7 @@ import {
   type SessionBundle,
 } from "@/server/repositories/store";
 import { getCatalogSpot } from "@/server/providers/catalog";
+import { presentMemoryList, presentReplay, presentRunView, presentSessionSnapshot } from "@/server/api/presenters";
 
 function gitSha(): string | null {
   return process.env.GIT_COMMIT ?? process.env.VERCEL_GIT_COMMIT_SHA ?? null;
@@ -242,7 +243,7 @@ export async function getSessionSnapshot(uid: string, sessionId: string) {
     const found = findSession(db, sessionId);
     if (!found) return { ok: false as const, status: 404, error: "not found" };
     if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
-    return { ok: true as const, data: snapshotOf(found.couple, found.bundle) };
+    return { ok: true as const, data: presentSessionSnapshot(snapshotOf(found.couple, found.bundle)) };
   });
 }
 
@@ -254,7 +255,14 @@ export async function getRunView(uid: string, runId: string) {
     const events = Object.values(found.bundle.events)
       .filter((e) => e.runId === runId)
       .sort((a, b) => a.seq - b.seq);
-    return { ok: true as const, run: found.run, events };
+    return {
+      ok: true as const,
+      ...presentRunView({
+        ok: true,
+        run: found.run,
+        events,
+      }),
+    };
   });
 }
 
@@ -580,9 +588,27 @@ export async function listMemory(uid: string, coupleId: string) {
     if (couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
     return {
       ok: true as const,
-      memories: Object.values(couple.memories),
-      candidates: Object.values(couple.memoryCandidates),
+      ...presentMemoryList({
+        ok: true,
+        memories: Object.values(couple.memories),
+        candidates: Object.values(couple.memoryCandidates),
+      }),
     };
+  });
+}
+
+export async function getReplay(uid: string, replayId: string) {
+  return readStore((db) => {
+    for (const couple of Object.values(db.couples)) {
+      if (couple.couple.ownerUid !== uid) continue;
+      const replay = couple.replays[replayId];
+      if (!replay) continue;
+      return {
+        ok: true as const,
+        ...presentReplay({ ok: true, replay }),
+      };
+    }
+    return { ok: false as const, status: 404 as const, error: "not found" };
   });
 }
 

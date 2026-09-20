@@ -1,0 +1,22 @@
+name: Ownership and boundaries
+
+on:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run check:boundaries
+      - name: List changed files by owner
+        env:
+          OWNERSHIP_BASE: origin/${{ github.base_ref }}
+        run: npm run ownership >> "$GITHUB_STEP_SUMMARY"

@@ -14,6 +14,9 @@ npm run dev                  # Auth/Firestore Emulator + Next.js + worker
 
 http://localhost:3000
 
+UI 担当が API なしで画面を触る場合は `docs/ui-handoff.md` と `npm run dev:ui`。
+担当境界はルートの `AGENTS.md`。契約変更は `src/contracts/`（両担当の確認）。
+
 - Web: `next dev`
 - worker: PENDING の run を lease して処理。サーバーレスの応答終了後に作業を続けません。
 - 保存先: Firestore Emulator（`DATA_BACKEND=file` で以前の JSON ファイルにも戻せます）

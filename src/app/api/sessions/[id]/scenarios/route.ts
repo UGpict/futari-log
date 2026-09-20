@@ -1,7 +1,7 @@
-import { json, requireUid } from "@/server/api/http";
+import { json, requireUid, readJson } from "@/server/api/http";
 import { injectScenario, startRun } from "@/server/api/actions";
 import { sha256 } from "@/lib/ids";
-import type { ScenarioKind } from "@/domain/schemas";
+import { injectScenarioRequestSchema } from "@/contracts/session";
 
 export async function POST(
   request: Request,
@@ -10,30 +10,24 @@ export async function POST(
   const auth = await requireUid(request);
   if ("error" in auth) return auth.error;
   const { id } = await ctx.params;
-  const body = (await request.json()) as {
-    kind: ScenarioKind;
-    spotId?: string | null;
-    legId?: string | null;
-    from?: string | null;
-    to?: string | null;
-    overlay?: Record<string, unknown>;
-  };
+  const body = await readJson(request, injectScenarioRequestSchema);
+  if ("error" in body) return body.error;
   const injected = await injectScenario(auth.uid, id, {
-    kind: body.kind,
-    spotId: body.spotId,
-    legId: body.legId,
-    from: body.from,
-    to: body.to,
-    overlay: body.overlay ?? {},
+    kind: body.data.kind,
+    spotId: body.data.spotId,
+    legId: body.data.legId,
+    from: body.data.from,
+    to: body.data.to,
+    overlay: body.data.overlay ?? {},
   });
   if (!injected.ok) return json({ error: injected.error }, injected.status);
   const run = await startRun({
     uid: auth.uid,
     sessionId: id,
     kind: "REPLAN",
-    trigger: body.kind,
+    trigger: body.data.kind,
     idempotencyKey: null,
-    bodyHash: sha256(JSON.stringify(body)),
+    bodyHash: sha256(JSON.stringify(body.data)),
   });
   if (!run.ok) return json({ error: run.error, scenarioId: injected.scenarioId }, run.status);
   return json({ scenarioId: injected.scenarioId, runId: run.runId }, 202);

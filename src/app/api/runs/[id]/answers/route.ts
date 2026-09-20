@@ -1,5 +1,6 @@
-import { json, requireUid } from "@/server/api/http";
+import { json, requireUid, readJson } from "@/server/api/http";
 import { answerQuestion } from "@/server/api/actions";
+import { answerRequestSchema } from "@/contracts/session";
 
 export async function POST(
   request: Request,
@@ -8,9 +9,9 @@ export async function POST(
   const auth = await requireUid(request);
   if ("error" in auth) return auth.error;
   const { id } = await ctx.params;
-  const body = (await request.json()) as { questionId?: string; answer?: string };
-  if (!body.questionId || !body.answer) return json({ error: "invalid" }, 400);
-  const result = await answerQuestion(auth.uid, id, body.questionId, body.answer);
+  const body = await readJson(request, answerRequestSchema);
+  if ("error" in body) return body.error;
+  const result = await answerQuestion(auth.uid, id, body.data.questionId, body.data.answer);
   if (!result.ok) return json({ error: result.error }, result.status);
   return json({ ok: true });
 }

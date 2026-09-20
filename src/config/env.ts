@@ -89,7 +89,9 @@ export function getEnv() {
   const orcaConfigured = Boolean(read("ORCAROUTER_API_KEY"));
   const mapsConfigured = Boolean(read("GOOGLE_MAPS_API_KEY"));
   const requested = (read("APP_RUNTIME") ?? "MOCK").toUpperCase();
-  const liveReady = firebaseConfigured && orcaConfigured && mapsConfigured && !emulator;
+  const uiFixtures = readBool("NEXT_PUBLIC_USE_API_FIXTURES", false);
+  const liveReady =
+    firebaseConfigured && orcaConfigured && mapsConfigured && !emulator && !uiFixtures;
   const runtime: RuntimeMode = requested === "LIVE" && liveReady ? "LIVE" : "MOCK";
 
   const explicitBackend = read("DATA_BACKEND");
@@ -141,6 +143,7 @@ export function getEnv() {
     port: readNumber("PORT", 3000),
     timeZone: TIME_ZONE,
     onCloudRun,
+    uiFixtures,
   };
 }
 

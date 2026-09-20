@@ -1,0 +1,18 @@
+# CODEOWNERS
+# GitHub ユーザー名が未確定のため TODO。確定したら @name を入れる。
+# 契約 src/contracts/ は両方のレビュー対象。
+
+# TODO-backend @REPLACE_ME_BACKEND
+# TODO-frontend @REPLACE_ME_UI
+
+# src/features/ @REPLACE_ME_UI
+# src/components/ @REPLACE_ME_UI
+# src/client/ @REPLACE_ME_UI
+# src/fixtures/ @REPLACE_ME_UI
+
+# src/server/ @REPLACE_ME_BACKEND
+# src/worker/ @REPLACE_ME_BACKEND
+# src/app/api/ @REPLACE_ME_BACKEND
+# src/domain/ @REPLACE_ME_BACKEND
+
+# src/contracts/ @REPLACE_ME_BACKEND @REPLACE_ME_UI
