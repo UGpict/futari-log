@@ -1,3 +1,4 @@
+import { planningInputSchema } from "@/contracts";
 import type { MeResponse, SessionSnapshot } from "@/contracts";
 import {
   fixtureApproval,
@@ -10,6 +11,19 @@ import {
 } from "./snapshots";
 
 export { fixturesEnabled, snapshotFor, fixtureMe, fixtureSuccess, fixtureFailed, fixtureApproval, fixtureReplan };
+
+// Mutable only in the explicitly enabled UI fixture runtime.
+const upcoming = structuredClone(fixtureSuccess);
+upcoming.session.id = "fx-upcoming";
+upcoming.session.input.dateTokyo = "2026-09-24";
+upcoming.session.status = "CONFIRMED";
+for (const item of upcoming.plan?.items ?? []) {
+  item.startAt = item.startAt.replace("2026-09-19", "2026-09-24");
+  item.endAt = item.endAt.replace("2026-09-19", "2026-09-24");
+}
+const calendarSnapshots = new Map<string, SessionSnapshot>([
+  [fixtureSuccess.session.id, fixtureSuccess], [upcoming.session.id, upcoming],
+]);
 
 function delay(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -24,8 +38,16 @@ export async function fixtureResponse<T>(path: string, init?: RequestInit): Prom
     return { uid: fixtureMe.uid, runtime: "MOCK" } as T;
   }
   if (url === "/api/couples" && method === "POST") return { id: "cpl_fixture" } as T;
+  if (/^\/api\/couples\/[^/]+\/sessions$/.test(url) && method === "GET") {
+    return { plans: [...calendarSnapshots.values()].map((snap) => ({ id: snap.session.id, date: snap.session.input.dateTokyo, startTime: snap.session.input.startTime, endTime: snap.session.input.endTime, status: snap.session.status, title: snap.plan?.items.map((item) => snap.spots[item.spotId]?.name).filter(Boolean).join("・") || "作成中のプラン" })) } as T;
+  }
   if (url.endsWith("/sessions") && method === "POST") {
-    return { sessionId: "fx-success", input: fixtureSuccess.session.input } as T;
+    const snap = structuredClone(fixtureSuccess);
+    snap.session.input = planningInputSchema.parse(JSON.parse(String(init?.body ?? "{}")));
+    snap.session.id = `fx-created-${calendarSnapshots.size}`;
+    snap.session.status = "DRAFT";
+    calendarSnapshots.set(snap.session.id, snap);
+    return { sessionId: snap.session.id, input: snap.session.input } as T;
   }
   if (url === "/api/sessions/fx-error") {
     throw new Error("fixture failure");
@@ -36,7 +58,7 @@ export async function fixtureResponse<T>(path: string, init?: RequestInit): Prom
   }
   const sessionMatch = url.match(/^\/api\/sessions\/([^/]+)$/);
   if (sessionMatch && method === "GET") {
-    const snap = snapshotFor(sessionMatch[1]);
+    const snap = calendarSnapshots.get(sessionMatch[1]) ?? snapshotFor(sessionMatch[1]);
     if (!snap) throw new Error("読み込み中…");
     return snap as T;
   }
@@ -44,6 +66,9 @@ export async function fixtureResponse<T>(path: string, init?: RequestInit): Prom
     return { runId: "run_fx" } as T;
   }
   if (/\/api\/sessions\/[^/]+\/progress$/.test(url) && method === "POST") {
+    const body = JSON.parse(String(init?.body ?? "{}"));
+    const snap = calendarSnapshots.get(url.split("/")[3]) ?? snapshotFor(url.split("/")[3]);
+    if (snap && typeof body.status === "string") snap.session.status = body.status;
     return { ok: true } as T;
   }
   if (/\/api\/sessions\/[^/]+\/scenarios$/.test(url) && method === "POST") {

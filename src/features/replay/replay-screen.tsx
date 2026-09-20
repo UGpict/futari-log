@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "@/components/button";
+
 import { CostBadge } from "@/components/cost-badge";
 import { ModeBanner } from "@/components/mode-banner";
 import { useReplay } from "@/client/hooks/use-replay";
@@ -17,18 +19,18 @@ export function ReplayScreen({ replayId }: { replayId: string }) {
       <h1 className="mt-4 text-2xl font-semibold">REPLAY</h1>
       <p className="text-sm text-ink-soft">{data.notes}</p>
       <div className="mt-4 flex gap-2">
-        <button className="rounded-full bg-ink px-4 py-2 text-sm text-white" onClick={() => setPlaying((p) => !p)}>
+        <Button size="compact" variant="primary"  onClick={() => setPlaying((p) => !p)}>
           {playing ? "停止" : "再生"}
-        </button>
-        <button className="rounded-full border border-line px-4 py-2 text-sm" onClick={() => setIndex((i) => Math.max(0, i - 1))}>
+        </Button>
+        <Button size="compact" variant="secondary"  onClick={() => setIndex((i) => Math.max(0, i - 1))}>
           戻る
-        </button>
-        <button
-          className="rounded-full border border-line px-4 py-2 text-sm"
+        </Button>
+        <Button size="compact" variant="secondary"
+
           onClick={() => setIndex((i) => Math.min(data.events.length - 1, i + 1))}
         >
           進む
-        </button>
+        </Button>
       </div>
       <ol className="mt-6 space-y-2 text-sm">
         {visible.map((e) => (
