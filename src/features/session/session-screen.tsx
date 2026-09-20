@@ -2,26 +2,20 @@
 
 import { Button, ButtonLink } from "@/components/button";
 
-import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
-import { ArrowLeft, CalendarHeart, Wallet, Check, MessageCircle, SlidersHorizontal, ArrowUpRight, ExternalLink, Clock3, Coffee, Landmark, Trees, MapPin } from "lucide-react";
+import { Check, MessageCircle, SlidersHorizontal, ArrowUpRight, ExternalLink, Clock3, MapPin } from "lucide-react";
 import { useSession } from "@/client/hooks/use-session";
 import { api, fixturesEnabled } from "@/client/api";
 import { formatTokyoHm } from "@/lib/time";
 import { PlanLoading } from "./plan-loading";
 import { HomeSheet } from "../home/home-sheet";
+import { PlanStickerIcon } from "@/components/plan-sticker-icon";
 import { MoodSticker } from "@/components/mood-sticker";
+import { Toast } from "@/components/toast";
+import { HomeLogo } from "@/components/home-logo";
+import { spotVisual } from "./spot-visuals";
 import styles from "./session.module.css";
-
-// Presentation-only placeholders until sourced venue photos are available in the API.
-function spotVisual(name: string, categories: string[]) {
-  const text = `${name} ${categories.join(" ")}`;
-  if (/美術館|博物館|展示|museum|gallery/i.test(text)) return { image: "museum", label: "アート・展示", Icon: Landmark };
-  if (/公園|森|庭園|散歩|park|garden/i.test(text)) return { image: "nature", label: "散策", Icon: Trees };
-  if (/カフェ|喫茶|コーヒー|ケーキ|ハーブス|cafe|coffee|bakery/i.test(text)) return { image: "cafe", label: "カフェ", Icon: Coffee };
-  return { image: null, label: "立ち寄りスポット", Icon: MapPin };
-}
 
 export function SessionScreen({ sessionId }: { sessionId: string }) {
   const { data, error, reload } = useSession(sessionId);
@@ -31,14 +25,15 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   const [actionError, setActionError] = useState("");
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
+  const [replanningItemId, setReplanningItemId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const latest = data?.runs.at(-1);
   const failed = latest && ["FAILED", "CANCELLED", "INTERRUPTED"].includes(latest.status);
   const active = data?.runs.some((run) => ["PENDING", "RUNNING", "WAITING_INPUT", "WAITING_APPROVAL"].includes(run.status));
   const approval = data?.approvals.find((item) => item.status === "PENDING");
   const attention = latest?.status === "WAITING_INPUT" || data?.approvals.some((item) => item.status === "PENDING");
-  if (!data && error) return <main className={styles.page}><Link className={styles.back} href="/" aria-label="カレンダーに戻る"><ArrowLeft size={18} aria-hidden="true" /></Link><h1>読み込めませんでした</h1><p role="alert">{error}</p><Button variant="secondary" size="compact" onClick={() => void reload().catch(() => undefined)}>もう一度読み込む</Button></main>;
-  if (!data || (!data.plan && !failed && !attention)) return <main className={styles.page}><Link href="/" className={styles.back} aria-label="カレンダーに戻る"><ArrowLeft size={18} aria-hidden="true" /></Link><PlanLoading demo={fixturesEnabled()} /></main>;
+  if (!data && error) return <main className={styles.page}><HomeLogo className={styles.homeLogo} /><h1>読み込めませんでした</h1><p role="alert">{error}</p><Button variant="secondary" size="compact" onClick={() => void reload().catch(() => undefined)}>もう一度読み込む</Button></main>;
+  if (!data || (!data.plan && !failed && !attention)) return <main className={styles.page}><HomeLogo className={styles.homeLogo} /><PlanLoading demo={fixturesEnabled()} /></main>;
   const input = data.session.input;
   const confirmed = ["CONFIRMED", "IN_PROGRESS", "DONE", "REFLECTED"].includes(data.session.status);
   const budget = [input.budget.mealsJpy, input.budget.facilitiesJpy, input.budget.transitJpy];
@@ -57,15 +52,39 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   function openFeedback(item?: { id: string; name: string; locked: boolean }) {
     setTarget(item ?? null); setFeedback(""); setActionError(""); setSheet("feedback");
   }
+  async function replan(trigger: string, itemId: string | null) {
+    if (pending || active) return;
+    setSheet(null); setPending(true); setActionError(""); setMessage(""); setReplanningItemId(itemId);
+    const startedAt = Date.now();
+    try {
+      await api(`/api/sessions/${sessionId}/runs`, { method: "POST", body: JSON.stringify({ kind: "REPLAN", trigger }) });
+      await new Promise((resolve) => setTimeout(resolve, Math.max(0, 2400 - (Date.now() - startedAt))));
+      await reload();
+      setMessage(itemId ? "この場所をもう一度考えました。" : "プランをもう一度考えました。");
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "保存できませんでした。もう一度お試しください。");
+    } finally {
+      setPending(false); setReplanningItemId(null);
+    }
+  }
   return <main className={styles.page}>
-    <header className={styles.header}><Link href="/" className={styles.back} aria-label="カレンダーに戻る"><ArrowLeft size={18} aria-hidden="true" /></Link><span className={styles.planStatus}>{fixturesEnabled() ? "サンプル" : confirmed ? "予定に追加済み" : "プランを相談中"}</span><Button variant="secondary" size="compact"  onClick={() => setSheet("conditions")}><SlidersHorizontal size={14} />条件</Button></header>
+    <Toast message={message} onDismiss={() => setMessage("")} />
+    <header className={styles.header}><HomeLogo className={styles.homeLogo} />{!fixturesEnabled() && <span className={styles.planStatus}>{confirmed ? "予定に追加済み" : "プランを相談中"}</span>}<Button className={styles.conditionButton} variant="ghost" size="compact" onClick={() => setSheet("conditions")}><SlidersHorizontal size={14} />条件</Button></header>
     <section className={styles.hero}>
-      <div className={styles.dateHeading}><h1>{new Intl.DateTimeFormat("ja-JP", { month: "long", day: "numeric", weekday: "short", timeZone: "Asia/Tokyo" }).format(new Date(`${input.dateTokyo}T12:00:00+09:00`))}</h1><span className={styles.dateSticker} aria-hidden="true"><MoodSticker mood="happy" /></span></div>
-      <div className={styles.facts}><span><CalendarHeart size={13} />{input.startTime}–{input.endTime}</span><span><Wallet size={13} />{budgetLabel}<small>ふたり分</small></span><span>{data.plan?.items.length ?? 0}スポット</span></div>
+      <div className={styles.planDateHeading}>
+        <h1><time dateTime={input.dateTokyo}>
+          {new Intl.DateTimeFormat("ja-JP", { month: "long", day: "numeric", timeZone: "Asia/Tokyo" }).format(new Date(`${input.dateTokyo}T12:00:00+09:00`))}
+          <span className={styles.planWeekday}>{new Intl.DateTimeFormat("ja-JP", { weekday: "short", timeZone: "Asia/Tokyo" }).format(new Date(`${input.dateTokyo}T12:00:00+09:00`))}曜日</span>
+        </time></h1>
+      </div>
+      <div className={styles.facts}>
+        <span><PlanStickerIcon kind="time" /><span><small>時間</small><strong>{input.startTime}–{input.endTime}</strong></span></span>
+        <span><PlanStickerIcon kind="budget" /><span><small>予算</small><strong>{budgetLabel}</strong><small>ふたり分</small></span></span>
+        <span><PlanStickerIcon kind="spots" /><span><small>スポット</small><strong>{data.plan?.items.length ?? 0}</strong></span></span>
+      </div>
     </section>
     {(error || actionError) && !sheet && <p className={styles.notice} role="alert">{actionError || error}</p>}
-    {message && <p className={styles.statusMessage} role="status"><Check size={14} />{message}</p>}
-    {active && !attention && <p className={styles.statusMessage} role="status">変更案を考えています。このまま少しお待ちください。</p>}
+    {active && !attention && <p className={styles.workingMessage} role="status">変更案を考えています。このまま少しお待ちください。</p>}
     {failed && <div className={styles.notice} role="alert"><strong>プランを作り直せませんでした</strong><p>{latest?.error || "時間をおいて、もう一度お試しください。"}</p><Button variant="secondary" size="compact" disabled={pending || active} onClick={() => void act(`/api/sessions/${sessionId}/runs`, { kind: data.plan ? "REPLAN" : "INITIAL_PLAN", trigger: latest?.trigger }, "再度プランを考えています")}>もう一度試す</Button></div>}
     {approval && <section className={styles.approval}><strong>変更案が届きました</strong><p>{approval.diff?.summary || approval.summary}</p><small>内容を確認してから、プランに反映できます。</small><div className={styles.buttonRow}><Button variant="primary" size="compact" disabled={pending} onClick={() => void act(`/api/approvals/${approval.id}/decision`, { decision: "APPROVE" }, "変更を反映しました")}>この変更にする</Button><Button variant="secondary" size="compact" disabled={pending} onClick={() => void act(`/api/approvals/${approval.id}/decision`, { decision: "REJECT" }, "元のプランを残しました")}>元のままにする</Button></div></section>}
     {latest?.status === "WAITING_INPUT" && latest.waitingQuestion && <section className={styles.approval}><strong>{latest.waitingQuestion.prompt}</strong><div className={styles.buttonRow}>{latest.waitingQuestion.options.map((answer) => <Button variant="secondary" size="compact" key={answer} disabled={pending} onClick={() => void act(`/api/runs/${latest.id}/answers`, { questionId: latest.waitingQuestion!.id, answer }, "回答を送りました")}>{answer}</Button>)}</div></section>}
@@ -79,9 +98,9 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
         const next = data.plan?.items[index + 1];
         const gap = next ? Math.round((Date.parse(next.startAt) - Date.parse(item.endAt)) / 60000) : 0;
         return <li key={item.id}>
-          <div className={styles.timelineTime}><time dateTime={item.startAt}>{formatTokyoHm(item.startAt)}</time><span data-kind={visual.image}><visual.Icon size={19} /></span></div>
+          <div className={styles.timelineTime}><time dateTime={item.startAt}>{formatTokyoHm(item.startAt)}</time><span data-kind={visual.id}><visual.Icon size={19} /></span></div>
           <div className={styles.stop}>
-            <article className={styles.spot}>
+            {replanningItemId === item.id ? <article className={styles.replanningSpot} aria-label={`${spot?.name ?? "この場所"}の変更案を考えています`}><PlanLoading demo={fixturesEnabled()} compact /></article> : <article className={styles.spot}>
               {visual.image && <div className={styles.spotImage}><Image src={`/images/itinerary/${visual.image}.jpg`} alt={`${visual.label}のイメージ写真（実際の施設とは異なります）`} fill sizes="(max-width: 430px) 76vw, 330px" /><span className={styles.photoLabel}>イメージ</span></div>}
               <div className={styles.spotBody}>
                 <div className={styles.spotTop}><span className={styles.category}>{visual.label}</span><small><Clock3 size={12} />{duration}分</small>{item.locked && <small>時間固定</small>}{item.progress === "DONE" && <small><Check size={12} />訪問済み</small>}</div>
@@ -90,7 +109,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
                 <div className={styles.spotFoot}><span>{spot?.costForTwoJpy.value ? (spot.costForTwoJpy.value.max === 0 ? "無料" : `¥${spot.costForTwoJpy.value.max.toLocaleString()}まで / ふたり`) : "料金は要確認"}</span>{spot?.officialUrl && <a href={spot.officialUrl} target="_blank" rel="noreferrer">公式サイト <ExternalLink size={12} /></a>}</div>
                 {!["DONE", "REFLECTED"].includes(data.session.status) && <button className={styles.changeSpot} disabled={Boolean(active) || pending} onClick={() => openFeedback({ id: item.id, name: spot?.name ?? "このスポット", locked: item.locked })}><MessageCircle size={14} />ここを変えたい<ArrowUpRight size={13} /></button>}
               </div>
-            </article>
+            </article>}
             {gap > 0 && <p className={styles.transition}><span />次の予定まで {gap}分<small>移動・ひと休み</small></p>}
           </div>
         </li>;
@@ -105,7 +124,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
         event.preventDefault();
         if (!feedback.trim() || pending || active || !fixturesEnabled()) return;
         const trigger = `${target ? `対象: ${target.name}（行程ID: ${target.id}）。` : "プラン全体について。"}希望: ${feedback.trim()}。固定予定と訪問済みの予定は維持し、必要な前後の予定も調整してください。`;
-        if (await act(`/api/sessions/${sessionId}/runs`, { kind: "REPLAN", trigger }, fixturesEnabled() ? "サンプルとして希望を受け付けました。実際の再提案は行いません。" : "希望を送りました。変更案を考えています。")) setSheet(null);
+        await replan(trigger, target?.id ?? null);
       }}>
         <div className={styles.feedbackIntro}><MoodSticker mood="relaxed" /><div><strong>{target?.name ?? "一日の過ごし方"}</strong><p>気になることを、ひとこと教えてね。</p></div></div>
         {target?.locked && <p className={styles.fieldHint}>時間が決まっている予定です。固定条件を守れる範囲で調整します。</p>}

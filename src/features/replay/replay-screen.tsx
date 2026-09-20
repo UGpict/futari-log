@@ -1,21 +1,20 @@
 "use client";
 
 import { Button } from "@/components/button";
+import { HomeLogo } from "@/components/home-logo";
 
-import { CostBadge } from "@/components/cost-badge";
-import { ModeBanner } from "@/components/mode-banner";
 import { useReplay } from "@/client/hooks/use-replay";
 
 export function ReplayScreen({ replayId }: { replayId: string }) {
   const { data, index, setIndex, playing, setPlaying } = useReplay(replayId);
 
-  if (!data) return <main className="p-8">読み込み中…</main>;
+  if (!data) return <main className="p-8"><HomeLogo />読み込み中…</main>;
   const visible = data.events.slice(0, index + 1);
   const spots = Object.fromEntries(data.spots.map((s) => [s.id, s.name]));
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8 pb-28">
-      <ModeBanner runtime="REPLAY" replay />
+      <HomeLogo />
       <h1 className="mt-4 text-2xl font-semibold">REPLAY</h1>
       <p className="text-sm text-ink-soft">{data.notes}</p>
       <div className="mt-4 flex gap-2">
@@ -51,14 +50,6 @@ export function ReplayScreen({ replayId }: { replayId: string }) {
           </ul>
         </section>
       ) : null}
-      <CostBadge
-        replay
-        llmJpy={data.costSnapshot.llmJpy}
-        apiJpy={data.costSnapshot.apiJpy}
-        hard={data.costSnapshot.hardCalls}
-        mundane={data.costSnapshot.mundaneCalls}
-        unaccounted={data.costSnapshot.unaccountedCalls}
-      />
     </main>
   );
 }

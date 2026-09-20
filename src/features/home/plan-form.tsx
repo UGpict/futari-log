@@ -7,12 +7,28 @@ import { useRouter } from "next/navigation";
 import { PlanLoading } from "@/features/session/plan-loading";
 import { api, fixturesEnabled } from "@/client/api";
 import { useMe } from "@/client/hooks/use-me";
-import { ModeBanner } from "@/components/mode-banner";
 import { MemoMascot } from "@/components/memo-mascot";
-import { Plus, ChevronLeft, ArrowRight, Check, ChevronDown, Sparkles, CalendarHeart, MapPinned } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, ArrowRight, Check, ChevronDown, Sparkles, CalendarHeart, Clock3, MapPinned } from "lucide-react";
 import styles from "./home.module.css";
 
-export function PlanForm({ initialDate, initialWish }: { initialDate: string; initialWish?: string }) {
+const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
+const timeOptions = Array.from({ length: 34 }, (_, index) => {
+  const minutes = 7 * 60 + index * 30;
+  const hour = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+});
+
+function parseDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function dateValue(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+export function PlanForm({ initialDate, initialWish, onStepChange }: { initialDate: string; initialWish?: string; onStepChange?: (step: number) => void }) {
   const router = useRouter();
   const { me, error: authError } = useMe();
   const [step, setStep] = useState(0);
@@ -59,6 +75,7 @@ export function PlanForm({ initialDate, initialWish }: { initialDate: string; in
       advanceTimer.current = null;
       setAdvancing(false);
       setStep(next);
+      onStepChange?.(next);
       setReached((previous) => Math.max(previous, next));
       requestAnimationFrame(() => { heading.current?.focus({ preventScroll: true }); heading.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); });
     };
@@ -87,6 +104,14 @@ export function PlanForm({ initialDate, initialWish }: { initialDate: string; in
     fixedEnd: "16:00",
     auto: false,
   });
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [choosingDate, setChoosingDate] = useState<string | null>(null);
+  const calendarTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (calendarTimer.current) clearTimeout(calendarTimer.current); }, []);
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const initial = parseDate(initialDate);
+    return new Date(initial.getFullYear(), initial.getMonth(), 1);
+  });
 
   const dateTokyo = form.dateTokyo || me?.demoDate || "2026-09-19";
   const meetName =
@@ -95,8 +120,47 @@ export function PlanForm({ initialDate, initialWish }: { initialDate: string; in
     "名古屋駅";
   const wish = [currentCategory?.wish, selected.filter((item) => item !== "おまかせ").length ? `気になること：${selected.filter((item) => item !== "おまかせ").join("、")}` : "", form.self.trim()].filter(Boolean).join("。") || "ふたりで楽しめる過ごし方を提案してほしい";
   const total = Number(form.meals) + Number(form.facilities) + Number(form.transit);
+  const budgetTotalValue = [form.meals, form.facilities, form.transit].every((value) => value.trim() !== "") ? String(total) : "";
   const timingValid = Boolean(dateTokyo && form.startTime && form.endTime && form.startTime < form.endTime);
   const valid = Boolean(category || selected.length || form.self.trim()) && timingValid && [form.meals, form.facilities, form.transit].every((value) => value.trim() !== "" && Number.isFinite(Number(value)) && Number(value) >= 0) && (!form.locked || (form.fixedName.trim() && form.fixedStart >= form.startTime && form.fixedEnd <= form.endTime && form.fixedStart < form.fixedEnd));
+  const selectedDate = parseDate(dateTokyo);
+  const calendarStart = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1).getDay();
+  const calendarDays = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0).getDate();
+  const dateLabel = `${selectedDate.getMonth() + 1}月${selectedDate.getDate()}日（${weekdays[selectedDate.getDay()]}）`;
+
+  function changeCalendarMonth(offset: number) {
+    setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
+  }
+
+  function setTotalBudget(value: string) {
+    if (value === "") {
+      setForm({ ...form, meals: "", facilities: "", transit: "" });
+      return;
+    }
+    const amount = Math.max(0, Number(value));
+    if (!Number.isFinite(amount)) return;
+    const meals = Math.round(amount * .6);
+    const facilities = Math.round(amount * .3);
+    setForm({ ...form, meals: String(meals), facilities: String(facilities), transit: String(amount - meals - facilities) });
+  }
+
+  function chooseDate(day: number) {
+    if (choosingDate) return;
+    const next = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), day);
+    const value = dateValue(next);
+    setForm({ ...form, dateTokyo: value });
+    setChoosingDate(value);
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setCalendarOpen(false);
+      setChoosingDate(null);
+      return;
+    }
+    calendarTimer.current = setTimeout(() => {
+      calendarTimer.current = null;
+      setCalendarOpen(false);
+      setChoosingDate(null);
+    }, 420);
+  }
 
   async function submit() {
     if (!me || !valid || busy) return;
@@ -199,11 +263,13 @@ export function PlanForm({ initialDate, initialWish }: { initialDate: string; in
   return (
     <div className={`${styles.planForm} ${styles.compactPlan}`}>
       <nav className={styles.planProgress} aria-label="プラン作成の進捗">
-        {["過ごし方", "日時と場所", "仕上げ"].map((label, index) => <button type="button" key={label} disabled={index > reached || busy || advancing || selectingCategory} data-complete={index < reached} aria-current={step === index ? "step" : undefined} onClick={() => move(index)}><span>{index < reached ? <Check size={12} /> : index + 1}</span>{label}</button>)}
+        {["過ごし方", "日時・場所", "予算・希望"].map((label, index) => <button type="button" key={label} disabled={index > reached || busy || advancing || selectingCategory} data-complete={index < reached} aria-current={step === index ? "step" : undefined} onClick={() => move(index)}><span>{index < reached ? <Check size={12} /> : index + 1}</span>{label}</button>)}
       </nav>
       <div className={styles.planCompanion}><MemoMascot nextCue={nextCue} /></div>
       <section key={step} className={`${styles.planStage} ${advancing ? styles.stageLeaving : styles.stageEntering}`} inert={advancing || selectingCategory}>
-        <h3 ref={heading} tabIndex={-1} className={step > 0 ? "sr-only" : undefined}>{["どんな一日にしよう？", "いつ・どこで過ごそう？", "大事にしたいことは？"][step]}</h3>
+        {step > 0 && <button type="button" className={styles.stepBack} onClick={() => move(step - 1)}><ChevronLeft size={18} />{step === 1 ? "過ごし方に戻る" : "日時と場所に戻る"}</button>}
+        <h3 ref={heading} tabIndex={-1} className={step === 1 ? "sr-only" : undefined}>{["どんな一日にしよう？", "いつ・どこで過ごそう？", "予算を決めよう"][step]}</h3>
+        {step === 2 && <p className={styles.budgetLead}>食事・施設・交通費を含む、ふたり分の目安です</p>}
 
         {step === 0 && <>
           {(showCategories || !currentCategory) && <div className={`${styles.dateMoodGrid} ${selectingCategory ? styles.categoryFading : ""}`} aria-label="デートの気分">
@@ -224,10 +290,27 @@ export function PlanForm({ initialDate, initialWish }: { initialDate: string; in
           {freeWish && <label className={styles.formLabel}>こんなこともしたい<textarea rows={2} maxLength={1500} placeholder="海が見えるところで、ゆっくりしたい" value={form.self} onChange={(e) => setForm({ ...form, self: e.target.value })} /></label>}
         </>}
         {step === 1 && <div className={styles.schedulePanel}>
-          <label className={styles.scheduleDate}><CalendarHeart size={19} /><span className="sr-only">日にち</span><input aria-label="日にち" type="date" value={dateTokyo} onChange={(e) => setForm({ ...form, dateTokyo: e.target.value })} /></label>
+          <div className={styles.scheduleDatePicker}>
+            <button type="button" className={styles.scheduleDate} aria-expanded={calendarOpen} aria-controls="plan-calendar" onClick={() => { if (calendarTimer.current) return; setCalendarMonth(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1)); setCalendarOpen(!calendarOpen); }}>
+              <CalendarHeart size={20} /><span><small>日にち</small><strong>{dateLabel}</strong></span><ChevronDown size={17} />
+            </button>
+            {calendarOpen && <div id="plan-calendar" className={styles.planCalendar} role="dialog" aria-label="日にちを選ぶ">
+              <div className={styles.planCalendarHeader}>
+                <button type="button" aria-label="前の月" onClick={() => changeCalendarMonth(-1)}><ChevronLeft size={18} /></button>
+                <strong>{calendarMonth.getFullYear()}年 {calendarMonth.getMonth() + 1}月</strong>
+                <button type="button" aria-label="次の月" onClick={() => changeCalendarMonth(1)}><ChevronRight size={18} /></button>
+              </div>
+              <div className={styles.planCalendarWeekdays} aria-hidden="true">{weekdays.map((day) => <span key={day}>{day}</span>)}</div>
+              <div className={styles.planCalendarDays}>{Array.from({ length: calendarStart }, (_, index) => <span key={`empty-${index}`} />)}{Array.from({ length: calendarDays }, (_, index) => {
+                const day = index + 1;
+                const value = dateValue(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), day));
+                return <button type="button" key={day} aria-label={`${calendarMonth.getMonth() + 1}月${day}日`} aria-pressed={value === dateTokyo} aria-disabled={Boolean(choosingDate)} data-choosing={value === choosingDate || undefined} onClick={() => chooseDate(day)}>{day}</button>;
+              })}</div>
+            </div>}
+          </div>
           <fieldset className={styles.scheduleTime}><legend className="sr-only">時間帯</legend>
-            <div className={styles.timePresets}>{[{ label: "昼から", start: "11:00", end: "17:00" }, { label: "午後から", start: "13:00", end: "18:00" }, { label: "夜から", start: "17:00", end: "21:00" }].map((item) => <button type="button" key={item.label} aria-pressed={form.startTime === item.start && form.endTime === item.end} onClick={() => setForm({ ...form, startTime: item.start, endTime: item.end })}>{item.label}</button>)}</div>
-            <div className={styles.inlineTimes}><input aria-label="開始時刻" type="time" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} /><span>—</span><input aria-label="終了時刻" type="time" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })} /></div>
+            <div className={styles.timePresets}>{[{ label: "朝から", start: "09:00", end: "15:00" }, { label: "昼から", start: "11:00", end: "17:00" }, { label: "午後から", start: "13:00", end: "18:00" }, { label: "夜から", start: "17:00", end: "21:00" }].map((item) => <button type="button" key={item.label} aria-pressed={form.startTime === item.start && form.endTime === item.end} onClick={() => setForm({ ...form, startTime: item.start, endTime: item.end })}>{item.label}</button>)}</div>
+            <div className={styles.inlineTimes}><Clock3 size={17} aria-hidden="true" /><label><span>開始</span><select aria-label="開始時刻" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</select><ChevronDown size={16} aria-hidden="true" /></label><span>〜</span><label><span>終了</span><select aria-label="終了時刻" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</select><ChevronDown size={16} aria-hidden="true" /></label></div>
           </fieldset>
           {!timingValid && <p className={styles.error} role="alert">終了は開始よりあとの時刻にしてね。</p>}
           <div className={styles.meetingCard}><label><MapPinned size={18} /><span>待ち合わせ</span><input aria-label="集合場所" value={meetName} onChange={(e) => setForm({ ...form, meetName: e.target.value })} placeholder="駅や目印になる場所" /></label>
@@ -235,8 +318,8 @@ export function PlanForm({ initialDate, initialWish }: { initialDate: string; in
           </div>
         </div>}
         {step === 2 && <div className={styles.finishPanel}>
-          <details className={styles.finishReview}><summary>{dateTokyo.slice(5).replace("-", "/")} · {form.startTime}〜{form.endTime}<span>条件を確認 <ChevronDown size={13} /></span></summary><p>{wish}</p><p>集合：{meetName} / 解散：{form.endName || meetName}</p><button type="button" onClick={() => move(0)}>過ごし方を変更</button><button type="button" onClick={() => move(1)}>日時・場所を変更</button></details>
-          <fieldset className={styles.planFieldset}><legend>予算 <span>ふたり合計・交通費込み</span></legend><div className={styles.planChips}>{[5000, 10000, 15000].map((amount) => <button type="button" key={amount} aria-pressed={total === amount} onClick={() => setForm({ ...form, meals: String(amount * .6), facilities: String(amount * .3), transit: String(amount * .1) })}>{amount.toLocaleString()}円</button>)}</div>          <details className={styles.planDetails}><summary>金額・内訳を調整 <ChevronDown size={14} /></summary><p className={styles.planHint}>食事 {form.meals}円 / 施設 {form.facilities}円 / 交通 {form.transit}円</p>{([ ["meals", "食事"], ["facilities", "施設"], ["transit", "交通"] ] as const).map(([key, label]) => <label key={key} className={styles.formLabel}>{label}（円）<input type="number" min="0" step="100" value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} /></label>)}</details></fieldset>
+          <fieldset className={styles.planFieldset}><legend className="sr-only">ふたり分の予算</legend><div className={styles.budgetChoices}>{[5000, 10000, 15000].map((amount) => <button type="button" key={amount} aria-pressed={total === amount} onClick={() => setForm({ ...form, meals: String(amount * .6), facilities: String(amount * .3), transit: String(amount * .1) })}>{total === amount && <Check size={14} />}{amount.toLocaleString()}円{amount === 10000 && <small>おすすめ</small>}</button>)}</div><details className={styles.planDetails}><summary>予算を自分で入力する <ChevronDown size={16} /></summary><label className={`${styles.formLabel} ${styles.totalBudgetInput}`}>ふたり分の合計金額<input aria-label="ふたり分の合計予算" type="number" inputMode="numeric" min="0" step="500" value={budgetTotalValue} onChange={(e) => setTotalBudget(e.target.value)} /></label><p className={styles.planHint}>内訳はAIにおまかせできます</p><details className={styles.budgetBreakdown}><summary>食事・施設・交通の内訳も決める <ChevronDown size={14} /></summary>{([ ["meals", "食事"], ["facilities", "施設"], ["transit", "交通"] ] as const).map(([key, label]) => <label key={key} className={styles.formLabel}>{label}（円）<input type="number" min="0" step="100" value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} /></label>)}</details></details></fieldset>
+          <div className={styles.optionalHeading}><h4>ほかに伝えておくこと</h4><p>必要なものだけ追加できます</p></div>
           <details className={styles.planDetails}><summary><Plus size={14} />相手の希望を添える <span>任意</span></summary><label className={styles.formLabel}>相手が楽しみにしていること<textarea rows={2} maxLength={2000} value={form.partner} onChange={(e) => setForm({ ...form, partner: e.target.value })} placeholder="パンケーキを食べたいって言っていた" /></label></details>
           <details className={styles.planDetails}><summary><Plus size={14} />時間が決まっている予定 <span>任意</span></summary><label className={styles.planToggle}><input type="checkbox" checked={form.locked} onChange={(e) => setForm({ ...form, locked: e.target.checked })} />プランに固定の予定を入れる</label>{form.locked && <><label className={styles.formLabel}>場所・予定の名前<input value={form.fixedName} onChange={(e) => setForm({ ...form, fixedName: e.target.value })} placeholder="美術館の展示を見る" /></label><div className={styles.planTimeRow}><label className={styles.formLabel}>開始<input type="time" value={form.fixedStart} onChange={(e) => setForm({ ...form, fixedStart: e.target.value })} /></label><span>〜</span><label className={styles.formLabel}>終了<input type="time" value={form.fixedEnd} onChange={(e) => setForm({ ...form, fixedEnd: e.target.value })} /></label></div><p className={styles.planHint}>デートの時間内で指定してください。予約は行いません。</p></>}</details>
           {!valid && <p role="alert" className={styles.error}>予算は0円以上、固定予定は名前とデート時間内の開始・終了を入力してね。</p>}
@@ -244,9 +327,9 @@ export function PlanForm({ initialDate, initialWish }: { initialDate: string; in
       </section>
       <footer className={styles.planFooter}>
         {(error || authError) && <p role="alert" className={styles.error}>{error || authError}</p>}
-        {step < 2 ? <Button fullWidth type="button" className={styles.primaryButton} disabled={advancing || selectingCategory || (step === 0 ? !category && !selected.length && !form.self.trim() : !timingValid)} onClick={() => move(step + 1)}>{step === 0 ? (selected.some((item) => item !== "おまかせ") || form.self.trim() ? "この希望で進む" : "この気分でおまかせ") : "仕上げに進む"}<ArrowRight size={18} /></Button> : <><p className={styles.planHint}>{form.startTime}〜{form.endTime} · ふたりで{total.toLocaleString()}円まで</p><Button fullWidth type="button" className={styles.primaryButton} disabled={busy || !me || !valid} onClick={() => void submit()}><Sparkles size={18} />{!me ? "準備中…" : busy ? "プランを考えています…" : "この条件でプランをつくる"}</Button></>}
+        {step < 2 ? <Button fullWidth type="button" className={styles.primaryButton} disabled={advancing || selectingCategory || (step === 0 ? !category && !selected.length && !form.self.trim() : !timingValid)} onClick={() => move(step + 1)}>{step === 0 ? (selected.some((item) => item !== "おまかせ") || form.self.trim() ? "この希望で進む" : "この気分でおまかせ") : "予算と希望へ"}<ArrowRight size={18} /></Button> : <><p className={styles.planTotalSummary}><strong>ふたりで {total.toLocaleString()}円まで</strong><small>{form.startTime}〜{form.endTime}</small></p><Button fullWidth type="button" className={styles.primaryButton} disabled={busy || !me || !valid} onClick={() => void submit()}><Sparkles size={18} />{!me ? "準備中…" : busy ? "プランを考えています…" : "この内容でプランをつくる"}</Button></>}
       </footer>
-      {me && step === 2 && <details className={styles.environmentDetails}><summary>実行環境について</summary><ModeBanner runtime={me.runtime} emulator={me.emulator} dataBackend={me.dataBackend} authBackend={me.authBackend} />{me.blockers.map((blocker) => <p key={blocker.code}>{blocker.item}</p>)}</details>}
+      {me && me.blockers.length > 0 && step === 2 && <details className={styles.environmentDetails}><summary>実行環境について</summary>{me.blockers.map((blocker) => <p key={blocker.code}>{blocker.item}</p>)}</details>}
     </div>
   );
 }

@@ -20,12 +20,18 @@ export function RiveMascot({ variant, nextCue = 0, active = true }: {
   const canvas = useRef<HTMLCanvasElement>(null);
   const player = useRef<Rive | null>(null);
   const reducedMotion = useRef(false);
-  const [ready, setReady] = useState(false);
+  const [loadedScene, setLoadedScene] = useState<typeof scene | null>(null);
+  const [failedScene, setFailedScene] = useState<typeof scene | null>(null);
+  const ready = loadedScene === scene;
+  const failed = failedScene === scene;
 
   useEffect(() => {
     const element = canvas.current;
     if (!element) return;
     let disposed = false;
+    let frames = 0;
+    let revealFrame = 0;
+    let revealed = false;
     let instance: Rive | null = null;
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
     reducedMotion.current = preference.matches;
@@ -63,15 +69,26 @@ export function RiveMascot({ variant, nextCue = 0, active = true }: {
           if (disposed) return;
           instance?.resizeDrawingSurfaceToCanvas();
           player.current = instance;
-          setReady(true);
           syncMotion();
         },
-        onLoadError: () => { if (!disposed) setReady(false); },
+        // Loading the file does not mean the canvas has painted yet. Let the
+        // renderer warm up while hidden, then reveal it on the next frame.
+        onAdvance: () => {
+          if (disposed || revealed || revealFrame || ++frames < 3) return;
+          revealFrame = requestAnimationFrame(() => {
+            revealFrame = 0;
+            if (disposed) return;
+            revealed = true;
+            setLoadedScene(scene);
+          });
+        },
+        onLoadError: () => { if (!disposed) setFailedScene(scene); },
       });
-    }).catch(() => { /* The matching static illustration remains visible. */ });
+    }).catch(() => { if (!disposed) setFailedScene(scene); });
 
     return () => {
       disposed = true;
+      cancelAnimationFrame(revealFrame);
       player.current = null;
       observer.disconnect();
       intersection.disconnect();
@@ -94,8 +111,8 @@ export function RiveMascot({ variant, nextCue = 0, active = true }: {
   return (
     <span className={`${styles.mascot} ${styles[variant]}`} aria-hidden="true">
       <Image src={scene.poster} alt="" width={500} height={500}
-        unoptimized loading={variant === "suggestion" ? "eager" : "lazy"} className={`${styles.visual} ${ready ? styles.hidden : ""}`} />
-      <canvas ref={canvas} className={`${styles.visual} ${ready ? "" : styles.hidden}`} />
+        unoptimized loading={variant === "suggestion" ? "eager" : "lazy"} className={`${styles.visual} ${!failed && (ready || variant === "suggestion") ? styles.hidden : ""}`} />
+      <canvas ref={canvas} className={`${styles.visual} ${styles.animation} ${ready && !failed ? "" : styles.hidden}`} />
     </span>
   );
 }

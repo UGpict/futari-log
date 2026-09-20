@@ -1,0 +1,7 @@
+.composer { flex-shrink: 0; padding: 0 0 24px; color: var(--memo-ink); }
+.form { display: grid; gap: 12px; }
+.form label { font-size: 14px; font-weight: 650; }
+.form textarea { width: 100%; min-height: 108px; max-height: 108px; resize: none; padding: 14px; border: 1px solid var(--memo-border); border-radius: var(--radius-field); background: var(--memo-field); color: var(--memo-ink); font: inherit; font-size: 16px; line-height: 1.7; }
+.form textarea::placeholder { color: var(--memo-muted); opacity: 1; }
+/* Higher specificity than the sheet's generic focus rule; no external ring. */
+.composer .form textarea:focus { outline: none; box-shadow: none; border-color: var(--memo-accent); }
