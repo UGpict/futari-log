@@ -21,17 +21,27 @@ export const LIMITS = {
   sourceFetchMaxBytes: 512_000,
 } as const;
 
-export const WALK_LIMITS = {
-  legMinutes: 25,
-  totalMinutes: 45,
-} as const;
-
 export const DEADLINES_MS = {
   INITIAL_PLAN: 60_000,
   REPLAN: 30_000,
   REFLECTION: 10_000,
   NEXT_PLAN: 60_000,
 } as const;
+
+/** アプリが Routes 予測に足す余裕。API の duration とは別フィールドに持つ */
+export const TRAVEL_BUFFER_MINUTES = {
+  WALK: 5,
+  TRANSIT: 8,
+  DRIVE: 5,
+} as const;
+
+/** 徒歩の確認閾値。超えたら交通手段を勝手に変えず、確認質問にする */
+export const WALK_LIMITS = {
+  legMinutes: 25,
+  totalMinutes: 45,
+} as const;
+
+export { SEARCH_EXPAND } from "@/contracts/serviceArea";
 
 export const CACHE_TTL_MS = {
   spotBasics: 24 * 60 * 60 * 1000,
@@ -63,10 +73,17 @@ export const MODEL_PARAMS = {
 export const PLACES_FIELD_MASK_SEARCH =
   "places.id,places.displayName,places.location,places.types,places.primaryType,places.googleMapsUri";
 
+export const PLACES_FIELD_MASK_TEXT =
+  "places.id,places.displayName,places.location,places.formattedAddress,places.types";
+
 export const PLACES_FIELD_MASK_DETAILS =
   "id,displayName,location,types,primaryType,websiteUri,googleMapsUri,regularOpeningHours,currentOpeningHours,priceLevel,priceRange,businessStatus";
 
-export const PLACES_FIELD_MASK_TEXT =
-  "places.id,places.displayName,places.formattedAddress,places.location";
+/** 行程写真専用。プラン生成の Details マスクには載せない */
+export const PLACES_FIELD_MASK_PHOTOS = "id,googleMapsUri,photos";
+export const PLACE_PHOTO_MAX_IDS = 8;
+export const PLACE_PHOTO_MAX_PX = 800;
+export const PLACE_PHOTO_NAME_RETRY = 1;
+export const PLACE_PHOTO_FAIL_LIMIT = 2;
 
 export const ROUTES_FIELD_MASK = "routes.duration,routes.distanceMeters";

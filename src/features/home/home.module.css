@@ -20,8 +20,8 @@
 }
 
 .page button, .sheet button { cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
-.page button, .sheet button, .sheet a, .sheet input, .sheet textarea { transition: background .18s, box-shadow .18s, transform .18s; }
-.page button:focus-visible, .sheet button:focus-visible, .sheet a:focus-visible, .sheet input:focus-visible, .sheet textarea:focus-visible {
+.page button, .sheet button, .sheet a, .sheet input, .sheet select, .sheet textarea { transition: background .18s, box-shadow .18s, transform .18s; }
+.page button:focus-visible, .sheet button:focus-visible, .sheet a:focus-visible, .sheet input:focus-visible, .sheet select:focus-visible, .sheet textarea:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 4px;
 }
@@ -85,8 +85,8 @@
   background: #fffeff;
 }
 .calendarHeader { display: grid; grid-template-columns: 40px 1fr 40px; align-items: center; padding: 0 4px 10px; gap: 6px; }
-.monthButton { display: grid; place-items: center; width: 34px; height: 34px; margin: 0 auto; border: 0; border-radius: 50%; background: #d889a8; color: #fff; }
-.monthButton:hover { background: #cd7d9f; }
+.monthButton { display: grid; place-items: center; width: 34px; height: 34px; margin: 0 auto; border: 0; border-radius: 50%; background: transparent; color: #c47a9b; }
+.monthButton:hover { background: #f7e8ee; }
 .monthButton:active { transform: scale(.93); }
 .calendarHeader h2 { display: flex; align-items: baseline; justify-content: center; gap: 7px; font-size: 24px; font-weight: 600; letter-spacing: -.025em; color: #685265; white-space: nowrap; }
 .calendarHeader h2 small { font-size: 15px; margin-left: 3px; }
@@ -108,23 +108,9 @@
   z-index: 12;
   right: max(10px, calc((100vw - 430px) / 2 + 10px));
   bottom: calc(14px + env(safe-area-inset-bottom));
-  display: flex;
-  width: 100px;
-  height: 100px;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
 }
-.fabText { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; fill: #b55f70; font-size: 8px; font-weight: 600; letter-spacing: .08em; }
-.fabCore { position: relative; display: block; width: 68px; height: 68px; overflow: visible; }
 .pageFootnote { display: flex; align-items: center; justify-content: center; gap: 12px; padding-top: 8px; font-size: 9px; color: #a299a4; }
 .pageFootnote button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 8px 16px; border: 0; border-radius: 999px; background: #f9e8ef; color: #b7688b; font-size: 11px; font-weight: 600; }
-.toast { position: fixed; z-index: 30; left: 50%; bottom: calc(98px + env(safe-area-inset-bottom)); width: max-content; max-width: calc(100% - 32px); transform: translateX(-50%); display: flex; align-items: center; gap: 9px; border-radius: 999px; padding: 10px 17px 10px 11px; background: #fce4ee; color: #a9597d; font-size: 11px; font-weight: 500; animation: toastAppear .22s ease-out; }
-.toastIcon { display: grid; place-items: center; width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%; background: #e78fae; color: white; }
-@keyframes toastAppear { from { opacity: 0; transform: translate(-50%, 7px); } to { opacity: 1; transform: translate(-50%, 0); } }
-@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
 
 .sheet { position: fixed; inset: auto 0 0; width: 100%; max-width: 430px; max-height: 91dvh; margin: 0 auto; padding: 0; border: none; border-radius: 28px 28px 0 0; background: #fffcf9; color: var(--text-primary); overscroll-behavior: contain; box-shadow: 0 -10px 80px #30243215; }
 .sheet[open] { animation: sheetUp .25s ease-out; }
@@ -298,8 +284,10 @@
 .dateDetails .planChips button { min-height: 39px; font-size: 11px; padding: 8px 11px; }
 
 /* Compact planning sheet: progress, mascot, then one choice surface. */
-.sheet:has(.compactPlan) .sheetInner { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
-.sheet:has(.compactPlan) .sheetHeader { margin-bottom: 8px; }
+.sheet:has(.compactPlan) { display: flex; flex-direction: column; overflow: hidden; }
+.sheet:has(.compactPlan) .sheetInner { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+.sheet:has(.compactPlan) .sheetHeader { flex-shrink: 0; margin-bottom: 8px; }
+.sheet:has(.compactPlan) .sheetHandle { flex-shrink: 0; }
 .planProgress { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; }
 .planProgress button { position: relative; flex-direction: column; gap: 4px; padding: 3px 0; min-height: 44px; font-size: 10px; isolation: isolate; }
 .planProgress button:not(:last-child)::after { content: ''; position: absolute; left: 50%; top: 15px; width: 100%; height: 3px; background: #e8dce3; z-index: -1; }
@@ -309,16 +297,37 @@
 .planProgress button:disabled { opacity: 1; color: #aa98a4; }
 .planCompanion { height: 74px; margin: 0; overflow: hidden; }
 .planCompanion > span { transform: scale(.58); transform-origin: top center; }
-.compactPlan { gap: 8px; }
+.compactPlan { flex: 1; min-height: 0; gap: 8px; }
 .compactPlan .planStage h3 { text-align: center; font-size: 19px; }
 .compactPlan .dateMoodGrid { gap: 9px; margin: 12px 0 8px; }
 .compactPlan .dateMoodPhoto { height: clamp(58px, 11dvh, 94px); aspect-ratio: auto; background-size: 200% auto; }
 .compactPlan .dateMoodCaption { padding: 8px; text-align: center; }
 .compactPlan .dateMoodCaption strong { font-size: 12px; }
 .compactPlan .planChips { margin: 8px 0 0; }
-.compactPlan .planFooter { bottom: 0; padding: 8px 0 0; }
+.compactPlan .planStage { flex: 1; min-height: 0; overflow: auto; }
+.compactPlan .planFooter { position: static; bottom: auto; z-index: 1; flex-shrink: 0; padding: 8px 0 0; }
 .compactPlan .dateDetails { padding: 0; margin-top: 6px; border: 0; background: transparent; }
-.categoryBack { min-height: 36px; color: #9c6585; font-size: 11px; }
+.stepBack { display: inline-flex; min-height: 44px; align-items: center; gap: 6px; margin: -4px 0 4px -8px; padding: 8px 12px; border-radius: 12px; color: #925675; font-size: 12px; font-weight: 600; }
+.stepBack:hover { background: #f6e9f0; }
+.stepBack:active { background: #efdee8; }
+.categoryBack {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 6px -8px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  color: #925675;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  touch-action: manipulation;
+}
+.categoryBack:hover { background: #f6e9f0; }
+.categoryBack:active { background: #efdee8; transform: scale(.98); }
+.categoryBack > svg { width: 18px; height: 18px; flex-shrink: 0; }
+.categoryBack:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .selectedCategoryPhoto { display: flex; align-items: end; height: 70px; border-radius: 13px; overflow: hidden; background-image: url('/images/date-moods.png'); background-size: 200% auto; }
 .selectedCategoryPhoto strong { width: 100%; padding: 9px 12px; color: white; font-size: 13px; background: linear-gradient(transparent, #352731bb); }
 .categoryQuestion { margin-top: 13px; font-size: 14px; font-weight: 600; }
@@ -338,16 +347,45 @@
 .dateDetails .categoryQuestion, .dateDetails > .planHint, .dateDetails .planChips { animation: planEnter .3s .16s both; }
 .planChips button { transition: background .18s, border-color .18s, box-shadow .18s, transform .18s; }
 .planChips button:active { transform: scale(.94); }
-.schedulePanel { display: grid; gap: 12px; }
-.scheduleDate { display: flex; align-items: center; gap: 12px; border: 1px solid #ebdfe6; border-radius: 16px; padding: 12px 14px; background: white; color: #bd7798; }
-.scheduleDate input { flex: 1; border: 0; outline-offset: 2px; padding: 4px 0; color: #695362; font-weight: 600; }
+.schedulePanel { position: relative; display: grid; gap: 12px; }
+.scheduleDatePicker { position: relative; }
+.scheduleDate { display: flex; width: 100%; min-height: 60px; align-items: center; gap: 12px; border: 1px solid #ebdfe6; border-radius: 16px; padding: 10px 14px; background: white; color: #bd7798; text-align: left; }
+.scheduleDate > span { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }
+.scheduleDate small { color: #9d8796; font-size: 10px; font-weight: 500; }
+.scheduleDate strong { color: #695362; font-size: 15px; font-weight: 650; }
+.scheduleDate > svg:last-child { transition: transform .18s; }
+.scheduleDate[aria-expanded="true"] > svg:last-child { transform: rotate(180deg); }
+.planCalendar { position: absolute; z-index: 8; top: calc(100% + 7px); left: 0; width: 100%; padding: 12px; border: 1px solid #eadde5; border-radius: 20px; background: #fffdfb; box-shadow: 0 15px 40px #5d405329; animation: calendarPop .2s cubic-bezier(.22,1,.36,1) both; }
+.planCalendarHeader { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; margin-bottom: 7px; }
+.planCalendarHeader strong { text-align: center; color: #765d6d; font-size: 14px; }
+.planCalendarHeader button { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 50%; color: #b5678b; }
+.planCalendarHeader button:hover { background: #faedf3; }
+.planCalendarWeekdays, .planCalendarDays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); text-align: center; }
+.planCalendarWeekdays { color: #aa97a4; font-size: 10px; }
+.planCalendarWeekdays span { padding: 4px 0; }
+.planCalendarWeekdays span:first-child { color: #c77998; }
+.planCalendarDays > span, .planCalendarDays button { min-width: 0; height: 38px; }
+.planCalendarDays button { position: relative; z-index: 0; isolation: isolate; color: #806c79; font-size: 13px; font-variant-numeric: tabular-nums; }
+.planCalendarDays button::before { content: ''; position: absolute; z-index: -1; top: 50%; left: 50%; width: 34px; height: 34px; border-radius: 50%; transform: translate(-50%, -50%); transition: background .18s, box-shadow .18s; }
+.planCalendarDays button:nth-child(7n + 1) { color: #c16e91; }
+.planCalendarDays button:hover::before { background: #f9edf3; }
+.planCalendarDays button[aria-pressed="true"] { color: white; font-weight: 700; }
+.planCalendarDays button[aria-pressed="true"]::before { background: #cc789c; box-shadow: 0 3px 9px #a95c7e33; }
+.planCalendarDays button[data-choosing="true"] { animation: chosenDateText .42s ease-out both; }
+.planCalendarDays button[data-choosing="true"]::before { animation: chosenDatePop .42s cubic-bezier(.2,1.65,.45,1) both; }
+@keyframes chosenDateText { 45% { color: #fff; } }
+@keyframes chosenDatePop { 0% { transform: translate(-50%, -50%) scale(.72); } 58% { transform: translate(-50%, -50%) scale(1.18); } 100% { transform: translate(-50%, -50%) scale(1); } }
+@keyframes calendarPop { from { opacity: 0; transform: translateY(-7px) scale(.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
 .scheduleTime { min-width: 0; border: 1px solid #ebdfe6; border-radius: 18px; padding: 10px 12px; background: white; }
-.timePresets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; background: #f8f1f5; border-radius: 12px; }
-.timePresets button { min-height: 38px; border-radius: 9px; font-size: 12px; color: #98818f; }
+.timePresets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px; background: #f8f1f5; border-radius: 12px; }
+.timePresets button { min-height: 40px; padding-inline: 2px; border-radius: 9px; font-size: 11px; color: #98818f; }
 .timePresets button[aria-pressed="true"] { background: #fff; color: #b55f85; box-shadow: 0 2px 7px #77516612; }
-.inlineTimes { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
-.planForm .inlineTimes input { min-width: 0; width: calc(50% - 15px); padding: 7px 3px; border: 0; color: #75596b; font-size: 19px; text-align: center; }
-.inlineTimes span { color: #bba5b3; }
+.inlineTimes { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; gap: 8px; margin-top: 10px; }
+.inlineTimes > svg { align-self: center; color: #c07898; }
+.inlineTimes label { position: relative; display: flex; min-width: 0; flex-direction: column; gap: 3px; color: #a08c99; font-size: 9px; }
+.inlineTimes label > select { width: 100%; min-height: 42px; padding: 6px 29px 6px 8px; border: 1px solid #eadfe5; border-radius: 11px; appearance: none; -webkit-appearance: none; background: #fff; color: #6f5867; font-size: 16px; font-weight: 600; }
+.inlineTimes label > svg { position: absolute; right: 9px; bottom: 13px; color: #bd7798; pointer-events: none; }
+.inlineTimes > span { align-self: center; color: #bba5b3; }
 .meetingCard { border: 1px solid #ebdfe6; border-radius: 16px; background: white; padding: 12px 14px; }
 .meetingCard label { display: grid; grid-template-columns: 20px 1fr; align-items: center; column-gap: 9px; row-gap: 6px; }
 .meetingCard label > svg { color: #bd7798; grid-row: span 2; }
@@ -356,27 +394,44 @@
 .meetingCard details { border-top: 1px solid #f0e7ec; margin: 12px 0 0 29px; padding-top: 4px; }
 .meetingCard summary { display: flex; align-items: center; justify-content: space-between; min-height: 32px; font-size: 11px; color: #9d8796; cursor: pointer; }
 .meetingCard details input { margin-bottom: 6px; }
-@media (prefers-reduced-motion: reduce) { .stageEntering, .stageLeaving, .dateDetails .categoryQuestion, .dateDetails > .planHint, .dateDetails .planChips { animation: none; } }
+.placeSuggest { display: grid; gap: 4px; margin: 8px 0 0; max-height: min(240px, 36dvh); overflow: auto; }
+.placeSuggest button { display: grid; gap: 2px; text-align: left; border: 0; border-radius: 12px; padding: 8px 10px; background: #faf6f8; color: #695362; font-size: 12px; }
+.placeSuggest button small { color: #9d8796; font-size: 10px; }
+.placeHint { margin: 6px 0 0; font-size: 10px; color: #9d8796; }
+.areaNotice { margin: 0 0 10px; color: #917e8b; font-size: 11px; line-height: 1.6; }
+@media (prefers-reduced-motion: reduce) { .stageEntering, .stageLeaving, .dateDetails .categoryQuestion, .dateDetails > .planHint, .dateDetails .planChips, .planCalendar, .planCalendarDays button[data-choosing="true"], .planCalendarDays button[data-choosing="true"]::before { animation: none; } }
 
 /* Keep native date/time editing, without duplicate browser glyphs. */
 .planForm input[type="date"], .planForm input[type="time"] { appearance: none; -webkit-appearance: none; }
 .planForm input[type="date"]::-webkit-calendar-picker-indicator,
 .planForm input[type="time"]::-webkit-calendar-picker-indicator { opacity: 0; cursor: pointer; }
 .finishPanel { display: grid; gap: 10px; }
-.finishReview { padding: 10px 12px; border-radius: 13px; background: #f7eff3; color: #816777; font-size: 12px; }
-.finishReview summary { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 28px; cursor: pointer; list-style: none; }
-.finishReview summary::-webkit-details-marker { display: none; }
-.finishReview summary > span { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: #a0778f; }
-.finishReview p { margin-top: 8px; overflow-wrap: anywhere; }
-.finishReview button { min-height: 40px; margin-right: 12px; color: #ae6487; font-size: 11px; }
+.budgetLead { margin: 2px 0 9px; color: #917e8b; font-size: 11px; line-height: 1.6; text-align: center; }
 .finishPanel > fieldset { padding: 12px; border: 1px solid #eadfe5; border-radius: 16px; background: white; }
 .finishPanel > fieldset legend { float: left; width: 100%; margin-bottom: 2px; }
-.finishPanel > fieldset .planChips { clear: both; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-.finishPanel > fieldset .planChips button { padding-inline: 7px; }
+.budgetChoices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.budgetChoices button { position: relative; display: flex; min-width: 0; min-height: 57px; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 7px 3px; border: 1px solid #e6dce2; border-radius: 14px; background: #fffdfb; color: #806b78; font-size: 12px; }
+.budgetChoices button > svg { position: absolute; top: 5px; right: 5px; }
+.budgetChoices button small { color: #a88b9b; font-size: 8px; font-weight: 500; }
+.budgetChoices button[aria-pressed="true"] { border-color: #c46f94; background: #c46f94; color: white; font-weight: 700; box-shadow: 0 4px 12px #a8587b26; }
+.budgetChoices button[aria-pressed="true"] small { color: #fff3f8; }
+.totalBudgetInput { margin-top: 10px; color: #796471; }
+.totalBudgetInput input { font-size: 19px; font-weight: 650; text-align: right; }
+.budgetBreakdown { margin-top: 8px; padding-top: 5px; border-top: 1px solid #efe6eb; }
+.budgetBreakdown > summary { display: flex; min-height: 40px; align-items: center; justify-content: space-between; color: #957b8b; font-size: 11px; cursor: pointer; list-style: none; }
+.budgetBreakdown > summary::-webkit-details-marker { display: none; }
+.budgetBreakdown[open] > summary { margin-bottom: 8px; }
+.budgetBreakdown > label + label { margin-top: 10px; }
+.optionalHeading { padding: 3px 2px 0; }
+.optionalHeading h4 { color: #715d69; font-size: 13px; font-weight: 650; }
+.optionalHeading p { margin-top: 3px; color: #a08d99; font-size: 10px; }
 .finishPanel .planDetails { padding-top: 4px; }
 .finishPanel > .planDetails { padding: 3px 12px; border: 1px solid #eadfe5; border-radius: 13px; background: white; }
 .finishPanel > .planDetails[open] { padding-bottom: 12px; }
 .finishPanel > fieldset .planDetails { margin-top: 7px; }
+.planTotalSummary { display: flex; align-items: baseline; justify-content: center; gap: 9px; color: #705a68; }
+.planTotalSummary strong { font-size: 12px; font-weight: 650; }
+.planTotalSummary small { color: #9d8996; font-size: 10px; }
 
 .suggestionCopy { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .agentBubble .suggestionCopy strong { font-size: 10px; line-height: 1.6; }
@@ -441,3 +496,7 @@
 
 @media (min-width: 400px) { .calendarGrid { --calendar-day-height: 55px; } }
 @media (max-width: 350px) { .calendarGrid { --calendar-day-height: 50px; } }
+
+.sheet.fixedSheet { height: min(760px, 90dvh); overflow: hidden; }
+.fixedSheet .sheetInner { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.fixedSheet .sheetHandle, .fixedSheet .sheetHeader { flex-shrink: 0; }

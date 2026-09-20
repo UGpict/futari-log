@@ -39,10 +39,23 @@ Worker lease、startRun 冪等、承認の一度きりの消費、`basePlanVersi
 
 ## 長距離徒歩の同意
 
-`walkLongAck` は対象セッションの行程指紋（日付・移動手段・集合/解散・spot 列・最長/合計徒歩分）にだけ有効。「今回続ける」は couple の travel 記憶にも永続メモリにも書かない。行程が変われば再質問する。
+`walkLongAck` は **そのセッション限定**。couple の `agentMemories/travel` にも永続メモリにも書かない。
+
+同意は次を持つ。
+
+- 日付・移動手段・集合 / 解散
+- 途中の行程（spot 列）
+- 当時の徒歩負担（最長区間・合計分）
+
+再質問するのは、集合・解散が同じでも **負担が増えた** とき。表示文言・item id・写真など、徒歩負担を変えない変更では失効しない（2 分までの取得ゆらぎは負担増とみなさない）。
 
 ## travel エージェント記憶の性質
 
-`couples/{id}/agentMemories/travel` は **永続メモリ**（カップル単位）。`travel:*` の事実は日付が同じなら使い回す日次キャッシュで、実行（run）内だけの一時状態ではない。`daily` も scout の日次スナップショットとして残す。
+`couples/{id}/agentMemories/travel` はカップル単位の **API 取得キャッシュ** であり、ユーザーの許容・好みではない。
 
-「今回続ける」の徒歩同意はここへ書かない。今後のデートにも使う内容は、対象・適用範囲を示して `MEMORY_SAVE` 承認を別途取る。
+- キー: `travel:{from}:{to}:{mode}:{時刻条件}`
+- WALK / DRIVE は東京時間の日付+時。TRANSIT は 5 分バケット。同日だからといって別経路・別出発時刻は使わない
+- 値: `{ fetchedAt, payload }`。当日かつ TTL（24h）内だけ再利用
+- `leg:` や `walkLongAcknowledged` は書かない。件数は `FACT_CAP`（80）で古い travel キーから落とす
+
+Worker の PENDING 取得は collection group `{ns}runs` の `status` + `createdAt`。定義は `firestore.indexes.json`。本番デプロイは切替前チェック。

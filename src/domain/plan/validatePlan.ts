@@ -106,6 +106,18 @@ export function validatePlan(plan: Plan, ctx: PlanContext): ValidationResult {
     }
     const dur = leg.durationMinutes.value;
     const delay = leg.delayMinutesInjected ?? 0;
+    const buffer = leg.bufferMinutes ?? 0;
+    if (leg.cachedAt) {
+      issues.push(
+        issue(
+          "TRAVEL_CACHE",
+          "WARNING",
+          `移動時間はキャッシュ（取得 ${leg.cachedAt}）を使っています`,
+          [item.id],
+          leg.evidenceIds,
+        ),
+      );
+    }
     if (dur == null) {
       issues.push(
         issue(
@@ -117,7 +129,7 @@ export function validatePlan(plan: Plan, ctx: PlanContext): ValidationResult {
         ),
       );
     } else {
-      const arrive = new Date(leg.departureAt).getTime() + (dur + delay) * 60_000;
+      const arrive = new Date(leg.departureAt).getTime() + (dur + buffer + delay) * 60_000;
       if (arrive > new Date(item.startAt).getTime() + 60_000) {
         issues.push(
           issue("WAIT_OR_TRAVEL", "ERROR", "移動を含めると開始に間に合いません", [item.id], leg.evidenceIds),
@@ -130,13 +142,25 @@ export function validatePlan(plan: Plan, ctx: PlanContext): ValidationResult {
     const last = items[items.length - 1];
     const dur = lastToEnd.durationMinutes.value;
     const delay = lastToEnd.delayMinutesInjected ?? 0;
+    const buffer = lastToEnd.bufferMinutes ?? 0;
     const sessionEnd = tokyoEnd(input);
+    if (lastToEnd.cachedAt) {
+      issues.push(
+        issue(
+          "TRAVEL_CACHE",
+          "WARNING",
+          `終了地点への移動時間はキャッシュ（取得 ${lastToEnd.cachedAt}）を使っています`,
+          [last.id],
+          lastToEnd.evidenceIds,
+        ),
+      );
+    }
     if (dur == null) {
       issues.push(
-        issue("END_TRAVEL_UNKNOWN", "UNKNOWN", "終了地点への移動時間が未検証です", [last.id]),
+        issue("END_TRAVEL_UNKNOWN", "UNKNOWN", "終了地点への移動時間が未検証です", [last.id], lastToEnd.evidenceIds),
       );
     } else {
-      const arriveEnd = new Date(last.endAt).getTime() + (dur + delay) * 60_000;
+      const arriveEnd = new Date(last.endAt).getTime() + (dur + buffer + delay) * 60_000;
       if (arriveEnd > new Date(sessionEnd).getTime() + 60_000) {
         issues.push(
           issue("LATE_TO_END", "ERROR", "指定終了時刻までに終了地点へ着けません", [last.id]),

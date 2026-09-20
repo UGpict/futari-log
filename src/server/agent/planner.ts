@@ -1,4 +1,5 @@
 import { getEnv } from "@/config/env";
+import { classifySpotKind, wantsSameKindTour } from "@/contracts";
 import type { Memory, Spot } from "@/domain/schemas";
 import type { LlmCallResult } from "@/server/llm";
 import { addMinutes, tokyoDateTime, toTokyoParts } from "@/lib/time";
@@ -32,6 +33,7 @@ export function pickFromCandidates(args: {
   preferCheaper?: boolean;
   preferRest?: boolean;
   allowAvoidedFallback?: boolean;
+  wishText?: string;
 }): { selected: string[]; rejected: { spotId: string; reason: string }[] } {
   const rejected: { spotId: string; reason: string }[] = [];
   const selected: string[] = [];
@@ -69,10 +71,33 @@ export function pickFromCandidates(args: {
   };
   const take = (list: Spot[]) =>
     rank(usable(list))[0] ?? (allowAvoidedFallback ? rank(usable(list, true))[0] : undefined);
-  addId(take(args.exhibit)?.id);
-  addId(take(args.walk)?.id);
-  addId(take(args.sweets)?.id);
-  if (selected.length < 3) addId(take(args.other)?.id);
+  const tour = wantsSameKindTour(args.wishText ?? "");
+  const picked = new Map<string, Spot>();
+  const rememberSpot = (spot?: Spot) => {
+    if (!spot || picked.has(spot.id) || selected.includes(spot.id)) return;
+    picked.set(spot.id, spot);
+    addId(spot.id);
+  };
+  rememberSpot(take(args.exhibit));
+  rememberSpot(take(args.walk));
+  rememberSpot(take(args.sweets));
+  if (selected.length < 3) rememberSpot(take(args.other));
+  if (selected.length < 3) {
+    const pool = rank(usable([...args.exhibit, ...args.walk, ...args.sweets, ...args.other], allowAvoidedFallback));
+    const kinds = new Set(
+      [...picked.values()].map((spot) => classifySpotKind(spot.name, spot.categories)),
+    );
+    for (const spot of pool) {
+      const kind = classifySpotKind(spot.name, spot.categories);
+      if (!tour && kinds.has(kind) && kind !== "other" && selected.length >= 2) {
+        rejected.push({ spotId: spot.id, reason: `同じ過ごし方（${kind}）が続きすぎるので見送り` });
+        continue;
+      }
+      rememberSpot(spot);
+      kinds.add(kind);
+      if (selected.length >= 3) break;
+    }
+  }
   if (selected.length < 3) {
     for (const s of [...args.exhibit, ...args.walk, ...args.sweets, ...args.other]) {
       if (!allowAvoidedFallback && args.avoidIds.includes(s.id)) continue;
@@ -188,6 +213,10 @@ export async function runPlanner(input: {
     ...(last?.selected ?? []),
   ];
   const instruction = input.instruction ?? "";
+  const wishText = [
+    instruction,
+    ...((input.preferences as { content?: string }[] | undefined) ?? []).map((item) => item.content ?? ""),
+  ].join("。");
   const fallback = pickFromCandidates({
     walk: input.walk,
     exhibit: input.exhibit,
@@ -202,6 +231,7 @@ export async function runPlanner(input: {
     preferCheaper: /予算|安|抑え/.test(instruction),
     preferRest: /ゆっくり|休憩/.test(instruction),
     allowAvoidedFallback: input.task !== "replan",
+    wishText,
   });
   const liveOnly = getEnv().runtime === "LIVE";
   const known = new Set(

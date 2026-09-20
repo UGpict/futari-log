@@ -4,16 +4,18 @@
  *
  *   npx tsx scripts/migrate-firestore-split.ts --dry-run
  *   npx tsx scripts/migrate-firestore-split.ts --dry-run --source=sys/root
- *   npx tsx scripts/migrate-firestore-split.ts --apply --namespace=localverify20260920
+ *   npx tsx scripts/migrate-firestore-split.ts --apply --namespace=rehearse20260920
+ *   npx tsx scripts/migrate-firestore-split.ts --apply --namespace=rehearse20260920 --if-missing
+ *   npx tsx scripts/migrate-firestore-split.ts --compare --namespace=rehearse20260920
  *
- * Production cutover (--apply without namespace) is not run until verification is reviewed.
+ * Production cutover (--apply without namespace) is refused until explicitly enabled later.
  */
 import { adminDb } from "../src/server/firebase/admin";
 import { getEnv } from "../src/config/env";
 import { LEGACY_ROOT_DOC } from "../src/server/repositories/layout";
 import { emptyDb, type Db } from "../src/server/repositories/types";
 import { assertRelationships, splitCounts, splitDocPaths } from "../src/server/repositories/splitMap";
-import { writeSplitFromDb } from "../src/server/repositories/firestoreSplit";
+import { listSplitInventory, writeSplitFromDb } from "../src/server/repositories/firestoreSplit";
 
 function arg(name: string): string | null {
   const hit = process.argv.find((a) => a === `--${name}` || a.startsWith(`--${name}=`));
@@ -36,10 +38,28 @@ function parsePayload(raw: unknown): Db {
   }
 }
 
+function diffIds(source: string[], dest: string[]) {
+  const src = new Set(source);
+  const dst = new Set(dest);
+  return {
+    sourceOnly: source.filter((id) => !dst.has(id)).slice(0, 20),
+    destOnly: dest.filter((id) => !src.has(id)).slice(0, 20),
+    both: source.filter((id) => dst.has(id)).length,
+    sourceCount: source.length,
+    destCount: dest.length,
+  };
+}
+
 async function main() {
-  const dryRun = arg("apply") !== "true";
+  const apply = arg("apply") === "true";
+  const compare = arg("compare") === "true";
+  const dryRun = !apply;
   const source = arg("source") || LEGACY_ROOT_DOC;
   const namespace = arg("namespace");
+  const ifMissing = arg("if-missing") === "true";
+  if ((apply || compare) && (!namespace || namespace === "true")) {
+    throw new Error("refusing to apply/compare without --namespace; production cutover is not enabled");
+  }
   if (namespace && namespace !== "true") process.env.FIRESTORE_NAMESPACE = namespace;
   const env = getEnv();
   if (env.dataBackend !== "firestore") {
@@ -59,29 +79,67 @@ async function main() {
   const runIds = Object.values(db.couples).flatMap((c) =>
     Object.values(c.sessions).flatMap((b) => Object.keys(b.runs)),
   );
+  const coupleIds = Object.keys(db.couples);
 
-  const report = {
+  const report: Record<string, unknown> = {
     ok: relationshipErrors.length === 0,
     dryRun,
+    compare,
     source,
-    namespace: process.env.FIRESTORE_NAMESPACE ?? "",
+    namespace: namespace && namespace !== "true" ? namespace : "",
     leavesSysRoot: true,
     counts,
     documentCount: paths.length,
-    sessionIds,
-    runIds,
+    coupleIds: coupleIds.slice(0, 20),
+    sessionIds: sessionIds.slice(0, 20),
+    runIds: runIds.slice(0, 20),
+    coupleCount: coupleIds.length,
+    sessionCount: sessionIds.length,
+    runCount: runIds.length,
     relationshipErrors,
     samplePaths: paths.slice(0, 20),
   };
 
-  if (dryRun || relationshipErrors.length) {
+  if (relationshipErrors.length) {
     console.log(JSON.stringify(report, null, 2));
-    if (relationshipErrors.length) process.exit(1);
+    process.exit(1);
+  }
+
+  if (dryRun && !compare) {
+    console.log(JSON.stringify(report, null, 2));
     return;
   }
 
-  const written = await writeSplitFromDb(db);
-  console.log(JSON.stringify({ ...report, written }, null, 2));
+  if (apply) {
+    const written = await writeSplitFromDb(db, { ifMissing });
+    report.written = written.written;
+    report.skipped = written.skipped;
+    report.ifMissing = ifMissing;
+  }
+
+  if (apply || compare) {
+    const inventory = await listSplitInventory();
+    report.inventory = {
+      couples: inventory.couples.length,
+      sessions: inventory.sessions.length,
+      runs: inventory.runs.length,
+      events: inventory.events,
+      planVersions: inventory.planVersions,
+    };
+    report.idDiff = {
+      couples: diffIds(coupleIds, inventory.couples),
+      sessions: diffIds(sessionIds, inventory.sessions),
+      runs: diffIds(runIds, inventory.runs),
+    };
+    report.ok =
+      relationshipErrors.length === 0 &&
+      inventory.couples.length >= coupleIds.length &&
+      inventory.sessions.length >= sessionIds.length &&
+      inventory.runs.length >= runIds.length;
+  }
+
+  console.log(JSON.stringify(report, null, 2));
+  if (!report.ok) process.exit(1);
 }
 
 main().catch((error) => {

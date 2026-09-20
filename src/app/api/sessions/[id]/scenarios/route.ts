@@ -2,7 +2,7 @@ import { json, requireUid, readJson } from "@/server/api/http";
 import { injectScenario, startRun } from "@/server/api/actions";
 import { sha256 } from "@/lib/ids";
 import { injectScenarioRequestSchema } from "@/contracts/session";
-import { dispatchProposal } from "@/server/workflows/dispatch";
+import { kickRun } from "@/server/workflows/dispatch";
 
 export async function POST(
   request: Request,
@@ -31,6 +31,6 @@ export async function POST(
     bodyHash: sha256(JSON.stringify(body.data)),
   });
   if (!run.ok) return json({ error: run.error, scenarioId: injected.scenarioId }, run.status);
-  if (!run.duplicated) void dispatchProposal(run.runId, "REPLAN");
+  if (!run.duplicated) kickRun(run.runId, "REPLAN");
   return json({ scenarioId: injected.scenarioId, runId: run.runId }, 202);
 }

@@ -50,7 +50,11 @@ function hasAdminCredentials(): boolean {
   if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) return true;
   const path = process.env.GOOGLE_APPLICATION_CREDENTIALS;
   if (path && existsSync(path)) return true;
-  return existsSync(join(homedir(), ".config/gcloud/application_default_credentials.json"));
+  const unixAdc = join(homedir(), ".config/gcloud/application_default_credentials.json");
+  const winAdc = process.env.APPDATA
+    ? join(process.env.APPDATA, "gcloud", "application_default_credentials.json")
+    : "";
+  return existsSync(unixAdc) || (winAdc !== "" && existsSync(winAdc));
 }
 
 async function signUpAnonymous(): Promise<{ uid: string; idToken: string }> {

@@ -49,3 +49,8 @@ export async function dispatchProposal(runId: string, kind: string): Promise<voi
     void executeRun(runId);
   }
 }
+
+export function kickRun(runId: string, kind: string): void {
+  void dispatchProposal(runId, kind);
+  if (getEnv().planOrchestrator !== "workflows") void executeRun(runId);
+}

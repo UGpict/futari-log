@@ -78,6 +78,49 @@ describe("walk ack scope", () => {
     );
     assert.equal(walkLongAcknowledged({ walkLongAcknowledged: true }), false);
   });
+
+  it("re-asks when the same endpoints gain a heavier walk, not on display-only changes", () => {
+    const fingerprint = walkAckFingerprint({
+      dateTokyo: "2026-09-20",
+      travelMode: "WALK",
+      meetSpotId: "meet",
+      endSpotId: "end",
+      spotIds: ["a", "b"],
+      longestLegMinutes: 103,
+      totalMinutes: 108,
+    });
+    const ack = { fingerprint, at: "2026-09-20T00:00:00.000Z" };
+    assert.equal(
+      walkLongAckMatches(
+        ack,
+        walkAckFingerprint({
+          dateTokyo: "2026-09-20",
+          travelMode: "WALK",
+          meetSpotId: "meet",
+          endSpotId: "end",
+          spotIds: ["a", "c"],
+          longestLegMinutes: 130,
+          totalMinutes: 150,
+        }),
+      ),
+      false,
+    );
+    assert.equal(
+      walkLongAckMatches(
+        ack,
+        walkAckFingerprint({
+          dateTokyo: "2026-09-20",
+          travelMode: "WALK",
+          meetSpotId: "meet",
+          endSpotId: "end",
+          spotIds: ["a", "c"],
+          longestLegMinutes: 90,
+          totalMinutes: 100,
+        }),
+      ),
+      true,
+    );
+  });
 });
 
 describe("firestore split mapping", () => {

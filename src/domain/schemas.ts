@@ -335,6 +335,8 @@ export const runSchema = z.object({
   leaseExpiresAt: z.string().nullable(),
   heartbeatAt: z.string().nullable(),
   trigger: z.string().nullable(),
+  instruction: z.string().nullable().optional(),
+  targetPlanItemId: z.string().nullable().optional(),
   basePlanVersion: z.number().nullable(),
   resultPlanVersion: z.number().nullable(),
   waitingQuestion: z

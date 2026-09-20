@@ -15,8 +15,16 @@ import { dailyFresh, pruneTravelFacts, readMemories, remember, writeMemories } f
 import { buildPlan, type BuiltPlan } from "./buildPlan";
 import { runPlace } from "./place";
 import { pickReplacementCandidate, runPlanner } from "./planner";
-import { runScout } from "./scout";
+import { jobsMissingCoverage, mergeScoutBuckets, runScout, scoutPool } from "./scout";
 import { scoutJobsForPreferences } from "./scoutJobs";
+import {
+  assessTokyoPlan,
+  companionScoutJobs,
+  outsideTokyoQuestion,
+  searchRadiiFor,
+  searchRangeQuestion,
+  tokyoUnconfirmedQuestion,
+} from "@/contracts/serviceArea";
 import { noteTravelPass } from "./travel";
 import type { AgentLog, AgentMemories } from "./types";
 import { runWeather } from "./weather";
@@ -72,6 +80,45 @@ export async function orchestratePlanning(input: {
     lng: input.session.input.areaLng,
     name: input.session.input.areaName,
   };
+  if (!input.session.input.tokyoAreaAcknowledged) {
+    const areaCheck = assessTokyoPlan([
+      {
+        name: input.session.input.meet.name,
+        lat: input.session.input.meet.lat,
+        lng: input.session.input.meet.lng,
+        address: input.session.input.meet.address,
+      },
+      {
+        name: input.session.input.end.name,
+        lat: input.session.input.end.lat,
+        lng: input.session.input.end.lng,
+        address: input.session.input.end.address,
+      },
+      ...input.session.input.fixedAppointments
+        .filter((item) => item.spotNameHint)
+        .map((item) => ({
+          name: item.spotNameHint ?? item.label,
+          lat: Number.NaN,
+          lng: Number.NaN,
+        })),
+    ]);
+    if (areaCheck.verdict === "outside") {
+      return {
+        waitingQuestion: outsideTokyoQuestion(areaCheck.outside.map((point) => point.name)),
+        built: null,
+        llm: noneLlm(),
+        mode,
+      };
+    }
+    if (areaCheck.verdict === "unknown") {
+      return {
+        waitingQuestion: tokyoUnconfirmedQuestion(areaCheck.unknown.map((point) => point.name)),
+        built: null,
+        llm: noneLlm(),
+        mode,
+      };
+    }
+  }
   const wish = scoutJobsForPreferences(input.session.input.preferences);
   if (wish.unsupported.length && !input.session.input.unsupportedWishAcknowledged) {
     const hasOnsen = wish.unsupported.includes("温泉");
@@ -90,15 +137,50 @@ export async function orchestratePlanning(input: {
       mode,
     };
   }
-  const scout = await runScout({
-    ctx: input.ctx,
-    log: input.log,
-    memories,
-    area,
-    radiusMeters: input.session.input.radiusMeters,
-    jobs: wish.jobs,
-    jobKey: wish.key,
+  const wishText = input.session.input.preferences.map((item) => item.content).join("。");
+  const jobs = [...wish.jobs, ...companionScoutJobs(wish.jobs, wishText)];
+  const radii = searchRadiiFor(input.session.input.travelMode, {
+    expand: input.session.input.searchExpandAcknowledged ? false : true,
   });
+  const scout: { walk: Spot[]; exhibit: Spot[]; sweets: Spot[]; other: Spot[] } = {
+    walk: [],
+    exhibit: [],
+    sweets: [],
+    other: [],
+  };
+  let usedRadius = radii[0] ?? 1200;
+  let missing = jobs.map((job) => job.category);
+  for (const [index, radiusMeters] of radii.entries()) {
+    usedRadius = radiusMeters;
+    const slice = await runScout({
+      ctx: input.ctx,
+      log: input.log,
+      memories,
+      area,
+      radiusMeters,
+      jobs,
+      jobKey: `${wish.key}:r${radiusMeters}`,
+      persist: index === 0,
+    });
+    mergeScoutBuckets(scout, slice);
+    missing = jobsMissingCoverage(wish.jobs, scoutPool(scout));
+    if (!missing.length) break;
+    if (index < radii.length - 1) {
+      await input.log(
+        "scout",
+        "NOTICE",
+        `希望カテゴリ不足（${missing.join("、")}）。検索範囲を ${radiusMeters}m から ${radii[index + 1]}m へ広げる`,
+      );
+    }
+  }
+  if (missing.length && !input.session.input.searchExpandAcknowledged) {
+    return {
+      waitingQuestion: searchRangeQuestion(usedRadius),
+      built: null,
+      llm: noneLlm(),
+      mode,
+    };
+  }
   const catalog = await loadSelectedEventSpots({
     enabled: env.enableEventCatalog,
     selectedEventIds: input.session.input.selectedEventIds ?? [],

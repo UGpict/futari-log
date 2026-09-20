@@ -6,8 +6,8 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import styles from "./home.module.css";
 
-export function HomeSheet({ title, onClose, children }: {
-  title: string; onClose: () => void; children: ReactNode;
+export function HomeSheet({ title, onClose, children, fixedHeight = false }: {
+  title: string; onClose: () => void; children: ReactNode; fixedHeight?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -23,9 +23,9 @@ export function HomeSheet({ title, onClose, children }: {
   }, []);
 
   return (
-    <dialog ref={ref} className={styles.sheet} aria-labelledby={titleId}
+    <dialog ref={ref} className={`${styles.sheet} ${fixedHeight ? styles.fixedSheet : ""}`} aria-labelledby={titleId}
       onCancel={onClose} onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div className={styles.sheetInner}>
+      <div className={styles.sheetInner} onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
         <div className={styles.sheetHandle} aria-hidden="true" />
         <header className={styles.sheetHeader}>
           <h2 id={titleId}>{title}</h2>

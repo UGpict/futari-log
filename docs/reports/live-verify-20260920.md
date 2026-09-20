@@ -13,7 +13,7 @@
 
 検証用書き込みは `FIRESTORE_ROOT_DOC=sys/local-verify-20260920`。本番データへは混ぜていない。
 
-## 分割保存の再確認（同日）
+## 分割保存（commit `2ae90b90b2bae8d7477fc66d696d1f4b3226f814`）
 
 `FIRESTORE_NAMESPACE=localverify20260920`（本番 `couples` には書いていない）。`sys/root` は削除していない。
 
@@ -21,6 +21,8 @@
 - 再読込後カレンダー 9/20 に当該セッション 1 件
 - 他ユーザー 403
 - カップル文書キーはメタのみ。イベント 46 件・行程 1 件はサブコレクション。2 件目セッション `ses_f7c9eb3536f71962` を親へ集約していない
+
+本番切替は未実施。手順は `docs/plans/firestore-cutover.md`。`sys/root` の dry-run と検証 namespace `rehearse20260920` への照合は `docs/reports/firestore-rehearse-20260920.md`（本番 `couples` へは未書き込み）。
 
 
 ## 未解決

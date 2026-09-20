@@ -7,6 +7,7 @@ import { newId } from "@/lib/ids";
 import { realNowIso } from "@/lib/time";
 import * as split from "./firestoreSplit";
 import { calendarTitle, listedOnCalendar } from "./calendarFields";
+import { replanStartError } from "@/domain/plan/replanOrder";
 import type {
   CoupleBundle,
   Db,
@@ -221,6 +222,9 @@ export async function insertPendingRun(input: {
   sessionId: string;
   kind: Run["kind"];
   trigger?: string | null;
+  instruction?: string | null;
+  targetPlanItemId?: string | null;
+  basePlanVersion?: number | null;
   idempotencyKey?: string | null;
   bodyHash: string;
 }): Promise<
@@ -247,6 +251,8 @@ export async function insertPendingRun(input: {
     leaseExpiresAt: null,
     heartbeatAt: null,
     trigger: input.trigger ?? null,
+    instruction: input.instruction ?? null,
+    targetPlanItemId: input.targetPlanItemId ?? null,
     basePlanVersion: null,
     resultPlanVersion: null,
     waitingQuestion: null,
@@ -288,6 +294,18 @@ export async function insertPendingRun(input: {
     if (found.couple.couple.ownerUid !== input.uid) {
       return { ok: false as const, status: 403, error: "forbidden" };
     }
+    const currentPlan = found.bundle.session.currentPlanVersion
+      ? found.bundle.planHistory[String(found.bundle.session.currentPlanVersion)]
+      : undefined;
+    const replanError = replanStartError({
+      kind: input.kind,
+      instruction: input.instruction,
+      basePlanVersion: input.basePlanVersion,
+      currentPlanVersion: found.bundle.session.currentPlanVersion,
+      targetPlanItemId: input.targetPlanItemId,
+      currentItemIds: currentPlan?.items.map((item) => item.id) ?? null,
+    });
+    if (replanError) return { ok: false as const, ...replanError };
     const active = Object.values(found.bundle.runs).filter((r) =>
       ["PENDING", "RUNNING", "WAITING_INPUT", "WAITING_APPROVAL"].includes(r.status),
     );

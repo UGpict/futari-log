@@ -12,12 +12,16 @@ const agents = [
   { message: "プランを考えています", character: "plan" },
 ];
 
-export function PlanLoading({ demo = false }: { demo?: boolean }) {
-  return <div className={styles.loading} role="status" aria-label="プランを準備しています">
+export function PlanningAgentArt({ character }: { character: string }) {
+  return <span className={styles.simpleAgentArt}>{character === "weather" ? <RiveMascot variant="weather" /> : <Image src={`/animations/planning-${character}-static.svg`} alt="" width={40} height={40} unoptimized />}</span>;
+}
+
+export function PlanLoading({ demo = false, compact = false }: { demo?: boolean; compact?: boolean }) {
+  return <div className={`${styles.loading} ${compact ? styles.loadingCompact : ""}`} role="status" aria-label="プランを準備しています">
     <div className={styles.loadingMascot}><MemoMascot nextCue={0} /></div>
     <h1>プランを準備しています</h1>
     <div className={styles.agentList} aria-hidden="true">{agents.map((agent, index) => <div key={agent.character} className={styles.agentRow} style={{ animationDelay: `${index * 350}ms` }}>
-      <span className={styles.simpleAgentArt}>{agent.character === "weather" ? <RiveMascot variant="weather" /> : <Image src={`/animations/planning-${agent.character}-static.svg`} alt="" width={40} height={40} unoptimized />}</span>
+      <PlanningAgentArt character={agent.character} />
       <span>{demo ? agent.message : "プランを準備しています"}<span className={styles.dots}><i /><i /><i /></span></span>
     </div>)}</div>
   </div>;

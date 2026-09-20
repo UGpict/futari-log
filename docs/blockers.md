@@ -9,7 +9,7 @@
 | Google Places / Routes | BLOCKED | `GOOGLE_MAPS_API_KEY`（Places New と Routes を有効化） |
 | 東京発表会場 | BLOCKED | 会場住所は未提供。開発デモの検索中心は**東京駅周辺**（会場そのものではない） |
 | LIVE カレンダー/徒歩 UI | 2026-09-20 成功 | 東京→新宿 WALK。`q_long_walk` 後に確定・再読込・カレンダー表示。検証書き込みは `sys/local-verify-20260920` |
-| 本番 sys/root 容量 | **未解決** | 1MB 超過。分割ドキュメントへ移行する。`sys/root` は削除しない |
+| 本番 sys/root 容量 | **未解決・切替前** | 1MB 超過。分割は `2ae90b90`。リハーサルは `rehearse20260920`（`docs/reports/firestore-rehearse-20260920.md`）。本番切替は `docs/plans/firestore-cutover.md`。`sys/root` は削除しない |
 | モック通し | 実施済み | `demo:live` PASS。Auth/Firestore は Emulator |
 | Cloud Run 公開 | 準備済み・未公開 | 手元 PC の手順は `docs/cloud-run.md` |
 | Named Router 名 | 未確認 | ダッシュボードの実際の router 名。`orcarouter/mundane` はプレースホルダ |

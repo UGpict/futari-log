@@ -4,19 +4,23 @@ import {
   PLACES_FIELD_MASK_DETAILS,
   PLACES_FIELD_MASK_SEARCH,
   PLACES_FIELD_MASK_TEXT,
-  ROUTES_FIELD_MASK,
 } from "@/config/settings";
 import type {
   Evidence,
   OpeningAssessment,
-  SourceKind,
   Spot,
   TravelMode,
 } from "@/domain/schemas";
-import { placeTypeList } from "@/contracts/spotKinds";
 import { newId } from "@/lib/ids";
 import { realNowIso, toTokyoParts } from "@/lib/time";
+import { includedTypesForCategory, placeTypeList } from "@/contracts/spotKinds";
 import { getCatalogSpot, MOCK_CATALOG, searchCatalog, searchCatalogByName, type CatalogSpot } from "./catalog";
+import {
+  computeLiveRoute,
+  scheduleDriveDeparture,
+  travelBufferMinutes,
+  type RouteEstimate,
+} from "./routes";
 import { getEvent, getVenue } from "@/server/catalog/repo";
 import { catalogEventToSpot, venueHours } from "@/server/catalog/toSpot";
 import type { ScenarioOverlay } from "@/domain/schemas";
@@ -61,7 +65,8 @@ function cacheGet<T>(ctx: ProviderCtx, key: string, ttlMs: number): T | null {
   const hit = ctx.cache.get(key);
   if (!hit) return null;
   const age = Date.now() - new Date(hit.at).getTime();
-  hit.stale = age > ttlMs;
+  hit.stale = !Number.isFinite(age) || age > ttlMs;
+  if (hit.stale) return null;
   return hit.value as T;
 }
 
@@ -128,7 +133,7 @@ export async function searchSpots(
     return result;
   }
   const result = await counted(ctx, "mock-places", async () => {
-    const found = searchCatalog(args.category, args.area, args.radiusMeters).slice(0, 20);
+    const found = searchCatalog(args.category, args.area, args.radiusMeters, args.includedTypes).slice(0, 20);
     const evidenceList = [
       evidence({
         kind: "API",
@@ -324,6 +329,21 @@ export function travelCacheKey(args: {
   return `travel:${fromId}:${toId}:${args.mode}:${when.date}T${String(when.hour).padStart(2, "0")}`;
 }
 
+function driveDepartureFields(mode: TravelMode, departureAt: string): Pick<
+  RouteEstimate,
+  "requestedDepartureAt" | "effectiveDepartureAt" | "departureAdjusted"
+> {
+  if (mode !== "DRIVE") {
+    return { requestedDepartureAt: null, effectiveDepartureAt: null, departureAdjusted: false };
+  }
+  const scheduled = scheduleDriveDeparture(departureAt);
+  return {
+    requestedDepartureAt: scheduled.requestedDepartureAt,
+    effectiveDepartureAt: scheduled.effectiveDepartureAt,
+    departureAdjusted: scheduled.adjusted,
+  };
+}
+
 export async function estimateTravel(
   ctx: ProviderCtx,
   args: {
@@ -332,13 +352,7 @@ export async function estimateTravel(
     mode: TravelMode;
     departureAt: string;
   },
-): Promise<{
-  durationMinutes: number | null;
-  distanceMeters: number | null;
-  evidence: Evidence;
-  kind: SourceKind;
-  delayMinutes: number;
-}> {
+): Promise<RouteEstimate & { delayMinutes: number }> {
   const delayOverlay = ctx.overlays.find(
     (o) =>
       o.kind === "TRAVEL_DELAY" &&
@@ -349,25 +363,55 @@ export async function estimateTravel(
   const delayMinutes = delayOverlay ? Number(delayOverlay.overlay.delayMinutes ?? 25) : 0;
   const env = getEnv();
   const key = travelCacheKey(args);
-  const cached = cacheGet<{
-    durationMinutes: number | null;
-    distanceMeters: number | null;
-    evidence: Evidence;
-    kind: SourceKind;
-  }>(ctx, key, CACHE_TTL_MS.travel);
+  const cached = cacheGet<RouteEstimate>(ctx, key, CACHE_TTL_MS.travel);
 
   let base = cached;
   if (!base) {
-    if (env.runtime === "LIVE" && env.googleMapsApiKey) {
-      base = await liveRouteWithFallback(ctx, env.googleMapsApiKey, args);
+    if (env.runtime === "LIVE") {
+      if (!env.googleMapsApiKey) {
+        base = {
+          durationMinutes: null,
+          distanceMeters: null,
+          bufferMinutes: travelBufferMinutes(args.mode),
+          kind: "UNKNOWN",
+          failure: "MISSING_KEY",
+          cached: false,
+          ...driveDepartureFields(args.mode, args.departureAt),
+          evidence: evidence({
+            kind: "UNKNOWN",
+            provider: "routes",
+            sourceRef: "computeRoutes",
+            sourceField: "duration",
+            fetchedAt: realNowIso(),
+            validFor: null,
+            note: "GOOGLE_MAPS_API_KEY 未設定。直線距離では代用しない",
+          }),
+        };
+      } else {
+        base = await counted(ctx, "routes", () =>
+          computeLiveRoute({
+            apiKey: env.googleMapsApiKey!,
+            from: args.from,
+            to: args.to,
+            mode: args.mode,
+            departureAt: args.departureAt,
+          }),
+        );
+      }
     } else {
       base = await counted(ctx, "mock-routes", async () => {
         const meters = haversineMeters(args.from, args.to);
         const speed = args.mode === "WALK" ? 80 : args.mode === "TRANSIT" ? 250 : 400;
+        const durationMinutes = Math.max(5, Math.round(meters / speed));
+        const bufferMinutes = travelBufferMinutes(args.mode);
         return {
-          durationMinutes: Math.max(5, Math.round(meters / speed)),
+          durationMinutes,
           distanceMeters: Math.round(meters),
+          bufferMinutes,
           kind: "API" as const,
+          failure: null,
+          cached: false,
+          ...driveDepartureFields(args.mode, args.departureAt),
           evidence: evidence({
             kind: "API",
             provider: "mock-routes",
@@ -375,7 +419,7 @@ export async function estimateTravel(
             sourceField: "duration",
             fetchedAt: realNowIso(),
             validFor: null,
-            note: "モック経路。LIVEでは Routes 失敗時に直線距離を実移動時間として使わない",
+            note: `モック経路 ${durationMinutes}分。余裕 ${bufferMinutes}分はアプリ加算。LIVEでは使わない`,
           }),
         };
       });
@@ -383,6 +427,21 @@ export async function estimateTravel(
     cacheSet(ctx, key, base);
   } else {
     await ctx.onHttp({ provider: "routes", cacheHit: true, attempt: ctx.httpAttempts });
+    const fetchedAt = base.evidence.fetchedAt ?? realNowIso();
+    base = {
+      ...base,
+      cached: true,
+      kind: "CACHE",
+      evidence: evidence({
+        kind: "CACHE",
+        provider: base.evidence.provider,
+        sourceRef: base.evidence.sourceRef,
+        sourceField: base.evidence.sourceField,
+        fetchedAt,
+        validFor: base.evidence.validFor,
+        note: `キャッシュ（取得 ${fetchedAt}）。${base.evidence.note ?? ""}`.trim(),
+      }),
+    };
   }
 
   if (delayOverlay) {
@@ -580,133 +639,8 @@ async function liveDetails(apiKey: string, spotId: string): Promise<SpotDetails>
   };
 }
 
-type RouteEstimate = {
-  durationMinutes: number | null;
-  distanceMeters: number | null;
-  evidence: Evidence;
-  kind: SourceKind;
-};
-
-async function liveRouteWithFallback(
-  ctx: ProviderCtx,
-  apiKey: string,
-  args: {
-    from: { lat: number; lng: number };
-    to: { lat: number; lng: number };
-    mode: TravelMode;
-    departureAt: string;
-  },
-): Promise<RouteEstimate> {
-  const departureAt = clampDeparture(args.departureAt);
-  const modes: TravelMode[] = [];
-  for (const mode of [args.mode, "WALK", "DRIVE"] as TravelMode[]) {
-    if (!modes.includes(mode)) modes.push(mode);
-  }
-  let last: RouteEstimate | null = null;
-  for (const mode of modes) {
-    last = await counted(ctx, "routes", () => liveRoute(apiKey, { ...args, mode, departureAt }));
-    if (last.durationMinutes != null) {
-      if (mode !== args.mode || departureAt !== args.departureAt) {
-        last = {
-          ...last,
-          evidence: {
-            ...last.evidence,
-            note: `Routes ${mode}${departureAt !== args.departureAt ? "（出発を現在以降に補正）" : ""}`,
-          },
-        };
-      }
-      return last;
-    }
-  }
-  return last!;
-}
-
-function clampDeparture(iso: string): string {
-  const at = new Date(iso).getTime();
-  if (!Number.isFinite(at)) return realNowIso();
-  if (at >= Date.now() - 30_000) return iso;
-  return realNowIso();
-}
-
-async function liveRoute(
-  apiKey: string,
-  args: {
-    from: { lat: number; lng: number };
-    to: { lat: number; lng: number };
-    mode: TravelMode;
-    departureAt: string;
-  },
-): Promise<{
-  durationMinutes: number | null;
-  distanceMeters: number | null;
-  evidence: Evidence;
-  kind: SourceKind;
-}> {
-  const travelMode = args.mode === "WALK" ? "WALK" : args.mode === "TRANSIT" ? "TRANSIT" : "DRIVE";
-  const res = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": apiKey,
-      "X-Goog-FieldMask": ROUTES_FIELD_MASK,
-    },
-    body: JSON.stringify({
-      origin: { location: { latLng: { latitude: args.from.lat, longitude: args.from.lng } } },
-      destination: { location: { latLng: { latitude: args.to.lat, longitude: args.to.lng } } },
-      travelMode,
-      languageCode: "ja",
-      departureTime: args.departureAt,
-    }),
-    signal: AbortSignal.timeout(10000),
-  });
-  if (!res.ok) {
-    return {
-      durationMinutes: null,
-      distanceMeters: null,
-      kind: "UNKNOWN",
-      evidence: evidence({
-        kind: "UNKNOWN",
-        provider: "routes",
-        sourceRef: null,
-        sourceField: "duration",
-        fetchedAt: realNowIso(),
-        validFor: null,
-        note: `Routes 失敗 (${res.status})。直線距離では代用しない`,
-      }),
-    };
-  }
-  const data = (await res.json()) as {
-    routes?: { duration?: string; distanceMeters?: number }[];
-  };
-  const route = data.routes?.[0];
-  const seconds = route?.duration ? Number(route.duration.replace("s", "")) : null;
-  return {
-    durationMinutes: seconds != null ? Math.round(seconds / 60) : null,
-    distanceMeters: route?.distanceMeters ?? null,
-    kind: "API",
-    evidence: evidence({
-      kind: "API",
-      provider: "routes",
-      sourceRef: "computeRoutes",
-      sourceField: "duration",
-      fetchedAt: realNowIso(),
-      validFor: null,
-      note: "Routes API computeRoutes",
-    }),
-  };
-}
-
 function categoryToPlaceTypes(category: string): string[] {
-  if (/公園|park/.test(category) && !/名所|tourist/.test(category)) return ["park"];
-  if (/散歩|walk|屋外|名所/.test(category)) return ["tourist_attraction"];
-  if (/美術館|gallery/.test(category)) return ["art_gallery"];
-  if (/展示|museum|博物館/.test(category)) return ["museum"];
-  if (/菓子|bakery/.test(category)) return ["bakery"];
-  if (/甘い|cafe|スイーツ|カフェ/.test(category)) return ["cafe"];
-  if (/書店|本/.test(category)) return ["bookstore"];
-  if (/図書館/.test(category)) return ["library"];
-  if (/買い物|mall/.test(category)) return ["shopping_mall"];
-  return ["tourist_attraction"];
+  return includedTypesForCategory(category);
 }
 
 function estimateEnvironment(types: string[]): Spot["environment"] {

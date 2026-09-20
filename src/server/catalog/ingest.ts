@@ -18,6 +18,7 @@ import {
   type CatalogVenueRecord,
 } from "./repo";
 import { structureEvents } from "./structure";
+import { TOKYO_PRIORITY_AREAS } from "@/contracts/serviceArea";
 
 function normalizeKey(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
@@ -333,4 +334,27 @@ export async function ingestEvents(input?: {
   } finally {
     await releaseIngestLock(runId);
   }
+}
+
+export async function ingestTokyoPriority(input?: {
+  dateTokyo?: string;
+  genre?: string;
+}): Promise<{ areaName: string; ok: boolean; runId: string; saved: number; error: string | null }[]> {
+  const results = [];
+  for (const area of TOKYO_PRIORITY_AREAS) {
+    const result = await ingestEvents({
+      dateTokyo: input?.dateTokyo,
+      genre: input?.genre ?? "展覧会",
+      areaName: area.name,
+      owner: `tokyo-priority-${area.name}`,
+    });
+    results.push({
+      areaName: area.name,
+      ok: result.ok,
+      runId: result.runId,
+      saved: result.saved,
+      error: result.error,
+    });
+  }
+  return results;
 }

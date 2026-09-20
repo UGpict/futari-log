@@ -1,5 +1,7 @@
 /** クライアントに出してよい公開設定。秘密・Admin・LLM キーは置かない。 */
 
+export { SERVICE_AREA_NOTICE } from "@/contracts/serviceArea";
+
 export const TIME_ZONE = "Asia/Tokyo";
 
 export const FX = {

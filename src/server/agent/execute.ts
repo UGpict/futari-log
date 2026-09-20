@@ -137,13 +137,14 @@ export async function executeRun(
       memories,
     });
     if (planned.waitingQuestion) {
-      await appendEvent(runId, "INPUT_REQUIRED", planned.waitingQuestion.prompt, {
+      const waitingQuestion = planned.waitingQuestion;
+      await appendEvent(runId, "INPUT_REQUIRED", waitingQuestion.prompt, {
         payload: { agent: "planner" },
       });
       await withRun(runId, (found) => {
         if (!found) return;
         found.run.status = "WAITING_INPUT";
-        found.run.waitingQuestion = planned.waitingQuestion;
+        found.run.waitingQuestion = waitingQuestion;
         found.run.leaseOwner = null;
         if (planned.walkAckFingerprint) {
           found.bundle.session.pendingWalkAckFingerprint = planned.walkAckFingerprint;

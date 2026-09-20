@@ -3,15 +3,13 @@
 import { Button } from "@/components/button";
 
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { api } from "@/client/api";
 import { useSession } from "@/client/hooks/use-session";
 import { Card } from "@/components/card";
-import { CostBadge } from "@/components/cost-badge";
-import { ModeBanner, SourceChip } from "@/components/mode-banner";
 import { formatTokyoHm } from "@/lib/time";
+import { HomeLogo } from "@/components/home-logo";
 
 export function SessionDetails({ sessionId }: { sessionId: string }) {
   const router = useRouter();
@@ -20,18 +18,6 @@ export function SessionDetails({ sessionId }: { sessionId: string }) {
   const [note, setNote] = useState("カフェは喜んでた。展示は途中で疲れてた");
 
   const latestRun = data?.runs.at(-1);
-  const cost = useMemo(() => {
-    const runs = data?.runs ?? [];
-    return {
-      llm: runs.reduce((n, r) => n + (r.cost.llmJpy ?? 0), 0),
-      usd: runs.reduce((n, r) => n + (r.cost.llmUsd ?? 0), 0),
-      usdKnown: runs.some((r) => r.cost.llmUsd != null),
-      api: runs.reduce((n, r) => n + (r.cost.apiJpy ?? 0), 0),
-      hard: runs.reduce((n, r) => n + r.cost.hardCalls, 0),
-      mundane: runs.reduce((n, r) => n + r.cost.mundaneCalls, 0),
-      unaccounted: runs.reduce((n, r) => n + r.cost.unaccountedCalls, 0),
-    };
-  }, [data]);
 
   const pendingApproval = data?.approvals.find((a) => a.status === "PENDING");
   const autoEvent = data?.events.find((e) => e.type === "PLAN_AUTO_APPLIED");
@@ -45,9 +31,7 @@ export function SessionDetails({ sessionId }: { sessionId: string }) {
     <main className="mx-auto max-w-4xl px-4 py-8 pb-28">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <Link href="/" className="inline-flex items-center gap-1 text-sm text-rose">
-            <ArrowLeft size={16} />ホーム
-          </Link>
+          <HomeLogo />
           <h1 className="text-2xl font-semibold">
             {data.session.input.dateTokyo} {data.session.input.meet.name}
           </h1>
@@ -60,16 +44,6 @@ export function SessionDetails({ sessionId }: { sessionId: string }) {
         </Link>
       </div>
 
-      <div className="mt-4">
-        <ModeBanner
-          runtime={data.runtime}
-          emulator={data.emulator}
-          dataBackend={data.dataBackend}
-          authBackend={data.authBackend}
-          mode={latestRun?.mode}
-          overlays={data.overlays}
-        />
-      </div>
       {error ? <p className="mt-3 text-sm text-rose">{error}</p> : null}
 
       {autoEvent ? (
@@ -156,7 +130,6 @@ export function SessionDetails({ sessionId }: { sessionId: string }) {
                   <div className="flex flex-wrap gap-2 text-xs">
                     {item.locked ? <span className="rounded-full bg-amber-soft px-2 py-1">時刻固定</span> : null}
                     <span className="rounded-full bg-paper-deep px-2 py-1">{item.progress}</span>
-                    {spot?.environment.value ? <SourceChip kind="API" /> : <SourceChip kind="UNKNOWN" />}
                   </div>
                 </div>
                 <p className="mt-2 text-sm">{item.reason}</p>
@@ -353,15 +326,6 @@ export function SessionDetails({ sessionId }: { sessionId: string }) {
           </p>
         ) : null}
       </section>
-
-      <CostBadge
-        llmUsd={cost.usdKnown ? cost.usd : null}
-        llmJpy={cost.llm}
-        apiJpy={cost.api}
-        hard={cost.hard}
-        mundane={cost.mundane}
-        unaccounted={cost.unaccounted}
-      />
     </main>
   );
 }

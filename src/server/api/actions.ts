@@ -35,7 +35,9 @@ import { getCatalogSpot } from "@/server/providers/catalog";
 import { searchPlacesByText } from "@/server/providers";
 import { presentMemoryList, presentReplay, presentRunView, presentSessionSnapshot } from "@/server/api/presenters";
 import { calendarListResponseSchema } from "@/contracts/calendar";
-import { placeSearchResponseSchema } from "@/contracts/places";
+import { isVenuePlaceId, placePhotosResponseSchema, placeSearchResponseSchema } from "@/contracts/places";
+import { PLACE_PHOTO_MAX_IDS } from "@/config/settings";
+import { listVenuePhotos, loadVenuePhotoMedia } from "@/server/providers/placePhotos";
 
 function gitSha(): string | null {
   return process.env.GIT_COMMIT ?? process.env.VERCEL_GIT_COMMIT_SHA ?? null;
@@ -212,6 +214,45 @@ export async function searchPlaces(uid: string, query: string, lat?: number, lng
   return { ok: true as const, data: placeSearchResponseSchema.parse(result) };
 }
 
+function photoUnavailable(placeId: string, state: "none" | "failed") {
+  return {
+    placeId,
+    state,
+    kind: "VENUE" as const,
+    source: "places" as const,
+    imageUrl: null,
+    googleMapsUri: null,
+    authorAttributions: [],
+  };
+}
+
+export async function listPlacePhotos(uid: string, ids: string[]) {
+  void uid;
+  const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))].slice(0, PLACE_PHOTO_MAX_IDS);
+  const env = getEnv();
+  if (!env.googleMapsApiKey) {
+    return {
+      ok: true as const,
+      data: placePhotosResponseSchema.parse({
+        photos: unique.map((id) => photoUnavailable(id, isVenuePlaceId(id) ? "failed" : "none")),
+      }),
+    };
+  }
+  const photos = await listVenuePhotos({ apiKey: env.googleMapsApiKey, placeIds: unique });
+  return { ok: true as const, data: placePhotosResponseSchema.parse({ photos }) };
+}
+
+export async function getPlacePhotoMedia(uid: string, placeId: string) {
+  void uid;
+  const env = getEnv();
+  if (!env.googleMapsApiKey || !isVenuePlaceId(placeId)) {
+    return { ok: false as const, status: isVenuePlaceId(placeId) ? 502 : 404, error: "photo unavailable" };
+  }
+  const result = await loadVenuePhotoMedia({ apiKey: env.googleMapsApiKey, placeId });
+  if (result.state === "ready") return { ok: true as const, bytes: result.bytes, contentType: result.contentType };
+  return { ok: false as const, status: result.state === "none" ? 404 : 502, error: "photo unavailable" };
+}
+
 export async function getRunView(uid: string, runId: string) {
   const found = await getRun(runId);
   if (!found) return { ok: false as const, status: 404, error: "not found" };
@@ -271,7 +312,29 @@ export async function answerQuestion(uid: string, runId: string, questionId: str
       found.run.leaseOwner = null;
       return { ok: true as const, restart: true, sessionId: found.bundle.session.id };
     }
-    if (questionId === "q_unsupported_wish" || questionId === "q_plan_unmet" || questionId === "q_no_candidates" || questionId === "q_replan_no_change") {
+    if (questionId === "q_tokyo_unconfirmed" && answer === "都内の場所です") {
+      found.bundle.session.input = { ...found.bundle.session.input, tokyoAreaAcknowledged: true };
+      found.run.status = "PENDING";
+      found.run.waitingQuestion = null;
+      found.run.leaseOwner = null;
+      return { ok: true as const, restart: true, sessionId: found.bundle.session.id };
+    }
+    if (questionId === "q_search_range" && answer === "この範囲で続ける") {
+      found.bundle.session.input = { ...found.bundle.session.input, searchExpandAcknowledged: true };
+      found.run.status = "PENDING";
+      found.run.waitingQuestion = null;
+      found.run.leaseOwner = null;
+      return { ok: true as const, restart: true, sessionId: found.bundle.session.id };
+    }
+    if (
+      questionId === "q_unsupported_wish" ||
+      questionId === "q_plan_unmet" ||
+      questionId === "q_no_candidates" ||
+      questionId === "q_replan_no_change" ||
+      questionId === "q_outside_tokyo" ||
+      questionId === "q_tokyo_unconfirmed" ||
+      questionId === "q_search_range"
+    ) {
       found.run.status = "CANCELLED";
       found.run.finishedAt = realNowIso();
       found.run.waitingQuestion = null;

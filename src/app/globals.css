@@ -73,3 +73,15 @@ svg.lucide {
   --control-icon-size: 40px;
   --disabled-opacity: .5;
 }
+
+/* Readable memo surfaces, shared by composing and editing. */
+:root {
+  --memo-surface: #ffffff;
+  --memo-field: #ffffff;
+  --memo-border: #cf9db3;
+  --memo-card-border: #dfd5dd;
+  --memo-ink: #403744;
+  --memo-muted: #756775;
+  --memo-accent: #99506f;
+  --memo-tint: #f7e8ef;
+}

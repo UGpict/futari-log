@@ -1,3 +1,4 @@
+import { normalizePlaceType } from "@/contracts/spotKinds";
 import type { Spot } from "@/domain/schemas";
 import { searchSpots, type ProviderCtx } from "@/server/providers";
 import { dailyFresh, remember } from "./memory";
@@ -128,4 +129,34 @@ export async function runScout(input: {
     `散歩${buckets.walk.length} / 展示${buckets.exhibit.length} / 甘味${buckets.sweets.length} / 寄り道${buckets.other.length}`,
   );
   return buckets;
+}
+
+export function mergeScoutBuckets(
+  into: { walk: Spot[]; exhibit: Spot[]; sweets: Spot[]; other: Spot[] },
+  add: { walk: Spot[]; exhibit: Spot[]; sweets: Spot[]; other: Spot[] },
+) {
+  mergeUnique(into.walk, add.walk);
+  mergeUnique(into.exhibit, add.exhibit);
+  mergeUnique(into.sweets, add.sweets);
+  mergeUnique(into.other, add.other);
+}
+
+export function scoutPool(buckets: { walk: Spot[]; exhibit: Spot[]; sweets: Spot[]; other: Spot[] }): Spot[] {
+  const seen = new Set<string>();
+  const out: Spot[] = [];
+  for (const spot of [...buckets.walk, ...buckets.exhibit, ...buckets.sweets, ...buckets.other]) {
+    if (seen.has(spot.id)) continue;
+    seen.add(spot.id);
+    out.push(spot);
+  }
+  return out;
+}
+
+export function jobsMissingCoverage(jobs: ScoutJob[], spots: Spot[]): string[] {
+  return jobs
+    .filter((job) => {
+      const wanted = new Set(job.includedTypes.map(normalizePlaceType));
+      return !spots.some((spot) => spot.categories.some((type) => wanted.has(normalizePlaceType(type))));
+    })
+    .map((job) => job.category);
 }

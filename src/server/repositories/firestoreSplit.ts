@@ -54,6 +54,7 @@ import type {
 } from "./types";
 import { emptyCoupleBundle, emptySessionBundle } from "./types";
 import { splitCounts, type SplitCounts } from "./splitMap";
+import { replanStartError } from "@/domain/plan/replanOrder";
 
 type Tx = Transaction;
 
@@ -513,6 +514,9 @@ export type InsertRunInput = {
   sessionId: string;
   kind: Run["kind"];
   trigger?: string | null;
+  instruction?: string | null;
+  targetPlanItemId?: string | null;
+  basePlanVersion?: number | null;
   idempotencyKey?: string | null;
   bodyHash: string;
   run: Run;
@@ -546,6 +550,21 @@ export async function insertPendingRun(input: InsertRunInput): Promise<
       if (!sessionSnap.exists) return { ok: false as const, status: 404, error: "session not found" };
       const session = stripSession(sessionSnap.data());
       if (!session) return { ok: false as const, status: 404, error: "session not found" };
+      let currentItemIds: string[] | null = null;
+      if (input.instruction != null && input.kind === "REPLAN" && session.currentPlanVersion != null) {
+        const planSnap = await tx.get(planRef(firestore, loc.coupleId, input.sessionId, session.currentPlanVersion));
+        const plan = planSnap.data() as Plan | undefined;
+        currentItemIds = plan?.items?.map((item) => item.id) ?? [];
+      }
+      const replanError = replanStartError({
+        kind: input.kind,
+        instruction: input.instruction,
+        basePlanVersion: input.basePlanVersion,
+        currentPlanVersion: session.currentPlanVersion,
+        targetPlanItemId: input.targetPlanItemId,
+        currentItemIds,
+      });
+      if (replanError) return { ok: false as const, ...replanError };
       const runsSnap = await tx.get(sessionRef(firestore, loc.coupleId, input.sessionId).collection(sub("runs")));
       const active = (runsSnap as FirebaseFirestore.QuerySnapshot).docs
         .map((doc) => stripRun(doc.data())?.run)
@@ -566,6 +585,8 @@ export async function insertPendingRun(input: InsertRunInput): Promise<
         coupleId: loc.coupleId,
         sessionId: input.sessionId,
         ownerUid: input.uid,
+        instruction: input.instruction ?? input.run.instruction ?? null,
+        targetPlanItemId: input.targetPlanItemId ?? input.run.targetPlanItemId ?? null,
         basePlanVersion: session.currentPlanVersion,
       };
       tx.set(runRef(firestore, loc.coupleId, input.sessionId, run.id), runDocPayload(run, 0));
@@ -803,7 +824,10 @@ export async function demoResetDocs(uid: string, keepReplays: boolean): Promise<
   }
 }
 
-export async function writeSplitFromDb(source: Db): Promise<SplitCounts> {
+export async function writeSplitFromDb(
+  source: Db,
+  opts: { ifMissing?: boolean } = {},
+): Promise<{ counts: SplitCounts; written: number; skipped: number }> {
   const firestore = db();
   const writes: Array<{ ref: FirebaseFirestore.DocumentReference; data: DocumentData }> = [];
   for (const couple of Object.values(source.couples)) {
@@ -865,12 +889,68 @@ export async function writeSplitFromDb(source: Db): Promise<SplitCounts> {
   for (const rec of Object.values(source.idempotency)) {
     writes.push({ ref: idempotencyRef(firestore, rec.key), data: rec });
   }
+
+  let written = 0;
+  let skipped = 0;
   for (let i = 0; i < writes.length; i += 400) {
-    const batch = firestore.batch();
-    for (const item of writes.slice(i, i + 400)) batch.set(item.ref, item.data);
-    await batch.commit();
+    const chunk = writes.slice(i, i + 400);
+    if (opts.ifMissing) {
+      for (let j = 0; j < chunk.length; j += 100) {
+        const slice = chunk.slice(j, j + 100);
+        const snaps = await firestore.getAll(...slice.map((item) => item.ref));
+        const batch = firestore.batch();
+        let used = 0;
+        snaps.forEach((snap, index) => {
+          if (snap.exists) {
+            skipped += 1;
+            return;
+          }
+          batch.set(slice[index].ref, slice[index].data);
+          used += 1;
+          written += 1;
+        });
+        if (used) await batch.commit();
+      }
+    } else {
+      const batch = firestore.batch();
+      for (const item of chunk) batch.set(item.ref, item.data);
+      await batch.commit();
+      written += chunk.length;
+    }
   }
-  return splitCounts(source);
+  return { counts: splitCounts(source), written, skipped };
+}
+
+export async function listSplitInventory(): Promise<{
+  couples: string[];
+  sessions: string[];
+  runs: string[];
+  events: number;
+  planVersions: number;
+}> {
+  const firestore = db();
+  const couplesSnap = await firestore.collection(coupleCol()).get();
+  const couples: string[] = [];
+  const sessions: string[] = [];
+  const runs: string[] = [];
+  let events = 0;
+  let planVersions = 0;
+  for (const coupleDoc of couplesSnap.docs) {
+    couples.push(coupleDoc.id);
+    const sessionSnap = await coupleDoc.ref.collection(sub("sessions")).get();
+    for (const sessionDoc of sessionSnap.docs) {
+      sessions.push(sessionDoc.id);
+      const [runSnap, eventSnap, planSnap] = await Promise.all([
+        sessionDoc.ref.collection(sub("runs")).select().get(),
+        sessionDoc.ref.collection(sub("events")).select().get(),
+        sessionDoc.ref.collection(sub("planVersions")).select().get(),
+      ]);
+      for (const runDoc of runSnap.docs) runs.push(runDoc.id);
+      events += eventSnap.size;
+      planVersions += planSnap.size;
+    }
+  }
+  return { couples, sessions, runs, events, planVersions };
 }
 
 export async function nextEventSeq(bundle: SessionBundle, runId: string, eventSeq: Record<string, number>): Promise<number> {

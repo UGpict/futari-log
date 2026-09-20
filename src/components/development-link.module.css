@@ -1,0 +1,7 @@
+.link { position: fixed; left: 64px; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 30; }
+.button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 56px; height: 56px; border: 0; border-radius: 50%; background: var(--action-primary); color: var(--action-on-primary); text-decoration: none; font-size: 10px; font-weight: 700; line-height: 1; letter-spacing: .06em; touch-action: manipulation; transition: transform .18s; }
+.button:hover { background: var(--action-primary-hover); }
+.button:active { transform: scale(.96); }
+.button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 4px; }
+@media (max-width: 600px) { .link { left: 12px; bottom: calc(90px + env(safe-area-inset-bottom)); } }
+@media (prefers-reduced-motion: reduce) { .button { transition: none; } }
