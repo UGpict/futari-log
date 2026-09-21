@@ -1,6 +1,7 @@
 import { LIMITS } from "@/config/settings";
 import { getEnv } from "@/config/env";
 import { loadSelectedEventSpots } from "@/server/catalog/planAttach";
+import { suggestCatalogEventsForPlan } from "@/server/catalog/suggest";
 import type { Memory, Plan, Run, Session, Spot } from "@/domain/schemas";
 import { evaluateWalkLimits, describeWalkOverages, longWalkQuestion, travelUnverifiedQuestion, hasUnverifiedTravel, walkAckFingerprintFromPlan, walkLongAckMatches, resolveWalkHardTotal } from "@/domain/plan/walkLimits";
 import { WALK_LIMITS } from "@/config/settings";
@@ -208,12 +209,28 @@ export async function orchestratePlanning(input: {
     };
   }
   const selected = input.session.input.selectedEventIds ?? [];
-  const exhibit = catalog.spots.length
-    ? [...catalog.spots, ...scout.exhibit.filter((s) => !catalog.spots.some((e) => e.id === s.id))]
+  const autoCatalog = await suggestCatalogEventsForPlan({
+    enabled: env.enableEventCatalog && selected.length === 0,
+    dateTokyo: input.session.input.dateTokyo,
+    areaHint: input.session.input.meet.name,
+    wishText: input.session.input.preferences.map((p) => p.content).join(" "),
+    excludeIds: selected,
+    limit: 3,
+  });
+  if (autoCatalog.reasons.length) {
+    await input.log(
+      "planner",
+      "NOTICE",
+      `カタログ自動候補: ${autoCatalog.reasons.map((r) => `${r.eventId}(${r.reason})`).join(" / ")}`,
+    );
+  }
+  const catalogSpots = [...catalog.spots, ...autoCatalog.spots.filter((s) => !catalog.spots.some((c) => c.id === s.id))];
+  const exhibit = catalogSpots.length
+    ? [...catalogSpots, ...scout.exhibit.filter((s) => !catalogSpots.some((e) => e.id === s.id))]
     : selected.length === 0 || catalog.fallbackAcknowledged
       ? scout.exhibit
       : [];
-  for (const [id, rules] of Object.entries(catalog.hours)) {
+  for (const [id, rules] of Object.entries({ ...catalog.hours, ...autoCatalog.hours })) {
     input.ctx.placeHours = { ...(input.ctx.placeHours ?? {}), [id]: rules };
   }
   const weather = await runWeather({
@@ -266,7 +283,7 @@ export async function orchestratePlanning(input: {
   });
   const lockedIds = [
     ...input.session.input.fixedAppointments.map((a) => a.spotId).filter((x): x is string => Boolean(x)),
-    ...catalog.spots.map((s) => s.id),
+    ...catalogSpots.map((s) => s.id),
     ...protectedItems.map((item) => item.spotId),
   ];
   const avoidIds =
@@ -384,7 +401,7 @@ export async function orchestratePlanning(input: {
   }
 
   const spotMap: Record<string, Spot> = {};
-  for (const s of [...scout.walk, ...exhibit, ...scout.sweets, ...scout.other, ...catalog.spots]) {
+  for (const s of [...scout.walk, ...exhibit, ...scout.sweets, ...scout.other, ...catalogSpots]) {
     spotMap[s.id] = s;
   }
 
