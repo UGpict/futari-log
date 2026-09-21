@@ -111,7 +111,7 @@
   position: fixed;
   z-index: 12;
   right: max(10px, calc((100vw - 430px) / 2 + 10px));
-  bottom: calc(14px + env(safe-area-inset-bottom));
+  bottom: calc(var(--app-viewport-edge-y) + 14px + env(safe-area-inset-bottom));
 }
 .createDateFab[data-over-events="true"] button > svg { fill: #a84668; }
 .createDateFab[data-over-events="true"] button > svg text { stroke: #fff; stroke-width: 6px; stroke-linejoin: round; paint-order: stroke fill; }

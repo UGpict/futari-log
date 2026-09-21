@@ -55,7 +55,7 @@ body {
 
   .app-viewport {
     width: 430px;
-    height: min(860px, calc(100svh - 56px));
+    height: var(--app-viewport-height);
     min-height: 0;
     overflow-x: hidden;
     overflow-y: auto;
@@ -84,6 +84,15 @@ svg.lucide {
 :root {
   --app-dot-pattern: radial-gradient(circle, #df9bb630 .85px, transparent 1.1px);
   --app-dot-size: 12px 12px;
+  --app-viewport-height: 100dvh;
+  --app-viewport-edge-y: 0px;
+}
+
+@media (min-width: 700px) {
+  :root {
+    --app-viewport-height: min(860px, calc(100svh - 56px));
+    --app-viewport-edge-y: calc((100svh - var(--app-viewport-height)) / 2);
+  }
 }
 
 /* Product UI tokens. Actions use components/button; feature CSS owns layout only. */
