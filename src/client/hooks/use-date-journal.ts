@@ -18,6 +18,10 @@ export type DateMemory = {
   reflectionId?: string;
   contentVersion?: number;
   analysisStatus?: string;
+  /** 旧1枚形式。読み込み時に stickerDataUrls へ移行する。 */
+  stickerDataUrl?: string;
+  /** 端末内で生成した透過ステッカー（最大3枚）。サーバーへは送信しない。 */
+  stickerDataUrls?: string[];
 };
 
 const updateEvent = "futari-journal-changed";
@@ -36,7 +40,8 @@ export function tokyoToday() {
 }
 
 function withoutDemoFlag(record: DateMemory): DateMemory {
-  const { demo: _demo, ...rest } = record;
+  const rest = { ...record };
+  delete rest.demo;
   return rest;
 }
 
@@ -60,10 +65,13 @@ function readRecords(raw: string): DateMemory[] | null {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return null;
     const migrated = parsed.map((item: unknown) => {
-      if (item && typeof item === "object" && "mood" in item && item.mood === "love") {
-        return { ...item, mood: "happy" };
+      if (!item || typeof item !== "object") return item;
+      const next = { ...item } as Record<string, unknown>;
+      if (next.mood === "love") next.mood = "happy";
+      if (typeof next.stickerDataUrl === "string" && !Array.isArray(next.stickerDataUrls)) {
+        next.stickerDataUrls = [next.stickerDataUrl];
       }
-      return item;
+      return next;
     });
     return migrated.every(isMemory) ? migrated : null;
   } catch {
@@ -80,6 +88,8 @@ function isMemory(value: unknown): value is DateMemory {
     typeof item.title === "string" &&
     typeof item.note === "string" &&
     moods.some((mood) => mood.id === item.mood) &&
+    (item.stickerDataUrl === undefined || (typeof item.stickerDataUrl === "string" && item.stickerDataUrl.startsWith("data:image/"))) &&
+    (item.stickerDataUrls === undefined || (Array.isArray(item.stickerDataUrls) && item.stickerDataUrls.length <= 3 && item.stickerDataUrls.every((url) => typeof url === "string" && url.startsWith("data:image/")))) &&
     (item.demo === undefined || item.demo === true || item.demo === false)
   );
 }
@@ -176,6 +186,7 @@ export function useDateJournal(uid?: string, demoRecords: DateMemory[] = []) {
       contentVersion: result.reflection.contentVersion,
       analysisStatus: result.reflection.analysisStatus,
     };
+    mapped.stickerDataUrls = clean.stickerDataUrls;
     saveLocal(mapped);
     return mapped;
   }
