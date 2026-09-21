@@ -2,7 +2,6 @@
 
 import { TextInput, TextArea, SelectInput } from "@/components/text-input";
 
-import { flushSync } from "react-dom";
 import { Button } from "@/components/button";
 
 import { useEffect, useRef, useState } from "react";
@@ -14,6 +13,7 @@ import { usePlaceSearch } from "@/client/hooks/use-place-search";
 import { SERVICE_AREA_NOTICE, tokyoToday } from "@/config/public";
 import type { PlaceCandidate } from "@/contracts";
 import { MemoMascot } from "@/components/memo-mascot";
+import { AiSparkIcon } from "@/components/ai-spark-icon";
 import { Plus, ChevronLeft, ChevronRight, ArrowRight, Check, ChevronDown, Sparkles, CalendarHeart, Clock3, MapPinned } from "lucide-react";
 import styles from "./home.module.css";
 
@@ -93,8 +93,6 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
     return () => window.removeEventListener("popstate", syncStepFromHistory);
   }, [fullPage]);
   const [selected, setSelected] = useState<string[]>([]);
-  const [freeWish, setFreeWish] = useState(Boolean(initialWish));
-  const freeWishInput = useRef<HTMLTextAreaElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const [showCategories, setShowCategories] = useState(true);
   const [selectingCategory, setSelectingCategory] = useState(false);
@@ -356,8 +354,14 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
             <p className={styles.planHint}>選ばずにおまかせでもOK・複数選択可</p>
             <div className={styles.planChips} aria-label="気になること（任意）">{currentCategory.options.map((option) => <button type="button" key={option} aria-pressed={selected.includes(option)} onClick={() => setSelected(selected.includes(option) ? selected.filter((item) => item !== option) : [...selected, option])}>{selected.includes(option) && <Check size={13} />}{option}</button>)}</div>
           </div>}
-          <div className={styles.planChips}><button type="button" aria-pressed={selected.includes("おまかせ")} onClick={() => { setCategory(null); setShowCategories(true); setSelected(selected.includes("おまかせ") ? [] : ["おまかせ"]); }}><Sparkles size={14} />全部おまかせ</button><button type="button" aria-expanded={freeWish} onClick={() => { flushSync(() => setFreeWish(true)); freeWishInput.current?.focus(); }}><Plus size={14} />希望を書く</button></div>
-          {freeWish && <label className={styles.formLabel}>こんなこともしたい<TextArea ref={freeWishInput} rows={2} maxLength={1500} placeholder="海が見えるところで、ゆっくりしたい" value={form.self} onChange={(e) => setForm({ ...form, self: e.target.value })} /></label>}
+          <div className={styles.aiWishArea}>
+            <button className={styles.aiChoice} type="button" aria-pressed={selected.includes("おまかせ")} onClick={() => { setCategory(null); setShowCategories(true); setSelected(selected.includes("おまかせ") ? [] : ["おまかせ"]); }}>
+              <AiSparkIcon />
+              <span><strong>全部おまかせ</strong><small>AIがふたりに合う過ごし方を提案</small></span>
+              {selected.includes("おまかせ") && <Check size={16} />}
+            </button>
+            <label className={`${styles.formLabel} ${styles.wishField}`}><span>希望があれば教えてね <small>任意</small></span><TextArea rows={1} maxLength={1500} placeholder="海が見えるところで、ゆっくりしたい" value={form.self} onChange={(e) => setForm({ ...form, self: e.target.value })} /></label>
+          </div>
         </>}
         {step === 1 && <div className={styles.schedulePanel}>
           <p className={styles.areaNotice}>{SERVICE_AREA_NOTICE}。都外の場所は確認します。</p>
