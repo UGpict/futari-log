@@ -157,6 +157,28 @@ export async function releasePriceLock(placeId: string, owner: string): Promise<
   }
 }
 
+function hashKey(key: string): string {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return h.toString(16);
+}
+
+/**
+ * 金額・quote を含まない旧 ID（PR #25 初回コミット以前）。
+ * カンマ欠け・誤 VERIFIED などが残りうるので会計には使わない。
+ */
+export function legacyStableFactId(parts: {
+  placeId: string;
+  kind: string;
+  unit: string;
+  audience: string;
+  usageKind: string;
+  sourceUrl: string | null;
+}): string {
+  const key = [parts.placeId, parts.kind, parts.unit, parts.audience, parts.usageKind, parts.sourceUrl ?? ""].join("|");
+  return `pf_${hashKey(key)}_${parts.placeId.slice(0, 8)}`;
+}
+
 /** 同一内容の fact が増殖しないよう、placeId+kind+unit+audience+usage+sourceUrl+金額+quote で安定 ID。 */
 export function stableFactId(parts: {
   placeId: string;
@@ -179,9 +201,53 @@ export function stableFactId(parts: {
     parts.amountMinJpy ?? "",
     quoteKey,
   ].join("|");
-  let h = 0;
-  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-  return `pf_${h.toString(16)}_${parts.placeId.slice(0, 8)}`;
+  return `pf_${hashKey(key)}_${parts.placeId.slice(0, 8)}`;
+}
+
+/** 旧 ID 形式で保存された fact（金額なしキー）なら true。 */
+export function isLegacyPriceFact(fact: Pick<OfficialPriceFact, "id" | "placeId" | "kind" | "unit" | "audience" | "usageKind" | "sourceUrl" | "amountMinJpy" | "quote">): boolean {
+  const legacyId = legacyStableFactId({
+    placeId: fact.placeId,
+    kind: fact.kind,
+    unit: fact.unit,
+    audience: fact.audience,
+    usageKind: fact.usageKind,
+    sourceUrl: fact.sourceUrl,
+  });
+  if (fact.id !== legacyId) return false;
+  const currentId = stableFactId({
+    placeId: fact.placeId,
+    kind: fact.kind,
+    unit: fact.unit,
+    audience: fact.audience,
+    usageKind: fact.usageKind,
+    sourceUrl: fact.sourceUrl,
+    amountMinJpy: fact.amountMinJpy,
+    quote: fact.quote,
+  });
+  return fact.id !== currentId;
+}
+
+export async function deleteFact(factId: string): Promise<void> {
+  if (useFirestore()) {
+    await adminDb().collection(col(FACTS)).doc(factId).delete();
+    return;
+  }
+  const db = readFileDb();
+  delete db.facts[factId];
+  writeFileDb(db);
+}
+
+/** 指定 place の旧形式 fact を削除。戻り値は削除件数。 */
+export async function purgeLegacyFactsForPlace(placeId: string): Promise<number> {
+  const facts = await listFactsForPlace(placeId);
+  let removed = 0;
+  for (const fact of facts) {
+    if (!isLegacyPriceFact(fact)) continue;
+    await deleteFact(fact.id);
+    removed += 1;
+  }
+  return removed;
 }
 
 export async function getDailyPriceEnrichBudget(
