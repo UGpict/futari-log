@@ -608,7 +608,7 @@
 .inlineTimes label > svg { position: absolute; right: 9px; bottom: 13px; color: #bd7798; pointer-events: none; }
 .inlineTimes > span { align-self: center; color: #bba5b3; }
 .meetingCard { position: relative; border: 1px solid #ebdfe6; border-radius: 20px; background: linear-gradient(145deg, #fff, #fffafb); padding: 12px; box-shadow: 0 7px 24px #7653650a; }
-.routePath { position: absolute; z-index: 0; top: 34px; bottom: -34px; left: 0; width: 35px; height: calc(100% - 0px); overflow: visible; pointer-events: none; }
+.routePath { position: absolute; z-index: 0; top: 34px; left: 0; width: 35px; height: calc(100% - 9px); overflow: visible; pointer-events: none; }
 .routePath path { fill: none; stroke: #ad876f; stroke-width: 3; stroke-linecap: round; stroke-dasharray: 1 9; vector-effect: non-scaling-stroke; filter: drop-shadow(0 1px 0 #fff); }
 .routeStart { position: relative; display: grid; grid-template-columns: 35px minmax(0, 1fr); gap: 9px; }
 .routeMarker { position: relative; z-index: 1; display: grid; width: 35px; height: 37px; place-items: center; }
@@ -628,13 +628,14 @@
 .routeEnd[open] summary strong { display: none; }
 .routeEnd summary > svg { transition: transform .2s ease; }
 .routeEnd[open] summary > svg { transform: rotate(180deg); }
-.routeEndEditor { margin: 0 0 0 44px; padding: 0; background: transparent; animation: planEnter .2s ease both; }
+.routeEndEditor { max-height: 180px; margin: 0 0 0 44px; overflow: hidden; padding: 0; background: transparent; animation: routeEditorOpen .3s cubic-bezier(.22, 1, .36, 1) both; transform-origin: top; }
 .routeEndEditor input { width: 100%; }
+@keyframes routeEditorOpen { from { max-height: 0; opacity: 0; transform: translateY(-6px); } to { max-height: 180px; opacity: 1; transform: translateY(0); } }
 .placeSuggest { display: grid; gap: 4px; margin: 8px 0 0; max-height: min(240px, 36dvh); overflow: auto; }
 .placeSuggest button { display: grid; gap: 2px; text-align: left; border: 0; border-radius: 12px; padding: 8px 10px; background: #faf6f8; color: #695362; font-size: 12px; }
 .placeSuggest button small { color: #9d8796; font-size: 10px; }
 .placeHint { margin: 6px 0 0; font-size: 10px; color: #9d8796; }
-@media (prefers-reduced-motion: reduce) { .stageEntering, .stageLeaving, .dateDetails .categoryQuestion, .dateDetails > .planHint, .dateDetails .planChips, .planCalendar, .planCalendarDays button[data-choosing="true"], .planCalendarDays button[data-choosing="true"]::before { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .stageEntering, .stageLeaving, .dateDetails .categoryQuestion, .dateDetails > .planHint, .dateDetails .planChips, .planCalendar, .planCalendarDays button[data-choosing="true"], .planCalendarDays button[data-choosing="true"]::before, .routeEndEditor { animation: none; } }
 
 /* Keep native date/time editing, without duplicate browser glyphs. */
 .planForm input[type="date"], .planForm input[type="time"] { appearance: none; -webkit-appearance: none; }
