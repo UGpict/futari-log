@@ -17,6 +17,8 @@ export async function GET(request: Request) {
       dataBackend: env.dataBackend,
       emulator: env.emulator,
       demoControls: env.enableDemoControls,
+      demoCalendarStickers: env.demoCalendarStickers,
+      demoCalendarAnchorDate: env.demoCalendarAnchorDate,
       demoAreaName: env.demoAreaName,
       demoDate: env.demoDate,
       demoLat: env.demoLat,

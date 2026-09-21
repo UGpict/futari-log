@@ -252,6 +252,8 @@ export const fixtureMe: MeResponse = {
   dataBackend: "file",
   emulator: false,
   demoControls: true,
+  demoCalendarStickers: false,
+  demoCalendarAnchorDate: "2026-09-21",
   demoAreaName: "東京駅周辺",
   demoDate: "2026-09-19",
   demoLat: 35.681236,

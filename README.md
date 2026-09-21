@@ -49,6 +49,7 @@ npm run replay:export -- <runId>
 | Firebase `NEXT_PUBLIC_*` | 本番の匿名 Auth。Emulator 時はプレースホルダでよい |
 | `ENABLE_DEMO_CONTROLS` | シナリオ注入。LIVE では `DEMO_ALLOWED_UIDS` に限定 |
 | `DEMO_AREA_NAME` / `DEMO_LAT` / `DEMO_LNG` / `DEMO_DATE` | 開発デモの集合エリア |
+| `DEMO_CALENDAR_STICKERS` / `DEMO_CALENDAR_ANCHOR_DATE` | 大会カレンダーのサンプル振り返り（表示のみ。Firestore・計画・記憶には入れない） |
 | `WORKER_CONCURRENCY` | 既定 1 |
 
 Firebase 匿名 Auth の許可ドメインは、手元 PC でプロジェクトを立てたあと Firebase Console に追加し、ここに記録してください。未設定です。手順は `docs/cloud-run.md`。
