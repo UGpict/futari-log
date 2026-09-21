@@ -6,6 +6,7 @@ import { Button, IconButton } from "@/components/button";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check, ChevronLeft, ChevronRight, NotebookPen, CalendarHeart, LogOut, MapPin } from "lucide-react";
 import { useCalendarPlans } from "@/client/hooks/use-calendar-plans";
@@ -26,6 +27,7 @@ import { HOME_SUGGESTION } from "./home-suggestion";
 import { nearbySampleEvents } from "./sample-events";
 import { decideReflectionSave, reflectionSaveNotice } from "./reflection-save";
 import { buildDemoCalendarRecords, type DemoCalendarConfig } from "./demo-calendar-stickers";
+import { PhotoSticker } from "./photo-sticker";
 import styles from "./home.module.css";
 
 type Panel = "records" | "recommendations" | "memory" | null;
@@ -47,6 +49,7 @@ function FeedbackEditor({ date, record, onSave }: {
   const [mood, setMood] = useState<Mood | null>(record?.mood ?? null);
   const [title, setTitle] = useState(record?.title ?? "");
   const [note, setNote] = useState(record?.note ?? "");
+  const [stickerDataUrls, setStickerDataUrls] = useState<string[]>(record?.stickerDataUrls ?? (record?.stickerDataUrl ? [record.stickerDataUrl] : []));
   const [error, setError] = useState("");
 
   const [saving, setSaving] = useState(false);
@@ -56,7 +59,7 @@ function FeedbackEditor({ date, record, onSave }: {
     if (!mood || saving) return;
     setSaving(true); setError("");
     try {
-      await onSave({ date, mood, title: title.trim() || "ふたりで過ごした日", note: note.trim() });
+      await onSave({ date, mood, title: title.trim() || "ふたりで過ごした日", note: note.trim(), stickerDataUrls });
     } catch {
       setError("記録を保存できませんでした。ブラウザの保存設定を確認して、もう一度お試しください。");
     } finally { setSaving(false); }
@@ -89,6 +92,7 @@ function FeedbackEditor({ date, record, onSave }: {
           <TextArea value={note} maxLength={500} rows={3} onChange={(event) => setNote(event.target.value)} placeholder="楽しかった場面や、相手の様子を残しておこう" />
         </label>
       </div>
+      <PhotoSticker value={stickerDataUrls} onChange={setStickerDataUrls} />
       {error && <p className={styles.error} role="alert">{error}</p>}
       <Button fullWidth className={styles.primaryButton} type="submit" disabled={!mood || saving}><Check size={20} />{saving ? "保存しています…" : record ? "振り返りを更新" : "振り返りを保存"}</Button>
     </form>
@@ -393,7 +397,13 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
       {selectedDate && !showCreatePrompt && (
         <HomeSheet key={selectedDate} title={reflecting ? "今回のデート、どうだった？" : selectedRecord?.demo ? "デモ用サンプル" : recordsByDate.has(selectedDate) ? "あの日の記録" : "ふたりの一日"} onClose={() => setSelectedDate(null)}>
           {selectedRecord && !reflecting ? <div className={styles.recordSummary}>
-            <header className={styles.recordHero}><MoodSticker mood={selectedRecord.mood} className={styles.recordSummarySticker} /><span className={styles.eyebrow}>{dateLabel(selectedDate)}</span>{selectedRecord.demo && <span className={styles.demoRecordBadge}>デモ用サンプル</span>}<h3>{selectedRecord.title}</h3></header>
+            <header className={styles.recordHero}>
+              <div className={styles.recordStickerScene} data-count={selectedRecord.stickerDataUrls?.length ?? (selectedRecord.stickerDataUrl ? 1 : 0)}>
+                <MoodSticker mood={selectedRecord.mood} className={styles.recordSummarySticker} />
+                {(selectedRecord.stickerDataUrls ?? (selectedRecord.stickerDataUrl ? [selectedRecord.stickerDataUrl] : [])).map((sticker, index) => <Image key={index} unoptimized width={96} height={90} src={sticker} alt={`写真から作った思い出シール${index + 1}`} className={styles.recordPhotoSticker} />)}
+              </div>
+              <span className={styles.eyebrow}>{dateLabel(selectedDate)}</span>{selectedRecord.demo && <span className={styles.demoRecordBadge}>デモ用サンプル</span>}<h3>{selectedRecord.title}</h3>
+            </header>
             {selectedRecord.note && <section className={styles.recordReflectionCard}><p className={styles.recordNote}>{selectedRecord.note}</p></section>}
             {selectedPlans.length > 0 && <section className={styles.recordPlanSection}><div className={styles.recordSectionHeading}><span><PlanStickerIcon kind="calendar" /></span><div><small>関連するプラン</small><strong>この日のプラン</strong></div></div>{selectedPlans.map((plan) => <Link key={plan.id} className={styles.planOpenLink} href={`/sessions/${plan.id}`}><span>{plan.title}</span><ChevronRight size={17} /></Link>)}</section>}
             {!selectedPlans.length && !selectedRecord.demo && <p className={styles.localNote}>この記録に紐づくプランはありません。</p>}
