@@ -1,0 +1,7 @@
+.control {
+  /* A shared floor prevents small feature styles from triggering iOS focus zoom.
+     Keep pinch zoom enabled; larger input typography can set this variable. */
+  font-size: max(16px, var(--input-font-size, 1em)) !important;
+  min-height: 44px;
+  scroll-margin-block: 16px;
+}

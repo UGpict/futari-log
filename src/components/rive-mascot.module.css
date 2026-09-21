@@ -1,5 +1,5 @@
 .mascot { position: relative; display: block; flex-shrink: 0; overflow: hidden; pointer-events: none; }
-.memo { width: 190px; height: 130px; }
+.memo { width: 190px; height: 130px; overflow: visible; }
 .visual { position: absolute; display: block; }
 .animation { transition: opacity .2s ease-out; }
 .memo .visual { top: -24px; left: 0; width: 190px; height: 190px; }
@@ -14,3 +14,6 @@
 
 .weather { width: 40px; height: 40px; overflow: visible; }
 .weather .visual { inset: 0; width: 100%; height: 100%; }
+
+.flight { width: 260px; height: 188px; overflow: visible; }
+.flight .visual { inset: 0; width: 100%; height: 100%; }

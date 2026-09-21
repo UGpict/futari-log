@@ -1,9 +1,12 @@
 "use client";
 
+import { TextInput, TextArea } from "@/components/text-input";
+
 import { Button, IconButton } from "@/components/button";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowRight, Check, ChevronLeft, ChevronRight, NotebookPen, CalendarHeart, MapPin } from "lucide-react";
 import { useCalendarPlans } from "@/client/hooks/use-calendar-plans";
 import { useMe } from "@/client/hooks/use-me";
@@ -14,20 +17,29 @@ import { Toast } from "@/components/toast";
 import { DevelopmentLink } from "@/components/development-link";
 import { HomeLogo } from "@/components/home-logo";
 import { MoodSticker, moods, type Mood } from "@/components/mood-sticker";
+import { PlanStickerIcon } from "@/components/plan-sticker-icon";
 import { HomeSheet } from "./home-sheet";
 import { MemoryScreen } from "@/features/memory/memory-screen";
-import { PlanForm } from "./plan-form";
-import { HOME_SUGGESTION, type PlanFormSeed } from "./home-suggestion";
-import { nearbySampleEvents } from "./sample-events";
 import { buildDemoCalendarRecords, type DemoCalendarConfig } from "./demo-calendar-stickers";
 import styles from "./home.module.css";
 
-type Panel = "records" | "recommendations" | "memory" | "plan" | null;
+type Panel = "records" | "recommendations" | "memory" | null;
 const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
 const ideas = [
   { mood: "happy" as const, title: "甘いものと、ゆっくり話す日", description: "カフェでひと息。ふたりのペースで。", wish: "カフェで甘いものを食べて、ゆっくり話したい" },
   { mood: "happy" as const, title: "いつもと違う道を、ふたりで", description: "公園さんぽと、小さな寄り道。", wish: "公園を散歩して、途中でカフェに寄りたい" },
   { mood: "relaxed" as const, title: "雨の日は、アートに会いに", description: "屋内で楽しむ、のんびりデート。", wish: "美術館や屋内の展示を、休憩を挟みながら楽しみたい" },
+];
+const homeSuggestion = {
+  title: "アートと夜カフェ",
+  area: "清澄白河",
+  wish: "清澄白河で美術館や展示を楽しんだあと、夜カフェでゆっくり話すデートにしたい",
+};
+const nearbyEvents = [
+  { id: "odd-exhibition", date: "2026-10-04", dateLabel: "10/4まで", area: "上野エリア", title: "ちょっと不思議なもの展", kicker: "会話が弾む、ユニークな企画展", theme: "exhibition", wish: "上野のちょっと不思議なもの展を見に行くデート", sponsored: false },
+  { id: "night-garden", date: "2026-09-23", dateLabel: "9/23–10/4", area: "清澄白河エリア", title: "夜の庭園ライトアップ", kicker: "秋の夜を、ゆっくり散歩", theme: "garden", wish: "清澄白河の夜の庭園ライトアップを組み込んだ、ゆっくり楽しめるデート", sponsored: false },
+  { id: "mystery-walk", date: "2026-09-27", dateLabel: "9/27まで", area: "下北沢・三軒茶屋", title: "ふたりで巡る、まち歩き謎解き", kicker: "寄り道しながら小さな謎を解こう", theme: "mystery", wish: "下北沢と三軒茶屋のまち歩き謎解きを中心にしたデート", sponsored: true },
+  { id: "ai-hack", date: "2026-09-23", dateLabel: "9/19–9/23", area: "東京都内・最終日", title: "AI HACK 2026", kicker: "賞金最大100万円、5日間のAIハッカソン", theme: "ai-hack", wish: "AI HACK 2026の最終日見学を組み込んだ、テクノロジーを楽しむデート", sponsored: false },
 ];
 
 function dateLabel(date: string) {
@@ -60,34 +72,37 @@ function FeedbackEditor({ date, record, onSave }: {
     <form className={styles.feedbackForm} onSubmit={submit}>
       <div className={styles.feedbackIntro}>
         <span className={styles.eyebrow}>{dateLabel(date)}</span>
-        <h3>相手はどんな様子だった？</h3>
-        <p>印象に近いスタンプを選んで、振り返りを完了しよう。</p>
       </div>
-      <fieldset className={styles.moodPicker}>
-        <legend className="sr-only">相手の様子</legend>
-        {moods.map((item) => (
-          <label key={item.id} className={`${styles.moodOption} ${mood === item.id ? styles.moodSelected : ""}`}>
-            <input className="sr-only" type="radio" name="mood" value={item.id} checked={mood === item.id} onChange={() => setMood(item.id)} required />
-            <MoodSticker mood={item.id} />
-            <span>{item.label}</span>
-            {mood === item.id && <Check className={styles.moodCheck} size={14} />}
-          </label>
-        ))}
-      </fieldset>
-      <label className={styles.formLabel}>この日のタイトル <span>任意</span>
-        <input value={title} maxLength={60} onChange={(event) => setTitle(event.target.value)} placeholder="カフェで過ごした、のんびりな午後" />
-      </label>
-      <label className={styles.formLabel}>どんな場面で、そう感じた？ <span>任意</span>
-        <textarea value={note} maxLength={500} rows={3} onChange={(event) => setNote(event.target.value)} placeholder="カフェで「また来たい」と言っていた。散歩の途中は少し疲れていそうだった。" />
-      </label>
+      <section className={styles.reflectionEditorCard}>
+        <div className={styles.reflectionCardHeading}><strong>相手はどんな様子だった？</strong></div>
+        <fieldset className={styles.moodPicker}>
+          <legend className="sr-only">相手の様子</legend>
+          {moods.map((item) => (
+            <label key={item.id} className={`${styles.moodOption} ${mood === item.id ? styles.moodSelected : ""}`}>
+              <input className="sr-only" type="radio" name="mood" value={item.id} checked={mood === item.id} onChange={() => setMood(item.id)} required />
+              <MoodSticker mood={item.id} />
+              <span>{item.label}</span>
+              {mood === item.id && <span className={styles.moodCheck} aria-hidden="true"><Check size={14} /></span>}
+            </label>
+          ))}
+        </fieldset>
+      </section>
+      <div className={styles.reflectionFields}>
+        <label className={styles.formLabel}>この日のタイトル <span>任意</span>
+          <TextInput value={title} maxLength={60} onChange={(event) => setTitle(event.target.value)} placeholder="カフェで過ごした、のんびりな午後" />
+        </label>
+        <label className={styles.formLabel}>この日のこと <span>任意</span>
+          <TextArea value={note} maxLength={500} rows={3} onChange={(event) => setNote(event.target.value)} placeholder="楽しかった場面や、相手の様子を残しておこう" />
+        </label>
+      </div>
       {error && <p className={styles.error} role="alert">{error}</p>}
-      <Button fullWidth className={styles.primaryButton} type="submit" disabled={!mood || saving}><Check size={20} />{saving ? "保存しています…" : record ? "スタンプと記録を更新する" : "振り返りを完了してスタンプを押す"}</Button>
-      <p className={styles.localNote}>この端末のブラウザに保存されます。</p>
+      <Button fullWidth className={styles.primaryButton} type="submit" disabled={!mood || saving}><Check size={20} />{saving ? "保存しています…" : record ? "振り返りを更新" : "振り返りを保存"}</Button>
     </form>
   );
 }
 
 export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig } = {}) {
+  const router = useRouter();
   const { me } = useMe();
   const { plans, error: plansError } = useCalendarPlans(me?.coupleId);
   const [reflecting, setReflecting] = useState(false);
@@ -105,7 +120,7 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
     () => (resolvedDemo.enabled ? buildDemoCalendarRecords(resolvedDemo.anchorDate) : []),
     [resolvedDemo.enabled, resolvedDemo.anchorDate],
   );
-  const { records, save, saveToServer, remove, today, isFixture, demoStickersActive } = useDateJournal(
+  const { records, save, remove, today, isFixture, demoStickersActive } = useDateJournal(
     me?.uid,
     demoRecords,
   );
@@ -119,14 +134,11 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
   const cellCount = Math.ceil((firstWeekday + daysInMonth) / 7) * 7;
   const [panel, setPanel] = useState<Panel>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [planDate, setPlanDate] = useState("");
-  const [planSeed, setPlanSeed] = useState<PlanFormSeed | undefined>(undefined);
-  const [planStep, setPlanStep] = useState(0);
   const [notice, setNotice] = useState("");
   const [stampedDate, setStampedDate] = useState<string | null>(null);
   const recordsByDate = new Map(records.map((record) => [record.date, record]));
   const panelTitles: Record<Exclude<Panel, null>, string> = {
-    records: "ふたりの記録", recommendations: "AIからの提案", memory: "次のデートに活かすこと", plan: ["過ごし方を選ぶ", "日時と場所を決める", "予算と希望を決める"][planStep],
+    records: "ふたりの記録", recommendations: "AIからの提案", memory: "次のデートに活かすこと",
   };
 
 
@@ -136,39 +148,19 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
     setMonthOverride(`${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`);
   }
 
-  function openPlan(date = today, seed?: PlanFormSeed) {
+  function openPlan(date = today, wish = "") {
     setSelectedDate(null);
-    setPlanDate(date);
-    setPlanSeed(seed);
-    setPlanStep(0);
-    setPanel("plan");
+    const query = new URLSearchParams({ date, step: "activity" });
+    if (wish) query.set("wish", wish);
+    router.push(`/plans/new?${query.toString()}`);
   }
 
   async function saveMemory(record: DateMemory) {
-    const dayPlans = plans.filter((plan) => plan.date === record.date);
-    const reflectable = dayPlans.filter((plan) =>
-      ["DONE", "REFLECTED", "CONFIRMED", "IN_PROGRESS"].includes(plan.status),
-    );
-    // 同日複数は勝手に紐付けない。1件だけならそのセッションへ保存。0件ならローカルのみ。
-    if (!isFixture && reflectable.length === 1) {
-      try {
-        await saveToServer(reflectable[0].id, record);
-        setNotice("振り返りを保存しました。分析は裏で続きます。");
-      } catch {
-        save(record);
-        setNotice("オフライン保存しました。再接続後にサーバーへ送れます。");
-      }
-    } else {
-      save(record);
-      setNotice(
-        reflectable.length > 1
-          ? "同日に複数の予定があるため、端末にのみ保存しました（セッション紐付けは未選択）。"
-          : "振り返り完了！スタンプを押しました",
-      );
-    }
+    save(record);
     setReflecting(false);
     setStampedDate(record.date);
     setSelectedDate(null);
+    setNotice("振り返り完了！スタンプを押しました");
   }
 
   const selectedPlans = plans.filter((plan) => plan.date === selectedDate);
@@ -202,24 +194,25 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
   function startEventDrag(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.pointerType !== "mouse" || event.button !== 0) return;
     eventDragRef.current = { active: true, moved: false, startX: event.clientX, scrollLeft: event.currentTarget.scrollLeft };
-    event.currentTarget.setPointerCapture(event.pointerId);
   }
   function moveEventDrag(event: ReactPointerEvent<HTMLDivElement>) {
     const drag = eventDragRef.current;
     if (!drag.active) return;
     const distance = event.clientX - drag.startX;
-    if (Math.abs(distance) > 4) {
+    if (!drag.moved && Math.abs(distance) > 6) {
       drag.moved = true;
       setDraggingEvents(true);
+      event.currentTarget.setPointerCapture(event.pointerId);
     }
-    if (drag.moved) event.currentTarget.scrollLeft = drag.scrollLeft - distance;
+    if (!drag.moved) return;
+    event.preventDefault();
+    event.currentTarget.scrollLeft = drag.scrollLeft - distance;
   }
   function endEventDrag(event: ReactPointerEvent<HTMLDivElement>) {
     if (!eventDragRef.current.active) return;
     eventDragRef.current.active = false;
     setDraggingEvents(false);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-    if (eventDragRef.current.moved) window.setTimeout(() => { eventDragRef.current.moved = false; }, 0);
   }
   useEffect(() => {
     if (!showCreatePrompt) return;
@@ -272,22 +265,15 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
           <button
             type="button"
             className={styles.suggestionCard}
-            onClick={() =>
-              openPlan(today, {
-                wish: HOME_SUGGESTION.wish,
-                meet: HOME_SUGGESTION.meetPlace,
-                startTime: HOME_SUGGESTION.startTime,
-                endTime: HOME_SUGGESTION.endTime,
-              })
-            }
-            aria-label={`${HOME_SUGGESTION.area}で、${HOME_SUGGESTION.title}。この案でプランをつくる`}
+            onClick={() => openPlan(today, homeSuggestion.wish)}
+            aria-label={`${homeSuggestion.area}で、${homeSuggestion.title}。この案でプランをつくる`}
             aria-haspopup="dialog"
           >
             <span className={styles.suggestionPhoto} aria-hidden="true" />
             <span className={styles.suggestionCopy}>
-              <span className={styles.suggestionArea}><MapPin size={12} aria-hidden="true" />{HOME_SUGGESTION.area}</span>
-              <strong>{HOME_SUGGESTION.title}</strong>
-              <span className={styles.suggestionRoute}>{HOME_SUGGESTION.routeLabels[0]}<ArrowRight size={12} aria-hidden="true" />{HOME_SUGGESTION.routeLabels[1]}</span>
+              <span className={styles.suggestionArea}><MapPin size={12} aria-hidden="true" />{homeSuggestion.area}</span>
+              <strong>{homeSuggestion.title}</strong>
+              <span className={styles.suggestionRoute}>美術館・展示<ArrowRight size={12} aria-hidden="true" />夜カフェ</span>
               <span className={styles.suggestionAction}>この案でプランをつくる<ArrowRight size={15} aria-hidden="true" /></span>
             </span>
           </button>
@@ -344,23 +330,23 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
             event.preventDefault();
             event.stopPropagation();
             eventDragRef.current.moved = false;
-          }} onWheel={(event) => {
+          }} onDragStart={(event) => event.preventDefault()} onWheel={(event) => {
             const carousel = event.currentTarget;
             if (Math.abs(event.deltaY) <= Math.abs(event.deltaX) || carousel.scrollWidth <= carousel.clientWidth) return;
             event.preventDefault();
             carousel.scrollLeft += event.deltaY;
           }}>
-            {nearbySampleEvents.map((event) => <button type="button" key={event.id} className={styles.eventBanner} data-theme={event.theme} data-demo="true" onClick={() => openPlan(today, { wish: event.planWish, meet: event.meet })} aria-label={`サンプル。${event.title}、${event.dateLabel}、${event.area}。この雰囲気でプランをつくる`}>
+            {nearbyEvents.map((event) => <button type="button" key={event.id} className={styles.eventBanner} data-theme={event.theme} onClick={() => openPlan(event.date, event.wish)} aria-label={`${event.title}、${event.dateLabel}、${event.area}。このイベントでデートをつくる`}>
               <span className={styles.eventArtwork} aria-hidden="true"><span className={styles.eventShade} /></span>
               <span className={styles.eventDetails}>
-                <span className={styles.eventMeta}><span className={styles.eventDemoBadge}>サンプル</span><span>{event.dateLabel}</span><span><MapPin size={10} />{event.area}</span>{event.sponsored && <span>PR</span>}</span>
+                <span className={styles.eventMeta}><span>{event.dateLabel}</span><span><MapPin size={10} />{event.area}</span>{event.sponsored && <span>PR</span>}</span>
                 <span className={styles.eventCopy}><strong>{event.title}</strong><span>{event.kicker}</span></span>
-                <span className={styles.eventAction}>この雰囲気でプランをつくる <ArrowRight size={14} /></span>
+                <span className={styles.eventAction}>このイベントでプランをつくる <ArrowRight size={14} /></span>
               </span>
             </button>)}
           </div>
           <button type="button" className={`${styles.carouselButton} ${styles.carouselNext}`} aria-label="次のイベントを見る" disabled={!eventScroll.right} onClick={() => scrollEvents(1)}><ChevronRight aria-hidden="true" /></button>
-          <p className={styles.eventDisclosure}>大会用のサンプル表示です。イベント名・開催期間はプランの実データには使いません。行程は実在スポットから作ります。</p>
+          <p className={styles.eventDisclosure}>イベント情報はUI確認用のサンプルです。</p>
         </section>
       </main>
       <div className={styles.createDateFab} data-over-events={eventsBehindCreateButton}><DateCreateButton onClick={() => openPlan()} /></div>
@@ -370,18 +356,14 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
       {selectedDate && !showCreatePrompt && (
         <HomeSheet key={selectedDate} title={reflecting ? "今回のデート、どうだった？" : selectedRecord?.demo ? "デモ用サンプル" : recordsByDate.has(selectedDate) ? "あの日の記録" : "ふたりの一日"} onClose={() => setSelectedDate(null)}>
           {selectedRecord && !reflecting ? <div className={styles.recordSummary}>
-            <span className={styles.eyebrow}>{dateLabel(selectedDate)}</span>
-            {selectedRecord.demo && <span className={styles.demoRecordBadge}>デモ用サンプル</span>}
-            <MoodSticker mood={selectedRecord.mood} className={styles.recordSummarySticker} />
-            <span className={styles.recordMoodLabel}>{moods.find((mood) => mood.id === selectedRecord.mood)?.label}</span>
-            <h3>{selectedRecord.title}</h3>
-            {selectedRecord.note && <p className={styles.recordNote}>{selectedRecord.note}</p>}
-            {selectedPlans.map((plan) => <Link key={plan.id} className={styles.planOpenLink} href={`/sessions/${plan.id}`}><span>この日のプランを見る<br /><small>{plan.title}</small></span><ChevronRight size={17} /></Link>)}
+            <header className={styles.recordHero}><MoodSticker mood={selectedRecord.mood} className={styles.recordSummarySticker} /><span className={styles.eyebrow}>{dateLabel(selectedDate)}</span>{selectedRecord.demo && <span className={styles.demoRecordBadge}>デモ用サンプル</span>}<h3>{selectedRecord.title}</h3></header>
+            {selectedRecord.note && <section className={styles.recordReflectionCard}><p className={styles.recordNote}>{selectedRecord.note}</p></section>}
+            {selectedPlans.length > 0 && <section className={styles.recordPlanSection}><div className={styles.recordSectionHeading}><span><PlanStickerIcon kind="calendar" /></span><div><small>関連するプラン</small><strong>この日のプラン</strong></div></div>{selectedPlans.map((plan) => <Link key={plan.id} className={styles.planOpenLink} href={`/sessions/${plan.id}`}><span>{plan.title}</span><ChevronRight size={17} /></Link>)}</section>}
             {!selectedPlans.length && !selectedRecord.demo && <p className={styles.localNote}>この記録に紐づくプランはありません。</p>}
             {selectedRecord.demo ? (
               <p className={styles.localNote}>大会デモ用の表示です。実記録としては保存されていません。</p>
             ) : (
-              <Button fullWidth type="button" className={styles.primaryButton} onClick={() => setReflecting(true)}>振り返りを編集する<ChevronRight size={17} /></Button>
+              <Button fullWidth type="button" className={styles.recordEditButton} onClick={() => setReflecting(true)}>振り返りを編集<ChevronRight size={17} /></Button>
             )}
           </div> : selectedPlans.length > 0 && !reflecting ? <div className={styles.plannedDay}>
             <span className={styles.eyebrow}>{dateLabel(selectedDate)}</span>
@@ -401,7 +383,6 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
       )}
 
       {panel && <HomeSheet key={panel} fixedHeight={panel === "memory"} title={panelTitles[panel]} onClose={() => setPanel(null)}>
-        {panel === "plan" && <PlanForm key={`${planDate}:${planSeed?.wish ?? ""}:${planSeed?.meet?.id ?? ""}`} initialDate={planDate || today} seed={planSeed} onStepChange={setPlanStep} />}
         {panel === "records" && <div className={styles.recordList}>
           <p className={styles.sheetDescription}>シールひとつに、ふたりの思い出。{isFixture && " 今はサンプルの記録を表示しています。"}{demoStickersActive && " デモ用の記録を含みます。"}</p>
           {records.length === 0 && <p className={styles.emptyMessage}>まだ記録がありません。カレンダーの日付をタップして、最初のシールを貼ってみよう。</p>}
@@ -413,7 +394,7 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
         </div>}
         {panel === "recommendations" && <div className={styles.recordList}>
           <p className={styles.sheetDescription}>気になる過ごし方から、ふたりのプランをつくろう。</p>
-          {ideas.map((idea) => <button type="button" className={styles.ideaCard} key={idea.title} onClick={() => openPlan(today, { wish: idea.wish })}>
+          {ideas.map((idea) => <button type="button" className={styles.ideaCard} key={idea.title} onClick={() => openPlan(today, idea.wish)}>
             <MoodSticker mood={idea.mood} /><span><strong>{idea.title}</strong><small>{idea.description}</small><span className={styles.ideaLink}>この気分でプランをつくる <ArrowRight size={14} /></span></span>
           </button>)}
         </div>}

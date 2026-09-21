@@ -1,14 +1,16 @@
 "use client";
 
+import { TextArea } from "@/components/text-input";
+
 import { Button, ButtonLink } from "@/components/button";
 
 import { useState } from "react";
-import { Check, MessageCircle, SlidersHorizontal, ArrowUpRight, ExternalLink, Clock3, MapPin } from "lucide-react";
+import { Check, MessageCircle, ArrowUpRight, ExternalLink, Clock3 } from "lucide-react";
 import { useSession } from "@/client/hooks/use-session";
 import { usePlacePhotos } from "@/client/hooks/use-place-photos";
 import { api, fixturesEnabled } from "@/client/api";
 import { formatTokyoHm } from "@/lib/time";
-import { PlanLoading } from "./plan-loading";
+import { PlanLoading, PlanningAgentTicker } from "./plan-loading";
 import { HomeSheet } from "../home/home-sheet";
 import { PlanStickerIcon } from "@/components/plan-sticker-icon";
 import { MoodSticker } from "@/components/mood-sticker";
@@ -16,6 +18,7 @@ import { Toast } from "@/components/toast";
 import { HomeLogo } from "@/components/home-logo";
 import { SpotCardImage } from "./spot-photo";
 import { spotVisual } from "./spot-visuals";
+import type { SessionSnapshot } from "@/contracts";
 import styles from "./session.module.css";
 
 function hasVisibleProposal(approval: {
@@ -39,9 +42,63 @@ function hasVisibleProposal(approval: {
   );
 }
 
+function travelFact(mode: "WALK" | "TRANSIT" | "DRIVE" | undefined) {
+  if (mode === "DRIVE") return { label: "車", icon: "drive" as const };
+  if (mode === "TRANSIT") return { label: "交通機関", icon: "transit" as const };
+  return { label: "徒歩", icon: "walk" as const };
+}
+
+function SessionPlanningSkeleton({ data }: { data: SessionSnapshot | null }) {
+  const input = data?.session.input;
+  const budget = input ? [input.budget.mealsJpy, input.budget.facilitiesJpy, input.budget.transitJpy] : [];
+  const budgetLabel = budget.length && budget.every((value) => value !== null)
+    ? `¥${budget.reduce<number>((sum, value) => sum + (value ?? 0), 0).toLocaleString()}`
+    : null;
+  const date = input
+    ? new Intl.DateTimeFormat("ja-JP", { month: "long", day: "numeric", timeZone: "Asia/Tokyo" }).format(new Date(`${input.dateTokyo}T12:00:00+09:00`))
+    : null;
+  const weekday = input
+    ? new Intl.DateTimeFormat("ja-JP", { weekday: "short", timeZone: "Asia/Tokyo" }).format(new Date(`${input.dateTokyo}T12:00:00+09:00`))
+    : null;
+  const travel = travelFact(input?.travelMode);
+
+  return <main className={styles.page} aria-busy="true">
+    <header className={styles.header}><HomeLogo className={styles.homeLogo} /></header>
+    <section className={styles.hero}>
+      <div className={styles.planDateHeading}><span className={styles.resultDateSticker}><PlanStickerIcon kind="calendar" /></span><div>{date ? <h1>{date}<span className={styles.planWeekday}>{weekday}</span></h1> : <span className={`${styles.skeletonLine} ${styles.skeletonDate}`} />}</div></div>
+      <div className={styles.facts}>
+        <span><PlanStickerIcon kind="time" /><span><small className="sr-only">時間</small>{input ? <strong>{input.startTime}<em>〜</em>{input.endTime}</strong> : <i className={styles.skeletonLine} />}</span></span>
+        <span><PlanStickerIcon kind="budget" /><span><small className="sr-only">ふたりの予算</small>{budgetLabel ? <strong>{budgetLabel}</strong> : <i className={styles.skeletonLine} />}</span></span>
+        <span><PlanStickerIcon kind="spots" /><span><small className="sr-only">立ち寄り先</small><i className={`${styles.skeletonLine} ${styles.skeletonCount}`} /></span></span>
+        <span><PlanStickerIcon kind={travel.icon} /><span><small className="sr-only">移動手段</small>{input ? <strong>{travel.label}</strong> : <i className={styles.skeletonLine} />}</span></span>
+      </div>
+    </section>
+    <section className={`${styles.itinerary} ${styles.itinerarySkeleton}`} aria-label="プランを作成中">
+      <svg className={styles.itineraryRoutePath} viewBox="0 0 40 100" preserveAspectRatio="none" aria-hidden="true"><path d="M18 0C35 10 4 23 20 36S35 59 18 72S6 91 20 100" /></svg>
+      <div className={`${styles.meeting} ${styles.planningMeeting}`}><span className={styles.endpointSticker}><PlanStickerIcon kind="start" /></span><div><small>{input?.startTime ?? "--:--"} 集合</small>{input ? <strong>{input.meet.name}</strong> : <span className={styles.skeletonLine} />}</div><PlanningAgentTicker /></div>
+      <ol>{[0, 1, 2].map((index) => <li key={index}>
+        <div className={styles.timelineTime}><i className={styles.skeletonTime} /><span className={styles.skeletonTimelineDot} /></div>
+        <div className={styles.stop}>
+          <article className={`${styles.spot} ${styles.skeletonSpot}`}>
+            <div className={`${styles.spotImage} ${styles.skeletonPhoto}`} />
+            <div className={`${styles.spotBody} ${styles.skeletonSpotBody}`}>
+              <div className={styles.spotTop}><span className={styles.skeletonCategory} /><span className={styles.skeletonMeta} /></div>
+              <span className={`${styles.skeletonLine} ${styles.skeletonTitle}`} />
+              <div className={styles.skeletonDescription}><span className={styles.skeletonLine} /><span className={styles.skeletonLine} /></div>
+              <div className={styles.spotFoot}><span className={styles.skeletonPrice} /></div>
+              <div className={`${styles.changeSpot} ${styles.skeletonAction}`}><span className={styles.skeletonLine} /></div>
+            </div>
+          </article>
+        </div>
+      </li>)}</ol>
+      <div className={styles.meeting}><span className={styles.endpointSticker}><PlanStickerIcon kind="goal" /></span><div><small>{input?.endTime ?? "--:--"}ごろ 解散</small>{input ? <strong>{input.end.name}</strong> : <span className={styles.skeletonLine} />}</div></div>
+    </section>
+  </main>;
+}
+
 export function SessionScreen({ sessionId }: { sessionId: string }) {
   const { data, error, reload, startReplan } = useSession(sessionId);
-  const [sheet, setSheet] = useState<"conditions" | "feedback" | null>(null);
+  const [sheet, setSheet] = useState<"feedback" | null>(null);
   const [target, setTarget] = useState<{ id: string; name: string; locked: boolean } | null>(null);
   const [feedback, setFeedback] = useState("");
   const [actionError, setActionError] = useState("");
@@ -58,13 +115,14 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   const displayPlan = proposalReady && data?.proposedPlan ? data.proposedPlan : data?.plan ?? null;
   const { photos: placePhotos, loading: photosLoading } = usePlacePhotos((displayPlan?.items ?? []).map((item) => item.spotId));
   if (!data && error) return <main className={styles.page}><HomeLogo className={styles.homeLogo} /><h1>読み込めませんでした</h1><p role="alert">{error}</p><Button variant="secondary" size="compact" onClick={() => void reload().catch(() => undefined)}>もう一度読み込む</Button></main>;
-  if (!data || (!data.plan && !failed && !attention)) return <main className={styles.page}><HomeLogo className={styles.homeLogo} /><PlanLoading demo={fixturesEnabled()} /></main>;
+  if (!data || (!data.plan && !failed && !attention)) return <SessionPlanningSkeleton data={data} />;
   const travelUnverified = Boolean(
     displayPlan?.validation.issues.some((issue) =>
       issue.code === "TRAVEL_UNKNOWN" || issue.code === "END_TRAVEL_UNKNOWN",
     ),
   );
   const input = data.session.input;
+  const travel = travelFact(input.travelMode);
   const confirmed = ["CONFIRMED", "IN_PROGRESS", "DONE", "REFLECTED"].includes(data.session.status);
   const budget = [input.budget.mealsJpy, input.budget.facilitiesJpy, input.budget.transitJpy];
   const budgetLabel = budget.every((value) => value !== null) ? `¥${budget.reduce<number>((sum, value) => sum + (value ?? 0), 0).toLocaleString()}` : "未設定あり";
@@ -97,18 +155,19 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   }
   return <main className={styles.page} data-sheet-open={sheet ? "" : undefined}>
     <Toast message={message} onDismiss={() => setMessage("")} />
-    <header className={styles.header}><HomeLogo className={styles.homeLogo} />{!fixturesEnabled() && <span className={styles.planStatus}>{confirmed ? "予定に追加済み" : proposalReady ? "変更案を確認中" : active && !attention ? "変更案を作成中" : "プランを相談中"}</span>}<Button className={styles.conditionButton} variant="ghost" size="compact" onClick={() => setSheet("conditions")}><SlidersHorizontal size={14} />条件</Button></header>
+    <header className={styles.header}><HomeLogo className={styles.homeLogo} />{!fixturesEnabled() && <span className={styles.planStatus}>{confirmed ? "予定に追加済み" : proposalReady ? "変更案を確認中" : active && !attention ? "変更案を作成中" : "プランを相談中"}</span>}</header>
     <section className={styles.hero}>
       <div className={styles.planDateHeading}>
-        <h1><time dateTime={input.dateTokyo}>
+        <span className={styles.resultDateSticker}><PlanStickerIcon kind="calendar" /></span><div><h1><time dateTime={input.dateTokyo}>
           {new Intl.DateTimeFormat("ja-JP", { month: "long", day: "numeric", timeZone: "Asia/Tokyo" }).format(new Date(`${input.dateTokyo}T12:00:00+09:00`))}
-          <span className={styles.planWeekday}>{new Intl.DateTimeFormat("ja-JP", { weekday: "short", timeZone: "Asia/Tokyo" }).format(new Date(`${input.dateTokyo}T12:00:00+09:00`))}曜日</span>
-        </time></h1>
+          <span className={styles.planWeekday}>{new Intl.DateTimeFormat("ja-JP", { weekday: "short", timeZone: "Asia/Tokyo" }).format(new Date(`${input.dateTokyo}T12:00:00+09:00`))}</span>
+        </time></h1></div>
       </div>
       <div className={styles.facts}>
-        <span><PlanStickerIcon kind="time" /><span><small>時間</small><strong>{input.startTime}–{input.endTime}</strong></span></span>
-        <span><PlanStickerIcon kind="budget" /><span><small>予算</small><strong>{budgetLabel}</strong><small>ふたり分</small></span></span>
-        <span><PlanStickerIcon kind="spots" /><span><small>スポット</small><strong>{displayPlan?.items.length ?? 0}</strong></span></span>
+        <span><PlanStickerIcon kind="time" /><span><small className="sr-only">時間</small><strong>{input.startTime}<em>〜</em>{input.endTime}</strong></span></span>
+        <span><PlanStickerIcon kind="budget" /><span><small className="sr-only">ふたりの予算</small><strong>{budgetLabel}</strong></span></span>
+        <span><PlanStickerIcon kind="spots" /><span><small className="sr-only">立ち寄り先</small><strong>{displayPlan?.items.length ?? 0}<em>か所</em></strong></span></span>
+        <span><PlanStickerIcon kind={travel.icon} /><span><small className="sr-only">移動手段</small><strong>{travel.label}</strong></span></span>
       </div>
     </section>
     {(error || actionError) && !sheet && <p className={styles.notice} role="alert">{actionError || error}</p>}
@@ -130,7 +189,8 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
     {travelUnverified && <section className={styles.notice} role="status"><strong>移動を確認できていない暫定案</strong><p>店舗候補はありますが、必須区間の経路が取れていません。このままでは確定できません。再試行・近場で再検索・集合/解散の変更から進めてください。</p></section>}
     {!!displayPlan?.validation.issues.length && <section className={styles.notice}><strong>お出かけ前に確認</strong>{displayPlan.validation.issues.map((issue, index) => <p key={index}>{issue.message}</p>)}</section>}
     <section className={styles.itinerary} aria-label="この日のスケジュール"><h2 className="sr-only">この日のスケジュール</h2>
-      <div className={styles.meeting}><span className={styles.endpointIcon}><MapPin size={17} /></span><div><small>{input.startTime} 集合</small><strong>{input.meet.name}</strong></div></div>
+      <svg className={styles.itineraryRoutePath} viewBox="0 0 40 100" preserveAspectRatio="none" aria-hidden="true"><path d="M18 0C35 10 4 23 20 36S35 59 18 72S6 91 20 100" /></svg>
+      <div className={styles.meeting}><span className={styles.endpointSticker}><PlanStickerIcon kind="start" /></span><div><small>{input.startTime} 集合</small><strong>{input.meet.name}</strong></div></div>
       <ol>{displayPlan?.items.map((item, index) => {
         const spot = data.spots[item.spotId];
         const visual = spotVisual(spot?.name ?? "", spot?.categories ?? []);
@@ -167,7 +227,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
           : null;
         return endLeg ? <p className={styles.transition}><span />解散まで {endLeg.durationMinutes.value != null ? `${endLeg.durationMinutes.value}分` : "未検証"} · {travelModeLabel(endLeg.mode, endLeg.walkMinutesWithin?.value)}</p> : null;
       })()}
-      <div className={styles.meeting}><span className={styles.endpointIcon}><Check size={17} /></span><div><small>{input.endTime}ごろ 解散</small><strong>{input.end.name}</strong></div></div>
+      <div className={styles.meeting}><span className={styles.endpointSticker}><PlanStickerIcon kind="goal" /></span><div><small>{input.endTime}ごろ 解散</small><strong>{input.end.name}</strong></div></div>
     </section>
     {!["DONE", "REFLECTED"].includes(data.session.status) && <button className={styles.wholeFeedback} disabled={Boolean(active) || pending} onClick={() => openFeedback()}><MoodSticker mood="relaxed" /><span><strong>もう少し、こんな一日にしたい</strong><small>プラン全体の希望を伝える</small></span><ArrowUpRight size={16} /></button>}
     <footer className={styles.footer} inert={sheet ? true : undefined}>{confirmed ? <ButtonLink variant="secondary" fullWidth href="/"><Check size={17} />カレンダーで予定を見る</ButtonLink> : <Button fullWidth disabled={saving || pending || Boolean(active) || !data.plan?.items.length || data.plan.validation.state === "FAIL" || travelUnverified || Boolean(attention)} onClick={async () => { setSaving(true); try { await act(`/api/sessions/${sessionId}/progress`, { confirm: true, status: "CONFIRMED" }, "カレンダーに予定を追加しました"); } finally { setSaving(false); } }}>{saving ? "保存しています…" : travelUnverified ? "移動確認後に確定できます" : "このプランで決める"}<Check size={17} /></Button>}</footer>
@@ -197,22 +257,20 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
           setPending(false); setReplanningItemId(null);
         }
       }}>
-        <div className={styles.feedbackIntro}><MoodSticker mood="relaxed" /><div><strong>{target?.name ?? "一日の過ごし方"}</strong><p>気になることを、ひとこと教えてね。</p></div></div>
+        <div className={styles.feedbackIntro}><MoodSticker mood="relaxed" /><div className={styles.feedbackSpeech}><small>{target?.name ?? "一日の過ごし方"}</small><strong>どんなふうに変えたい？</strong></div></div>
         {target?.locked && <p className={styles.fieldHint}>時間が決まっている予定です。固定条件を守れる範囲で調整します。</p>}
-        <div className={styles.quickOptions}>{["別の場所がいい", "もう少し予算を抑えたい", "ゆっくり過ごしたい", "移動を少なくしたい"].map((text) => <Button variant="secondary" size="compact" type="button" key={text} disabled={pending} onClick={() => setFeedback((value) => value ? `${value}
-${text}` : text)}>{text}</Button>)}</div>
-        <label className={styles.feedbackLabel}>どんなふうに変えたい？<textarea autoFocus rows={3} maxLength={1000} value={feedback} disabled={pending} onChange={(event) => setFeedback(event.target.value)} placeholder="例えば、ここは行ったことがあるから、別の美術館がいいな。" /></label>
+        <fieldset className={styles.feedbackQuick}><legend>近い希望があれば選んでね</legend><div className={styles.quickOptions}>{["別の場所がいい", "予算を抑えたい", "ゆっくり過ごしたい", "移動を少なくしたい"].map((text) => {
+          const selected = feedback.split("\n").includes(text);
+          return <button type="button" key={text} aria-pressed={selected} disabled={pending} onClick={() => setFeedback((value) => {
+            const lines = value.split("\n").filter(Boolean);
+            return selected ? lines.filter((line) => line !== text).join("\n") : [...lines, text].join("\n");
+          })}><span aria-hidden="true">{selected && <Check size={12} />}</span>{text}</button>;
+        })}</div></fieldset>
+        <label className={styles.feedbackLabel}><span><strong>追加の希望</strong><small>自由に入力 · 任意</small></span><TextArea rows={3} maxLength={1000} value={feedback} disabled={pending} onChange={(event) => setFeedback(event.target.value)} placeholder="別の美術館がいい、もう少しカフェでゆっくりしたい" /></label>
         {fixturesEnabled() && <p className={styles.fieldHint}>現在は操作確認用のサンプルです。</p>}
         {actionError && <p className={styles.notice} role="alert">{actionError}</p>}
-        <Button fullWidth type="submit" disabled={!feedback.trim() || pending || Boolean(active)}>{pending ? "送っています…" : "この希望で考え直す"}<ArrowUpRight size={17} /></Button>
+        <Button fullWidth type="submit" className={styles.feedbackSubmit} disabled={!feedback.trim() || pending || Boolean(active)}>{pending ? "送っています…" : "この希望で考え直す"}<ArrowUpRight size={17} /></Button>
       </form>
-    </HomeSheet>}
-    {sheet === "conditions" && <HomeSheet title="プランをつくった条件" onClose={() => setSheet(null)}>
-      <div className={styles.conditionSheet}><p>最初の3ステップで入力した内容です。</p><dl><dt>時間</dt><dd>{input.startTime}〜{input.endTime}</dd><dt>集合 → 解散</dt><dd>{input.meet.name} → {input.end.name}</dd><dt>ふたりの予算</dt><dd>{budgetLabel}</dd></dl>
-        <h3>伝えた希望</h3>{input.preferences.map((item) => <p className={styles.preference} key={item.id}>{item.content}</p>)}
-        {!!displayPlan?.assumptions.length && <><h3>まだ確認できていないこと</h3>{displayPlan.assumptions.map((item) => <p key={item}>{item}</p>)}</>}
-        {!!displayPlan?.planB.length && <><h3>予定が変わったら</h3>{displayPlan.planB.map((item) => <p key={item.id}><strong>{item.trigger}</strong><br />{item.isVerifiedAlternative && item.candidateSpotId ? data.spots[item.candidateSpotId]?.name : item.policy || "代わりのプランを検討します"}</p>)}</>}
-      </div>
     </HomeSheet>}
   </main>;
 }
