@@ -159,7 +159,9 @@ export async function executeRun(
         });
         await withRun(runId, (found) => {
           if (!found) return;
-          found.run.displayRuntime = env.runtime === "MOCK" ? "MOCK" : display;
+          // displayRuntime は LIVE_SCENARIO を持たない（mode 側で区別）
+          found.run.displayRuntime =
+            env.runtime === "MOCK" ? "MOCK" : display === "REPLAY" ? "REPLAY" : "LIVE";
           found.run.mode = overlays.length ? "LIVE_SCENARIO" : found.run.mode;
           for (const ev of Object.values(built.evidence)) {
             found.bundle.evidence[ev.id] = ev;

@@ -9,11 +9,11 @@ import { computeLiveRoute } from "../src/server/providers/routes";
 
 async function main() {
   const env = getEnv();
-  const key = env.googleMapsApiKey;
-  if (!key) {
+  if (!env.googleMapsApiKey) {
     console.error("GOOGLE_MAPS_API_KEY missing");
     process.exit(1);
   }
+  const apiKey: string = env.googleMapsApiKey;
 
   const future = new Date(Date.now() + 2 * 3600_000).toISOString();
 
@@ -24,7 +24,7 @@ async function main() {
     to: { lat: number; lng: number },
   ) {
     const r = await computeLiveRoute({
-      apiKey: key,
+      apiKey,
       from,
       to,
       mode,

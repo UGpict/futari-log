@@ -4,8 +4,8 @@ import type { Memory, Plan, Session, TravelLeg, TravelMode, WalkLongAck } from "
 export type WalkOverageLeg = {
   id?: string;
   key: string;
-  from: TravelLeg["from"] | string;
-  to: TravelLeg["to"] | string;
+  from: TravelLeg["from"];
+  to: TravelLeg["to"];
   fromSpotId: string | null;
   toSpotId: string | null;
   minutes: number;
