@@ -579,7 +579,11 @@ export async function orchestratePlanning(input: {
   }
 
   if (built.plan.validation.state === "FAIL") {
-    const reason = built.plan.validation.issues[0]?.message ?? "制約を満たせません";
+    const reason =
+      built.plan.validation.issues.find((i) => i.severity === "ERROR")?.message ??
+      built.plan.validation.issues.find((i) => i.severity === "UNKNOWN")?.message ??
+      built.plan.validation.issues[0]?.message ??
+      "制約を満たせません";
     return {
       waitingQuestion: {
         id: "q_plan_unmet",
