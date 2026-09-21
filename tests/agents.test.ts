@@ -11,10 +11,16 @@ import { searchCatalog } from "../src/server/providers/catalog";
 
 function parts(iso: string) {
   const date = new Date(iso);
+  const tokyoMs = date.getTime() + 9 * 60 * 60 * 1000;
+  const t = new Date(tokyoMs);
+  const y = t.getUTCFullYear();
+  const m = String(t.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(t.getUTCDate()).padStart(2, "0");
   return {
-    hour: date.getUTCHours() + 9,
-    minute: date.getUTCMinutes(),
-    weekday: 6,
+    date: `${y}-${m}-${d}`,
+    hour: t.getUTCHours(),
+    minute: t.getUTCMinutes(),
+    weekday: t.getUTCDay(),
   };
 }
 
@@ -25,7 +31,7 @@ describe("place facts", () => {
         { open: { day: 6, hour: 10, minute: 0 }, close: { day: 6, hour: 18, minute: 0 } },
       ],
     });
-    assert.deepEqual(hours, [{ days: [6], open: "10:00", close: "18:00" }]);
+    assert.deepEqual(hours, [{ days: [6], open: "10:00", close: "18:00", alwaysOpen: false }]);
     assert.equal(
       assessHours(hours, "2026-09-19T01:00:00.000Z", "2026-09-19T04:00:00.000Z", parts),
       "OPEN",

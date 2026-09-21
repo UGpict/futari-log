@@ -167,6 +167,9 @@ export const approvalDtoSchema = z.object({
   kind: z.enum(["PLAN_APPLY", "MEMORY_SAVE", "MEMORY_EDIT"]),
   status: z.enum(["PENDING", "APPROVED", "REJECTED", "CONSUMED", "EXPIRED"]),
   summary: z.string(),
+  targetCandidateId: z.string().nullable().optional(),
+  targetMemoryId: z.string().nullable().optional(),
+  expectedVersion: z.number().nullable().optional(),
   diff: planDiffSchema.nullable(),
   consumedAt: z.string().nullable(),
   createdAt: z.string(),
@@ -223,10 +226,29 @@ export const spotDtoSchema = z.object({
 });
 export type SpotDto = z.infer<typeof spotDtoSchema>;
 
+export const travelLegDtoSchema = z.object({
+  id: z.string(),
+  from: z.enum(["MEET", "SPOT", "END"]),
+  fromSpotId: z.string().nullable(),
+  to: z.enum(["MEET", "SPOT", "END"]),
+  toSpotId: z.string().nullable(),
+  mode: z.enum(["WALK", "TRANSIT", "DRIVE"]),
+  departureAt: z.string(),
+  durationMinutes: z.object({ value: z.number().nullable(), evidenceIds: z.array(z.string()) }),
+  distanceMeters: z.object({ value: z.number().nullable(), evidenceIds: z.array(z.string()) }).optional(),
+  walkMinutesWithin: z
+    .object({ value: z.number().nullable(), evidenceIds: z.array(z.string()) })
+    .optional(),
+  bufferMinutes: z.number(),
+  cachedAt: z.string().nullable().optional(),
+  evidenceIds: z.array(z.string()).optional(),
+});
+export type TravelLegDto = z.infer<typeof travelLegDtoSchema>;
+
 export const planDtoSchema = z.object({
   version: z.number(),
   items: z.array(planItemDtoSchema),
-  legs: z.array(z.unknown()),
+  legs: z.array(travelLegDtoSchema),
   openings: z.array(z.unknown()).optional(),
   assumptions: z.array(z.string()),
   validation: z.object({

@@ -1,5 +1,6 @@
 import { getEnv } from "@/config/env";
 import type { Evidence, Spot } from "@/domain/schemas";
+import { withTimeout } from "@/lib/abort";
 import { newId } from "@/lib/ids";
 import { realNowIso } from "@/lib/time";
 import { hydratePlacePhotos } from "./placePhotos";
@@ -110,33 +111,8 @@ export async function attachSpotImages(args: {
     for (const ev of places.evidence) evidence[ev.id] = ev;
   }
 
-  const targets = Object.values(spots).filter((s) => !s.imageUrl).slice(0, 4);
-  if (env.geminiVia && targets.length) {
-    const grounded = await groundedFromGemini({
-      ctx: args.ctx,
-      spots: targets,
-      areaName: args.areaName,
-      via: env.geminiVia,
-      orcaBaseUrl: env.orcaBaseUrl,
-      orcaApiKey: env.orcaApiKey,
-      googleApiKey: env.geminiApiKey,
-      model: env.geminiModel,
-      signal: args.signal,
-    });
-    queries = grounded.queries;
-    searchEntryPointHtml = grounded.searchEntryPointHtml;
-    for (const ev of grounded.evidence) evidence[ev.id] = ev;
-    for (const img of grounded.images) {
-      const spot = spots[img.spotId];
-      if (!spot) continue;
-      spots[img.spotId] = {
-        ...spot,
-        imageUrl: img.imageUrl,
-        imageSourceUrl: img.imageSourceUrl,
-        imageProvider: img.provider,
-      };
-    }
-  }
+  // Places で写真が無いスポットはプレースホルダのまま。
+  // groundedFromGemini は同期の初回プラン経路では呼ばない（関数は残す）。
 
   for (const spot of Object.values(spots)) {
     if (spot.imageUrl || !spot.officialUrl) continue;
@@ -191,6 +167,8 @@ async function groundedFromGemini(args: {
   };
 
   let res: Response;
+  const groundingTimeoutMs = args.via === "orcarouter" ? 20_000 : 35_000;
+  const groundingSignal = withTimeout(args.signal, groundingTimeoutMs);
   try {
     res =
       args.via === "orcarouter"
@@ -204,7 +182,7 @@ async function groundedFromGemini(args: {
                 "X-OrcaRouter-Include-Cost": "true",
               },
               body: JSON.stringify(body),
-              signal: args.signal ?? AbortSignal.timeout(20000),
+              signal: groundingSignal,
             },
           )
         : await fetch(`${GOOGLE_GEMINI_ENDPOINT}/${encodeURIComponent(modelId)}:generateContent`, {
@@ -214,7 +192,7 @@ async function groundedFromGemini(args: {
               "x-goog-api-key": args.googleApiKey ?? "",
             },
             body: JSON.stringify(body),
-            signal: args.signal ?? AbortSignal.timeout(35000),
+            signal: groundingSignal,
           });
   } catch (error) {
     return {
@@ -338,7 +316,7 @@ async function fetchOgImage(pageUrl: string, signal?: AbortSignal): Promise<stri
     const res = await fetch(pageUrl, {
       headers: { Accept: "text/html", "User-Agent": "FutariLog/0.6 (grounded-image)" },
       redirect: "follow",
-      signal: signal ?? AbortSignal.timeout(6000),
+      signal: withTimeout(signal, 6000),
     });
     if (!res.ok) return null;
     const type = res.headers.get("content-type") ?? "";

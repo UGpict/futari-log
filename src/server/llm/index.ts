@@ -1,5 +1,11 @@
 import { getEnv } from "@/config/env";
 import { LLM_PRICE_TABLE, MODEL_PARAMS } from "@/config/settings";
+import type { AppEvent } from "@/domain/schemas";
+import { withTimeout } from "@/lib/abort";
+import { newId } from "@/lib/ids";
+import { realNowIso } from "@/lib/time";
+import { maskPii } from "@/server/privacy/mask";
+import { appendRunEvent, nextEventSeq } from "@/server/repositories/store";
 import { z, type ZodType } from "zod";
 import { orcaBase, orcaHeaders, usdToJpy, usageFromOrca } from "./usage";
 
@@ -23,6 +29,49 @@ export const TASK_POOL: Record<LlmTask, Pool> = {
   conflict: "hard",
 };
 
+/**
+ * Masked LLM failure body truncate length for Cloud Logging only.
+ * LIVE sample failure used ~82 completion tokens (~300–400 chars of JSON).
+ * 800 chars keeps typical short failures intact for Zod diagnosis while
+ * bounding log payload size. Not written to Firestore run events.
+ */
+export const LLM_FAILURE_CONTENT_CHARS = 800;
+
+export type LlmParseFailureKind = "json_parse_failed" | "schema_validation_failed";
+
+/** Firestore NOTICE payload — no reflection/LLM body preview (private couple text). */
+export type LlmParseFailureEventPayload = {
+  agent: "llm";
+  task: LlmTask;
+  attempt: number;
+  repaired: boolean;
+  failureKind: LlmParseFailureKind;
+  zodFlatten: ReturnType<z.ZodError["flatten"]> | null;
+  requestedModel: string;
+  actualModel: string;
+};
+
+export function llmParseFailureEventPayload(input: {
+  task: LlmTask;
+  attempt: number;
+  repaired: boolean;
+  kind: LlmParseFailureKind;
+  zodFlatten: ReturnType<z.ZodError["flatten"]> | null;
+  requestedModel: string;
+  actualModel: string;
+}): LlmParseFailureEventPayload {
+  return {
+    agent: "llm",
+    task: input.task,
+    attempt: input.attempt,
+    repaired: input.repaired,
+    failureKind: input.kind,
+    zodFlatten: input.zodFlatten,
+    requestedModel: input.requestedModel,
+    actualModel: input.actualModel,
+  };
+}
+
 export type LlmCallResult<T> = {
   data: T | null;
   ok: boolean;
@@ -41,6 +90,100 @@ export type LlmCallResult<T> = {
 function modelFor(pool: Pool): string {
   const env = getEnv();
   return pool === "hard" ? env.orcaHardModel : env.orcaMundaneModel;
+}
+
+export function previewMaskedLlmContent(content: string, maxChars = LLM_FAILURE_CONTENT_CHARS): string {
+  const masked = maskPii(content).masked;
+  if (masked.length <= maxChars) return masked;
+  return `${masked.slice(0, maxChars)}…`;
+}
+
+/** Classify JSON.parse vs Zod failure without collapsing both to one error string. */
+export function classifyLlmJsonAgainstSchema<T>(
+  content: string,
+  schema: ZodType<T>,
+): {
+  kind: LlmParseFailureKind | null;
+  data: T | null;
+  zodFlatten: ReturnType<z.ZodError["flatten"]> | null;
+} {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return { kind: "json_parse_failed", data: null, zodFlatten: null };
+  }
+  const checked = schema.safeParse(parsed);
+  if (checked.success) {
+    return { kind: null, data: checked.data, zodFlatten: null };
+  }
+  return {
+    kind: "schema_validation_failed",
+    data: null,
+    zodFlatten: checked.error.flatten(),
+  };
+}
+
+function errorMessageForKind(kind: LlmParseFailureKind): string {
+  return kind === "json_parse_failed" ? "json parse failed" : "schema validation failed";
+}
+
+async function recordLlmParseFailure(input: {
+  runId: string;
+  task: LlmTask;
+  attempt: number;
+  repaired: boolean;
+  kind: LlmParseFailureKind;
+  content: string;
+  zodFlatten: ReturnType<z.ZodError["flatten"]> | null;
+  requestedModel: string;
+  actualModel: string;
+}): Promise<void> {
+  const contentPreview = previewMaskedLlmContent(input.content);
+  const contentTruncated = maskPii(input.content).masked.length > LLM_FAILURE_CONTENT_CHARS;
+  const eventPayload = llmParseFailureEventPayload(input);
+
+  // Structured log (short retention): include masked preview for diagnosis.
+  console.info(
+    JSON.stringify({
+      severity: "WARNING",
+      message: "llm_parse_failure",
+      runId: input.runId,
+      ...eventPayload,
+      contentPreview,
+      contentTruncated,
+    }),
+  );
+
+  // Run event (long-lived Firestore): metadata only — no note/body preview.
+  try {
+    const seq = await nextEventSeq(input.runId);
+    const event: AppEvent = {
+      eventId: newId("evt"),
+      runId: input.runId,
+      seq,
+      at: realNowIso(),
+      type: "NOTICE",
+      summary: `LLM ${input.kind} (attempt ${input.attempt})`,
+      evidenceIds: [],
+      model: input.actualModel,
+      pool: null,
+      requestedModel: input.requestedModel,
+      actualModel: input.actualModel,
+      usage: null,
+      payload: eventPayload,
+    };
+    await appendRunEvent(input.runId, event);
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        severity: "ERROR",
+        message: "llm_parse_failure_event_write_failed",
+        runId: input.runId,
+        error: error instanceof Error ? error.message : "unknown",
+      }),
+    );
+  }
 }
 
 export async function callLLM<T>(input: {
@@ -78,22 +221,33 @@ export async function callLLM<T>(input: {
     ? input.messages
     : [{ role: "system" as const, content: "Respond with a JSON object." }, ...input.messages];
 
-  const body = {
-    model: requestedModel,
-    messages,
-    temperature: MODEL_PARAMS.temperature,
-    max_tokens: MODEL_PARAMS.maxTokens,
-    response_format: {
-      type: "json_object" as const,
-    },
+  type ChatMessage = { role: "system" | "user"; content: string };
+  type AttemptBundle = {
+    result: LlmCallResult<T>;
+    content: string;
+    kind: LlmParseFailureKind | null;
+    zodFlatten: ReturnType<z.ZodError["flatten"]> | null;
   };
 
-  const attempt = async (): Promise<LlmCallResult<T>> => {
+  const attempt = async (
+    attemptNo: number,
+    repaired: boolean,
+    requestMessages: ChatMessage[],
+  ): Promise<AttemptBundle> => {
+    const body = {
+      model: requestedModel,
+      messages: requestMessages,
+      temperature: MODEL_PARAMS.temperature,
+      max_tokens: MODEL_PARAMS.maxTokens,
+      response_format: {
+        type: "json_object" as const,
+      },
+    };
     const res = await fetch(`${orcaBase()}/chat/completions`, {
       method: "POST",
       headers: orcaHeaders(),
       body: JSON.stringify(body),
-      signal: input.signal ?? AbortSignal.timeout(25000),
+      signal: withTimeout(input.signal, 25000),
     });
     const latencyMs = Date.now() - started;
     const actualModel =
@@ -102,18 +256,23 @@ export async function callLLM<T>(input: {
       "unknown";
     if (!res.ok) {
       return {
-        data: null,
-        ok: false,
-        requestedModel,
-        actualModel,
-        pool,
-        promptTokens: null,
-        completionTokens: null,
-        costUsd: null,
-        costJpy: null,
-        latencyMs,
-        repaired: false,
-        error: `orcarouter ${res.status}`,
+        content: "",
+        kind: null,
+        zodFlatten: null,
+        result: {
+          data: null,
+          ok: false,
+          requestedModel,
+          actualModel,
+          pool,
+          promptTokens: null,
+          completionTokens: null,
+          costUsd: null,
+          costJpy: null,
+          latencyMs,
+          repaired: false,
+          error: `orcarouter ${res.status}`,
+        },
       };
     }
     const json = (await res.json()) as {
@@ -126,37 +285,77 @@ export async function callLLM<T>(input: {
       };
     };
     const content = json.choices?.[0]?.message?.content ?? "";
-    let parsed: unknown = null;
-    try {
-      parsed = JSON.parse(content);
-    } catch {
-      parsed = null;
+    let classified = classifyLlmJsonAgainstSchema(content, input.schema);
+    // Fence / embedded object: same extractor as callOrcaJson (no schema relaxation).
+    if (classified.kind === "json_parse_failed") {
+      const extracted = extractJsonObject(content);
+      if (extracted != null) {
+        const checked = input.schema.safeParse(extracted);
+        classified = checked.success
+          ? { kind: null, data: checked.data, zodFlatten: null }
+          : {
+              kind: "schema_validation_failed",
+              data: null,
+              zodFlatten: checked.error.flatten(),
+            };
+      }
     }
-    const checked = input.schema.safeParse(parsed);
     const usage = usageFromOrca(json);
+    const resolvedModel = json.model ?? actualModel;
+    if (classified.kind) {
+      await recordLlmParseFailure({
+        runId: input.runId,
+        task: input.task,
+        attempt: attemptNo,
+        repaired,
+        kind: classified.kind,
+        content,
+        zodFlatten: classified.zodFlatten,
+        requestedModel,
+        actualModel: resolvedModel,
+      });
+    }
     return {
-      data: checked.success ? checked.data : null,
-      ok: checked.success,
-      requestedModel,
-      actualModel: json.model ?? actualModel,
-      pool,
-      promptTokens: usage.promptTokens,
-      completionTokens: usage.completionTokens,
-      costUsd: usage.costUsd,
-      costJpy: usage.costJpy,
-      latencyMs,
-      repaired: false,
-      error: checked.success ? null : "schema validation failed",
+      content,
+      kind: classified.kind,
+      zodFlatten: classified.zodFlatten,
+      result: {
+        data: classified.data,
+        ok: classified.kind == null,
+        requestedModel,
+        actualModel: resolvedModel,
+        pool,
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+        costUsd: usage.costUsd,
+        costJpy: usage.costJpy,
+        latencyMs,
+        repaired: false,
+        error: classified.kind ? errorMessageForKind(classified.kind) : null,
+      },
     };
   };
 
-  const result = await attempt();
-  if (!result.ok && result.error === "schema validation failed") {
-    const repaired = await attempt();
-    repaired.repaired = true;
-    return repaired;
+  const first = await attempt(1, false, messages);
+  if (
+    !first.result.ok &&
+    (first.result.error === "schema validation failed" || first.result.error === "json parse failed")
+  ) {
+    const repairUser: ChatMessage = {
+      role: "user",
+      content: [
+        "前回の応答は要求スキーマに合いませんでした。修正した JSON オブジェクトだけを返してください。説明文やコードフェンスは不要です。",
+        `failureKind: ${first.kind ?? "unknown"}`,
+        `zodIssues: ${JSON.stringify(first.zodFlatten)}`,
+        "previousResponse:",
+        first.content.slice(0, MODEL_PARAMS.maxTokens * 4),
+      ].join("\n"),
+    };
+    const second = await attempt(2, true, [...messages, repairUser]);
+    second.result.repaired = true;
+    return second.result;
   }
-  return result;
+  return first.result;
 }
 
 /** OrcaRouter JSON。キーがあるときは MOCK runtime でも実呼び出しする（収集の構造化用） */
@@ -198,7 +397,7 @@ export async function callOrcaJson<T>(input: {
       max_tokens: MODEL_PARAMS.maxTokens,
       response_format: { type: "json_object" as const },
     }),
-    signal: input.signal ?? AbortSignal.timeout(25000),
+    signal: withTimeout(input.signal, 25000),
   });
   const latencyMs = Date.now() - started;
   const actualModel =
@@ -248,7 +447,8 @@ export async function callOrcaJson<T>(input: {
   };
 }
 
-function extractJsonObject(content: string): unknown {
+/** Shared by callLLM and callOrcaJson: fenced or embedded JSON object/array. */
+export function extractJsonObject(content: string): unknown {
   const fence = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = fence?.[1] ?? content;
   const start = candidate.indexOf("{");

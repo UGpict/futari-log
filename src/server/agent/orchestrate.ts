@@ -1,8 +1,10 @@
 import { LIMITS } from "@/config/settings";
 import { getEnv } from "@/config/env";
 import { loadSelectedEventSpots } from "@/server/catalog/planAttach";
+import { suggestCatalogEventsForPlan } from "@/server/catalog/suggest";
 import type { Memory, Plan, Run, Session, Spot } from "@/domain/schemas";
-import { evaluateWalkLimits, longWalkQuestion, walkAckFingerprintFromPlan, walkLongAckMatches } from "@/domain/plan/walkLimits";
+import { evaluateWalkLimits, describeWalkOverages, longWalkQuestion, travelUnverifiedQuestion, hasUnverifiedTravel, walkAckFingerprintFromPlan, walkLongAckMatches, resolveWalkHardTotal } from "@/domain/plan/walkLimits";
+import { WALK_LIMITS } from "@/config/settings";
 import { composeReplanOrder, isProtectedPlanItem } from "@/domain/plan/replanOrder";
 import {
   classifyReplanIntent,
@@ -10,6 +12,7 @@ import {
 } from "@/domain/plan/replanIntent";
 import type { LlmCallResult } from "@/server/llm";
 import type { ProviderCtx } from "@/server/providers";
+import { asSpotOpeningHours } from "@/server/providers";
 import { withRun, type CoupleBundle } from "@/server/repositories/store";
 import { dailyFresh, pruneTravelFacts, readMemories, remember, writeMemories } from "./memory";
 import { buildPlan, type BuiltPlan } from "./buildPlan";
@@ -17,6 +20,7 @@ import { runPlace } from "./place";
 import { pickReplacementCandidate, runPlanner } from "./planner";
 import { jobsMissingCoverage, mergeScoutBuckets, runScout, scoutPool } from "./scout";
 import { scoutJobsForPreferences } from "./scoutJobs";
+import { refillOpenSpotIds, SELF_CORRECT_REFILL_LOOKUPS } from "./selfCorrect";
 import {
   assessTokyoPlan,
   companionScoutJobs,
@@ -207,13 +211,29 @@ export async function orchestratePlanning(input: {
     };
   }
   const selected = input.session.input.selectedEventIds ?? [];
-  const exhibit = catalog.spots.length
-    ? [...catalog.spots, ...scout.exhibit.filter((s) => !catalog.spots.some((e) => e.id === s.id))]
+  const autoCatalog = await suggestCatalogEventsForPlan({
+    enabled: env.enableEventCatalog && selected.length === 0,
+    dateTokyo: input.session.input.dateTokyo,
+    areaHint: input.session.input.meet.name,
+    wishText: input.session.input.preferences.map((p) => p.content).join(" "),
+    excludeIds: selected,
+    limit: 3,
+  });
+  if (autoCatalog.reasons.length) {
+    await input.log(
+      "planner",
+      "NOTICE",
+      `カタログ自動候補: ${autoCatalog.reasons.map((r) => `${r.eventId}(${r.reason})`).join(" / ")}`,
+    );
+  }
+  const catalogSpots = [...catalog.spots, ...autoCatalog.spots.filter((s) => !catalog.spots.some((c) => c.id === s.id))];
+  const exhibit = catalogSpots.length
+    ? [...catalogSpots, ...scout.exhibit.filter((s) => !catalogSpots.some((e) => e.id === s.id))]
     : selected.length === 0 || catalog.fallbackAcknowledged
       ? scout.exhibit
       : [];
-  for (const [id, rules] of Object.entries(catalog.hours)) {
-    input.ctx.placeHours = { ...(input.ctx.placeHours ?? {}), [id]: rules };
+  for (const [id, rules] of Object.entries({ ...catalog.hours, ...autoCatalog.hours })) {
+    input.ctx.placeHours = { ...(input.ctx.placeHours ?? {}), [id]: asSpotOpeningHours(rules) };
   }
   const weather = await runWeather({
     ctx: input.ctx,
@@ -265,7 +285,7 @@ export async function orchestratePlanning(input: {
   });
   const lockedIds = [
     ...input.session.input.fixedAppointments.map((a) => a.spotId).filter((x): x is string => Boolean(x)),
-    ...catalog.spots.map((s) => s.id),
+    ...catalogSpots.map((s) => s.id),
     ...protectedItems.map((item) => item.spotId),
   ];
   const avoidIds =
@@ -383,7 +403,7 @@ export async function orchestratePlanning(input: {
   }
 
   const spotMap: Record<string, Spot> = {};
-  for (const s of [...scout.walk, ...exhibit, ...scout.sweets, ...scout.other, ...catalog.spots]) {
+  for (const s of [...scout.walk, ...exhibit, ...scout.sweets, ...scout.other, ...catalogSpots]) {
     spotMap[s.id] = s;
   }
 
@@ -446,18 +466,37 @@ export async function orchestratePlanning(input: {
         )
         .map((item) => item.spotId),
     );
+    const closedItemWindows = built.plan.items
+      .filter((item) => closedSpotIds.has(item.spotId))
+      .map((item) => ({ startAt: item.startAt, endAt: item.endAt }));
     const protectedSpotIds = new Set(protectedItems.map((item) => item.spotId));
-    const retryIds = orderedSpotIds.filter(
-      (id) => protectedSpotIds.has(id) || (!closedSpotIds.has(id) && !(env.runtime === "LIVE" && id.startsWith("mock:"))),
-    );
     const pool = [...scout.walk, ...exhibit, ...scout.sweets, ...scout.other];
-    for (const spot of pool) {
-      if (retryIds.length >= Math.max(3, orderedSpotIds.length)) break;
-      if (retryIds.includes(spot.id) || closedSpotIds.has(spot.id) || protectedSpotIds.has(spot.id)) continue;
-      if (env.runtime === "LIVE" && spot.id.startsWith("mock:")) continue;
-      if (rain && spot.environment.value === "OUTDOOR") continue;
-      retryIds.push(spot.id);
-    }
+    const refill = await refillOpenSpotIds({
+      orderedSpotIds,
+      closedSpotIds,
+      protectedSpotIds,
+      pool,
+      rain,
+      liveOnly: env.runtime === "LIVE",
+      targetCount: Math.max(3, orderedSpotIds.length),
+      maxLookups: SELF_CORRECT_REFILL_LOOKUPS,
+      dateTokyo: input.session.input.dateTokyo,
+      startTime: input.session.input.startTime,
+      endTime: input.session.input.endTime,
+      previousItems: built.plan.items.map((item) => ({
+        spotId: item.spotId,
+        startAt: item.startAt,
+        endAt: item.endAt,
+      })),
+      closedItemWindows,
+      ctx: input.ctx,
+    });
+    const retryIds = refill.ids;
+    await input.log(
+      "planner",
+      "NOTICE",
+      `差し替え補充: OPEN確認 ${retryIds.length}件 / 照会 ${refill.lookups}件（上限 ${SELF_CORRECT_REFILL_LOOKUPS}）`,
+    );
     const retryPlace = await runPlace({
       ctx: input.ctx,
       log: input.log,
@@ -498,19 +537,68 @@ export async function orchestratePlanning(input: {
     };
   }
 
-  const walkCheck = evaluateWalkLimits(input.session.input.travelMode, built.plan.legs);
+  const walkCheck = evaluateWalkLimits(input.session.input.travelMode, built.plan.legs, {
+    hardTotalMinutes: resolveWalkHardTotal(input.memories).minutes ?? WALK_LIMITS.hardTotalMinutes,
+    enforcePerLeg: input.session.input.travelMode === "WALK",
+  });
+  const hardFromMemory = resolveWalkHardTotal(input.memories);
   const fingerprint = walkAckFingerprintFromPlan(input.session, built.plan, walkCheck);
-  if (walkCheck.exceeds && !walkLongAckMatches(input.session.walkLongAck, fingerprint)) {
+  if (walkCheck.exceeds && !walkLongAckMatches(input.session.walkLongAck, fingerprint, {
+    hardTotalMinutes: walkCheck.hardTotalMinutes,
+  })) {
     await withRun(input.runId, (found) => {
       if (!found) return;
       found.bundle.session.pendingWalkAckFingerprint = fingerprint;
       persistTravelCache(input.ctx, memories);
       writeMemories(found.couple, memories);
     });
+    const details = describeWalkOverages(
+      walkCheck,
+      built.plan.legs,
+      built.spots,
+      { meetName: input.session.input.meet.name, endName: input.session.input.end.name },
+    );
     return {
-      waitingQuestion: longWalkQuestion(walkCheck),
+      waitingQuestion: longWalkQuestion(walkCheck, details, built.spots, {
+        meetName: input.session.input.meet.name,
+        endName: input.session.input.end.name,
+      }),
       walkAckFingerprint: fingerprint,
       built: null,
+      llm: planned.llm,
+      mode,
+    };
+  }
+
+  if (walkCheck.softTotalExceeded && !walkCheck.exceeds) {
+    built.plan.assumptions = [
+      `徒歩合計は ${walkCheck.totalMinutes}分（参考目安 ${walkCheck.softTotalMinutes}分を超過）。区間ごとの確認目安は超えていないため、合計だけでは止めていません。`,
+      ...built.plan.assumptions,
+    ];
+  }
+  if (hardFromMemory.memoryIds.length && walkCheck.hardTotalMinutes != null) {
+    built.plan.assumptions = [
+      `承認済みの総徒歩上限 ${walkCheck.hardTotalMinutes}分を適用（記憶 ${hardFromMemory.memoryIds.length} 件）`,
+      ...built.plan.assumptions,
+    ];
+  }
+
+  if (hasUnverifiedTravel(built.plan.validation.issues)) {
+    const unknownCount = built.plan.validation.issues.filter((i) =>
+      ["TRAVEL_UNKNOWN", "END_TRAVEL_UNKNOWN"].includes(i.code),
+    ).length;
+    built.plan.assumptions = [
+      "移動を確認できていない暫定案です。必須区間の経路が取れるまで通常の確定はできません。",
+      ...built.plan.assumptions,
+    ];
+    await withRun(input.runId, (found) => {
+      if (!found) return;
+      persistTravelCache(input.ctx, memories);
+      writeMemories(found.couple, memories);
+    });
+    return {
+      waitingQuestion: travelUnverifiedQuestion(unknownCount),
+      built,
       llm: planned.llm,
       mode,
     };

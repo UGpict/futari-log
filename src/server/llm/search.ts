@@ -1,4 +1,5 @@
 import { getEnv } from "@/config/env";
+import { withTimeout } from "@/lib/abort";
 import {
   lookupSettledCost,
   orcaBase,
@@ -175,7 +176,7 @@ async function chatCompletionsSearch(
       temperature: 0.2,
       max_tokens: 2000,
     }),
-    signal: signal ?? AbortSignal.timeout(45000),
+    signal: withTimeout(signal, 45000),
   });
   const latencyMs = Date.now() - started;
   const actualHeader =
@@ -235,7 +236,7 @@ async function nativeGeminiSearch(
       contents: [{ role: "user", parts: [{ text: query }] }],
       tools: [{ googleSearch: {} }],
     }),
-    signal: signal ?? AbortSignal.timeout(45000),
+    signal: withTimeout(signal, 45000),
   });
   const latencyMs = Date.now() - started;
   if (!res.ok) {

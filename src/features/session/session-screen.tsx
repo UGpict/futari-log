@@ -61,10 +61,28 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   const { photos: placePhotos, loading: photosLoading } = usePlacePhotos((displayPlan?.items ?? []).map((item) => item.spotId));
   if (!data && error) return <main className={styles.page}><HomeLogo className={styles.homeLogo} /><h1>読み込めませんでした</h1><p role="alert">{error}</p><Button variant="secondary" size="compact" onClick={() => void reload().catch(() => undefined)}>もう一度読み込む</Button></main>;
   if (!data || (!data.plan && !failed && !attention)) return <main className={styles.page}><HomeLogo className={styles.homeLogo} /><PlanLoading demo={fixturesEnabled()} /></main>;
+  const travelUnverified = Boolean(
+    displayPlan?.validation.issues.some((issue) =>
+      issue.code === "TRAVEL_UNKNOWN" || issue.code === "END_TRAVEL_UNKNOWN",
+    ),
+  );
   const input = data.session.input;
   const confirmed = ["CONFIRMED", "IN_PROGRESS", "DONE", "REFLECTED"].includes(data.session.status);
   const budget = [input.budget.mealsJpy, input.budget.facilitiesJpy, input.budget.transitJpy];
   const budgetLabel = budget.every((value) => value !== null) ? `¥${budget.reduce<number>((sum, value) => sum + (value ?? 0), 0).toLocaleString()}` : "未設定あり";
+  function travelModeLabel(mode: string, walkWithin?: number | null) {
+    if (mode === "WALK") return "徒歩";
+    if (mode === "TRANSIT") {
+      if (walkWithin == null) return "公共交通（徒歩内訳未取得）";
+      if (walkWithin === 0) return "公共交通";
+      return `公共交通（徒歩${walkWithin}分）`;
+    }
+    if (mode === "DRIVE") return "車";
+    return mode;
+  }
+  function legForTransition(fromSpotId: string | null, toSpotId: string | null) {
+    return displayPlan?.legs.find((leg) => leg.fromSpotId === fromSpotId && leg.toSpotId === toSpotId) ?? null;
+  }
   async function act(path: string, body: unknown, success: string) {
     if (pending) return false;
     setPending(true); setActionError(""); setMessage("");
@@ -111,6 +129,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
     {approval && !proposalReady && latest?.status === "WAITING_APPROVAL" && <section className={styles.approval}><strong>条件に合う別の候補が見つかりませんでした。条件を変えて探しますか？</strong><div className={styles.buttonRow}><Button variant="secondary" size="compact" disabled={pending} onClick={() => void act(`/api/approvals/${approval.id}/decision`, { decision: "REJECT" }, "元のプランを残しました")}>元のままにする</Button></div></section>}
     {data.grounding?.searchEntryPointHtml && <iframe title="検索情報の出典" sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={data.grounding.searchEntryPointHtml} className={styles.searchSources} />}
     {latest?.status === "WAITING_INPUT" && latest.waitingQuestion && <section className={styles.approval}><strong>{latest.waitingQuestion.prompt}</strong><div className={styles.buttonRow}>{latest.waitingQuestion.options.map((answer) => <Button variant="secondary" size="compact" key={answer} disabled={pending} onClick={() => void act(`/api/runs/${latest.id}/answers`, { questionId: latest.waitingQuestion!.id, answer }, "回答を送りました")}>{answer}</Button>)}</div></section>}
+    {travelUnverified && <section className={styles.notice} role="status"><strong>移動を確認できていない暫定案</strong><p>店舗候補はありますが、必須区間の経路が取れていません。このままでは確定できません。再試行・近場で再検索・集合/解散の変更から進めてください。</p></section>}
     {!!displayPlan?.validation.issues.length && <section className={styles.notice}><strong>お出かけ前に確認</strong>{displayPlan.validation.issues.map((issue, index) => <p key={index}>{issue.message}</p>)}</section>}
     <section className={styles.itinerary} aria-label="この日のスケジュール"><h2 className="sr-only">この日のスケジュール</h2>
       <div className={styles.meeting}><span className={styles.endpointIcon}><MapPin size={17} /></span><div><small>{input.startTime} 集合</small><strong>{input.meet.name}</strong></div></div>
@@ -120,9 +139,14 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
         const duration = Math.max(0, Math.round((Date.parse(item.endAt) - Date.parse(item.startAt)) / 60000));
         const next = displayPlan?.items[index + 1];
         const gap = next ? Math.round((Date.parse(next.startAt) - Date.parse(item.endAt)) / 60000) : 0;
+        const prevSpotId = index === 0 ? (input.meet.spotId ?? null) : displayPlan?.items[index - 1]?.spotId ?? null;
+        const inbound = index === 0
+          ? displayPlan?.legs.find((leg) => leg.from === "MEET" && leg.toSpotId === item.spotId)
+          : legForTransition(prevSpotId, item.spotId);
         return <li key={item.id}>
           <div className={styles.timelineTime}><time dateTime={item.startAt}>{formatTokyoHm(item.startAt)}</time><span data-kind={visual.id}><visual.Icon size={19} /></span></div>
           <div className={styles.stop}>
+            {inbound && <p className={styles.transition}><span />{inbound.durationMinutes.value != null ? `${inbound.durationMinutes.value}分` : "未検証"} · {travelModeLabel(inbound.mode, inbound.walkMinutesWithin?.value)}</p>}
             {replanningItemId === item.id ? <article className={styles.replanningSpot} aria-label={`${spot?.name ?? "この場所"}の変更案を考えています`}><PlanLoading demo={fixturesEnabled()} compact /></article> : <article className={styles.spot}>
               <SpotCardImage key={item.spotId} spotId={item.spotId} name={spot?.name ?? ""} visual={visual} photo={placePhotos[item.spotId]} loading={photosLoading} />
               <div className={styles.spotBody}>
@@ -138,10 +162,17 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
         </li>;
       })}</ol>
       {!displayPlan?.items.length && <p className={styles.notice}>表示できる行程がまだありません。</p>}
+      {(() => {
+        const last = displayPlan?.items.at(-1);
+        const endLeg = last
+          ? displayPlan?.legs.find((leg) => leg.fromSpotId === last.spotId && leg.to === "END")
+          : null;
+        return endLeg ? <p className={styles.transition}><span />解散まで {endLeg.durationMinutes.value != null ? `${endLeg.durationMinutes.value}分` : "未検証"} · {travelModeLabel(endLeg.mode, endLeg.walkMinutesWithin?.value)}</p> : null;
+      })()}
       <div className={styles.meeting}><span className={styles.endpointIcon}><Check size={17} /></span><div><small>{input.endTime}ごろ 解散</small><strong>{input.end.name}</strong></div></div>
     </section>
     {!["DONE", "REFLECTED"].includes(data.session.status) && <button className={styles.wholeFeedback} disabled={Boolean(active) || pending} onClick={() => openFeedback()}><MoodSticker mood="relaxed" /><span><strong>もう少し、こんな一日にしたい</strong><small>プラン全体の希望を伝える</small></span><ArrowUpRight size={16} /></button>}
-    <footer className={styles.footer} inert={sheet ? true : undefined}>{confirmed ? <ButtonLink variant="secondary" fullWidth href="/"><Check size={17} />カレンダーで予定を見る</ButtonLink> : <Button fullWidth disabled={saving || pending || Boolean(active) || !data.plan?.items.length || data.plan.validation.state === "FAIL" || Boolean(attention)} onClick={async () => { setSaving(true); try { await act(`/api/sessions/${sessionId}/progress`, { confirm: true, status: "CONFIRMED" }, "カレンダーに予定を追加しました"); } finally { setSaving(false); } }}>{saving ? "保存しています…" : "このプランで決める"}<Check size={17} /></Button>}</footer>
+    <footer className={styles.footer} inert={sheet ? true : undefined}>{confirmed ? <ButtonLink variant="secondary" fullWidth href="/"><Check size={17} />カレンダーで予定を見る</ButtonLink> : <Button fullWidth disabled={saving || pending || Boolean(active) || !data.plan?.items.length || data.plan.validation.state === "FAIL" || travelUnverified || Boolean(attention)} onClick={async () => { setSaving(true); try { await act(`/api/sessions/${sessionId}/progress`, { confirm: true, status: "CONFIRMED" }, "カレンダーに予定を追加しました"); } finally { setSaving(false); } }}>{saving ? "保存しています…" : travelUnverified ? "移動確認後に確定できます" : "このプランで決める"}<Check size={17} /></Button>}</footer>
     {sheet === "feedback" && <HomeSheet title={target ? "ここ、少し変えよう" : "プランの希望を伝える"} onClose={() => setSheet(null)}>
       <form className={styles.feedbackForm} onSubmit={async (event) => {
         event.preventDefault();

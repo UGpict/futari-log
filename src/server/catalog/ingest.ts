@@ -19,6 +19,31 @@ import {
 } from "./repo";
 import { structureEvents } from "./structure";
 import { TOKYO_PRIORITY_AREAS } from "@/contracts/serviceArea";
+import { tokyoToday, toTokyoParts } from "@/lib/time";
+
+function defaultIngestDateTokyo(): string {
+  // 固定 demoDate に依存しない。JST 当日を既定とする。
+  return tokyoToday();
+}
+
+function defaultIngestArea(): { name: string; lat: number; lng: number } {
+  return TOKYO_PRIORITY_AREAS[0];
+}
+
+function weekendDatesFrom(today: string): string[] {
+  const parts = toTokyoParts(`${today}T12:00:00+09:00`);
+  const base = new Date(`${today}T12:00:00+09:00`);
+  const dates: string[] = [today];
+  for (let i = 0; i < 7; i += 1) {
+    const d = new Date(base.getTime() + i * 86400_000);
+    const p = toTokyoParts(d.toISOString());
+    if (p.weekday === 0 || p.weekday === 6) {
+      if (!dates.includes(p.date)) dates.push(p.date);
+    }
+  }
+  void parts;
+  return dates.slice(0, 3);
+}
 
 function normalizeKey(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
@@ -45,13 +70,18 @@ export async function ingestEvents(input?: {
   owner?: string;
 }): Promise<{ ok: boolean; runId: string; status: string; saved: number; error: string | null }> {
   const env = getEnv();
-  const dateTokyo = input?.dateTokyo ?? env.demoDate;
+  const area = TOKYO_PRIORITY_AREAS.find((a) => a.name === input?.areaName) ?? defaultIngestArea();
+  const dateTokyo = input?.dateTokyo ?? defaultIngestDateTokyo();
   const genre = input?.genre ?? "展覧会";
-  const areaName = input?.areaName ?? env.demoAreaName;
+  const areaName = input?.areaName ?? area.name;
   const owner = input?.owner ?? `ingest-${process.pid}`;
   const runId = newId("ing");
   const startedAt = new Date().toISOString();
   const query = `${areaName} ${dateTokyo} ${genre} 開催 公式`;
+  const searchArea = { lat: area.lat, lng: area.lng };
+  const relatedDates = weekendDatesFrom(dateTokyo);
+  const queryWithWeekend =
+    relatedDates.length > 1 ? `${query} （関連 ${relatedDates.slice(1).join(",")}）` : query;
 
   const lock = await tryAcquireIngestLock({ owner, runId, leaseMs: 180_000 });
   if (!lock.ok) {
@@ -63,7 +93,7 @@ export async function ingestEvents(input?: {
       leaseOwner: owner,
       leaseExpiresAt: null,
       attempt: 1,
-      query,
+      query: queryWithWeekend,
       areaName,
       dateTokyo,
       genre,
@@ -84,7 +114,7 @@ export async function ingestEvents(input?: {
     leaseOwner: owner,
     leaseExpiresAt: new Date(Date.now() + 180_000).toISOString(),
     attempt: 1,
-    query,
+    query: queryWithWeekend,
     areaName,
     dateTokyo,
     genre,
@@ -96,7 +126,7 @@ export async function ingestEvents(input?: {
   await saveIngestRun(run);
 
   try {
-    const search = await groundedGoogleSearch({ query, model: env.orcaSearchModel });
+    const search = await groundedGoogleSearch({ query: queryWithWeekend, model: env.orcaSearchModel });
     run.search = {
       requestedModel: search.requestedModel,
       actualModel: search.actualModel,
@@ -139,7 +169,7 @@ export async function ingestEvents(input?: {
     }
 
     const structured = await structureEvents({
-      query,
+      query: queryWithWeekend,
       searchText: search.text,
       citations: search.citations,
       documents: [...new Map([...bodies.entries()].filter(([url]) => !url.includes("vertexaisearch"))).entries()].map(
@@ -247,7 +277,7 @@ export async function ingestEvents(input?: {
         place = await matchVenuePlace({
           apiKey: env.googleMapsApiKey,
           name: venue.value,
-          area: { lat: env.demoLat, lng: env.demoLng },
+          area: searchArea,
         }).catch(() => null);
       }
       const venueRecord: CatalogVenueRecord | null = venue.value

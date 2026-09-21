@@ -8,8 +8,14 @@ import type {
   PlanningInput,
   Spot,
   TravelLeg,
+  TravelMode,
 } from "@/domain/schemas";
+import { WALK_LIMITS } from "@/config/settings";
 import { explainWishMatches } from "@/contracts/spotKinds";
+import {
+  collectDirectiveEffects,
+  stayMinutesForSpot,
+} from "@/domain/memory/directives";
 import { preferenceMatchIds, validatePlan } from "@/domain/plan/validatePlan";
 import { newId } from "@/lib/ids";
 import { addMinutes, minutesBetween, tokyoDateTime } from "@/lib/time";
@@ -21,6 +27,7 @@ import {
 } from "@/server/providers";
 import { getCatalogSpot } from "@/server/providers/catalog";
 import { hydratePlacePhotos } from "@/server/providers/placePhotos";
+import type { RouteEstimate } from "@/server/providers/routes";
 
 function fact<T>(value: T | null, evidenceIds: string[] = []) {
   return { value, evidenceIds };
@@ -45,10 +52,8 @@ export async function buildPlan(input: {
   const evidence: Evidence[] = [];
   const spots = { ...input.spots };
   const start = tokyoDateTime(input.input.dateTokyo, input.input.startTime);
-  const standingCare = input.memories.filter(
-    (m) => m.active && /立|歩/.test(m.content) && m.strength !== undefined,
-  );
-  const restCare = standingCare.length > 0;
+  const effects = collectDirectiveEffects(input.memories);
+  const restCare = effects.preferSeatedRest.length > 0;
 
   const detailsNeeded = input.orderedSpotIds.filter((id) => !spots[id]);
   for (const id of detailsNeeded.slice(0, 6)) {
@@ -74,46 +79,29 @@ export async function buildPlan(input: {
   });
 
   const lockedIds = locked.map((l) => l.spotId).filter((x): x is string => Boolean(x));
-  const unlocked = uniqueIds(input.orderedSpotIds).filter(
+  let unlocked = uniqueIds(input.orderedSpotIds).filter(
     (id) => spots[id] && !lockedIds.includes(id),
   );
+  if (effects.revisitSpotIds.size) {
+    unlocked = [...unlocked].sort((a, b) => {
+      const aRev = effects.revisitSpotIds.has(a) ? 0 : 1;
+      const bRev = effects.revisitSpotIds.has(b) ? 0 : 1;
+      return aRev - bRev;
+    });
+  }
 
   const items: PlanItem[] = [];
   const influences: Plan["memoryInfluences"] = [];
   const prevBySpot = new Map((input.previousItems ?? []).map((i) => [i.spotId, i]));
 
   function baseStay(spot: Spot): number {
-    if (restCare && (spot.standingBurden.value === "HIGH" || spot.standingBurden.value === "MEDIUM")) return 35;
-    if (restCare && spot.restEase.value === "EASY") return 40;
-    return 50;
+    return stayMinutesForSpot(spot, effects, 50).stay;
   }
 
   function stayAndMemory(spot: Spot): { stay: number; memIds: string[] } {
-    let stay = 50;
-    const memIds: string[] = [];
-    if (restCare && (spot.standingBurden.value === "HIGH" || spot.standingBurden.value === "MEDIUM")) {
-      stay = 35;
-      for (const m of standingCare) {
-        memIds.push(m.id);
-        influences.push({
-          memoryId: m.id,
-          effect: "DURATION",
-          detail: `${spot.name} の滞在を短くした`,
-        });
-      }
-    }
-    if (restCare && spot.restEase.value === "EASY") {
-      stay = 40;
-      for (const m of standingCare) {
-        memIds.push(m.id);
-        influences.push({
-          memoryId: m.id,
-          effect: "REST_INSERT",
-          detail: `${spot.name} を休憩として配置`,
-        });
-      }
-    }
-    return { stay, memIds: [...new Set(memIds)] };
+    const { stay, influences: inf } = stayMinutesForSpot(spot, effects, 50);
+    for (const row of inf) influences.push(row);
+    return { stay, memIds: [...new Set(inf.map((i) => i.memoryId))] };
   }
 
   function makeItem(
@@ -128,6 +116,16 @@ export async function buildPlan(input: {
     }
     const spot = spots[spotId];
     const { memIds } = stayAndMemory(spot);
+    if (effects.revisitSpotIds.has(spotId)) {
+      for (const m of effects.revisitSpotIds.get(spotId) ?? []) {
+        influences.push({
+          memoryId: m.id,
+          effect: "PRIORITY",
+          detail: `${spot.name} を承認済みの再訪希望として優先`,
+        });
+        memIds.push(m.id);
+      }
+    }
     return {
       id: newId("it"),
       spotId,
@@ -137,7 +135,7 @@ export async function buildPlan(input: {
       locked: Boolean(appt),
       lockReason: appt ? "時刻固定" : null,
       matchesPreferenceIds: preferenceMatchIds(spot, input.input.preferences),
-      memoryIds: memIds,
+      memoryIds: [...new Set(memIds)],
       reason: reasonFor(spot, input.input),
       evidenceIds: [...spot.environment.evidenceIds, ...spot.costForTwoJpy.evidenceIds],
     };
@@ -182,14 +180,14 @@ export async function buildPlan(input: {
 
   if (restCare && !items.some((it) => spots[it.spotId]?.restEase.value === "EASY")) {
     influences.push({
-      memoryId: standingCare[0]?.id ?? "unknown",
+      memoryId: effects.preferSeatedRest[0]?.id ?? "unknown",
       effect: "NONE",
       detail: "休憩候補は行程条件を既に満たすか、候補不足で追加していない",
     });
   }
-  if (standingCare.length && influences.length === 0) {
+  if (effects.preferSeatedRest.length && influences.length === 0) {
     influences.push({
-      memoryId: standingCare[0].id,
+      memoryId: effects.preferSeatedRest[0].id,
       effect: "NONE",
       detail: "既に条件を満たしているため変更なし",
     });
@@ -226,22 +224,73 @@ export async function buildPlan(input: {
     to: { lat: number; lng: number; spotId: string | null; kind: TravelLeg["to"] },
     departureAt: string,
   ): Promise<TravelLeg> {
-    const t = await estimateTravel(input.ctx, {
-      from,
-      to,
-      mode,
-      departureAt,
-    });
-    evidence.push(t.evidence);
     const label =
       from.kind === "MEET"
         ? `集合→${to.spotId ? spots[to.spotId]?.name ?? "最初" : "最初"}`
         : to.kind === "END"
           ? `${from.spotId ? spots[from.spotId]?.name ?? "最後" : "最後"}→解散`
           : `${from.spotId ? spots[from.spotId]?.name ?? "区間" : "区間"}→${to.spotId ? spots[to.spotId]?.name ?? "次" : "次"}`;
-    if (t.durationMinutes == null) {
-      travelNotes.push(`${label}: 未検証（${t.evidence.note ?? "Routes 失敗"}）`);
+
+    const pointFrom = { lat: from.lat, lng: from.lng, spotId: from.spotId };
+    const pointTo = { lat: to.lat, lng: to.lng, spotId: to.spotId };
+
+    let adoptedMode: TravelMode = mode;
+    let t: RouteEstimate & { delayMinutes: number };
+
+    if (mode === "TRANSIT") {
+      // 「公共交通を使う」= 徒歩＋公共交通。近距離は実WALK、長距離はTRANSIT。
+      // 直線距離や固定分では代用しない。TRANSIT失敗時に長距離徒歩を無断採用しない。
+      const walk = await estimateTravel(input.ctx, {
+        from: pointFrom,
+        to: pointTo,
+        mode: "WALK",
+        departureAt,
+      });
+      if (walk.durationMinutes != null && walk.durationMinutes <= WALK_LIMITS.legMinutes) {
+        adoptedMode = "WALK";
+        t = walk;
+        travelNotes.push(`${label}: 徒歩 ${walk.durationMinutes}分（近距離のため徒歩を採用）`);
+      } else {
+        const transit = await estimateTravel(input.ctx, {
+          from: pointFrom,
+          to: pointTo,
+          mode: "TRANSIT",
+          departureAt,
+        });
+        adoptedMode = "TRANSIT";
+        if (transit.durationMinutes != null) {
+          t = transit;
+          const walkHint =
+            walk.durationMinutes != null
+              ? `（徒歩なら ${walk.durationMinutes}分で上限超過のため公共交通）`
+              : "";
+          travelNotes.push(`${label}: 公共交通 ${transit.durationMinutes}分${walkHint}`);
+        } else {
+          t = transit;
+          const walkHint =
+            walk.durationMinutes != null
+              ? `徒歩なら ${walk.durationMinutes}分だが上限超過のため公共交通を試した。長距離徒歩は採用しない。`
+              : "徒歩経路も未取得。";
+          travelNotes.push(`${label}: 未検証（${walkHint}${transit.evidence.note ?? "Routes 失敗"}）`);
+          if (walk.durationMinutes != null) {
+            // Keep walk evidence for diagnostics; transit is the authoritative failure.
+            evidence.push(walk.evidence);
+          }
+        }
+      }
+    } else {
+      t = await estimateTravel(input.ctx, {
+        from: pointFrom,
+        to: pointTo,
+        mode,
+        departureAt,
+      });
+      if (t.durationMinutes == null) {
+        travelNotes.push(`${label}: 未検証（${t.evidence.note ?? "Routes 失敗"}）`);
+      }
     }
+
+    evidence.push(t.evidence);
     if (t.departureAdjusted && t.requestedDepartureAt && t.effectiveDepartureAt) {
       travelNotes.push(
         `${label}: 予定出発 ${t.requestedDepartureAt} → 実リクエスト ${t.effectiveDepartureAt}（過去・直近のみ補正。未来の予定は置き換えていない）`,
@@ -253,10 +302,14 @@ export async function buildPlan(input: {
       fromSpotId: from.spotId,
       to: to.kind,
       toSpotId: to.spotId,
-      mode,
+      mode: adoptedMode,
       departureAt,
       durationMinutes: fact(t.durationMinutes, [t.evidence.id]),
       distanceMeters: fact(t.distanceMeters, [t.evidence.id]),
+      walkMinutesWithin:
+        adoptedMode === "WALK"
+          ? undefined
+          : fact(t.walkMinutesWithin ?? null, [t.evidence.id]),
       bufferMinutes: t.bufferMinutes,
       cachedAt: t.cached ? t.evidence.fetchedAt : null,
       requestedDepartureAt: t.requestedDepartureAt,

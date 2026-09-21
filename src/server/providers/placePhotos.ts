@@ -8,6 +8,7 @@ import {
 } from "@/config/settings";
 import { isVenuePlaceId, type PlacePhoto } from "@/contracts/places";
 import type { Evidence, Spot } from "@/domain/schemas";
+import { withTimeout } from "@/lib/abort";
 import { newId } from "@/lib/ids";
 import { realNowIso } from "@/lib/time";
 import type { ProviderCtx } from "./types";
@@ -248,7 +249,7 @@ export async function resolvePhotoMedia(
     `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=800&skipHttpRedirect=true`,
     {
       headers: { "X-Goog-Api-Key": apiKey },
-      signal: signal ?? AbortSignal.timeout(8000),
+      signal: withTimeout(signal, 8000),
     },
   );
   if (!res.ok) return null;
@@ -286,7 +287,7 @@ export async function hydratePlacePhotos(
           "X-Goog-Api-Key": apiKey,
           "X-Goog-FieldMask": "id,photos.name,photos.authorAttributions,googleMapsUri",
         },
-        signal: signal ?? AbortSignal.timeout(8000),
+        signal: withTimeout(signal, 8000),
       });
       if (!details.ok) continue;
       const body = (await details.json()) as {

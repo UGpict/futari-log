@@ -142,6 +142,11 @@ export const travelLegSchema = z.object({
   departureAt: z.string(),
   durationMinutes: factSchema(z.number()),
   distanceMeters: factSchema(z.number()),
+  /**
+   * TRANSIT 区間のうち徒歩部分（駅まで・乗換・駅から）。
+   * value null = 内訳未取得（0分扱いにしない）。WALK 区間では通常省略し duration 全体が徒歩。
+   */
+  walkMinutesWithin: factSchema(z.number()).optional(),
   bufferMinutes: z.number().optional(),
   cachedAt: z.string().nullable().optional(),
   requestedDepartureAt: z.string().nullable().optional(),
@@ -240,11 +245,30 @@ export const planDiffSchema = z.object({
 });
 export type PlanDiff = z.infer<typeof planDiffSchema>;
 
+/** 決定論プランが読む構造化方針。曖昧な観察から HARD 数値を自動生成しない。 */
+export const memoryPlanDirectiveSchema = z.object({
+  kind: z.enum([
+    "PREFER_SEATED_REST",
+    "SHORTEN_CATEGORY_STAY",
+    "REVISIT_SPOT",
+    "PREFER_NEW_SPOTS",
+    "WALK_HARD_CAP",
+  ]),
+  categories: z.array(z.string()).default([]),
+  spotId: z.string().nullable().default(null),
+  /** SHORTEN 用。ユーザーが明示したときだけ。根拠のない上限は作らない。 */
+  maxStayMinutes: z.number().int().positive().nullable().default(null),
+  /** WALK_HARD_CAP かつ strength=HARD のときだけ強制。 */
+  walkHardCapMinutes: z.number().int().positive().nullable().default(null),
+});
+export type MemoryPlanDirective = z.infer<typeof memoryPlanDirectiveSchema>;
+
 export const memoryCandidateSchema = z.object({
   id: z.string(),
   coupleId: z.string(),
   sessionId: z.string(),
   reflectionId: z.string(),
+  reflectionVersion: z.number().int().positive().default(1),
   answerId: z.string().nullable(),
   subject: z.enum(["SELF", "PARTNER", "BOTH"]),
   type: z.enum(["CARE", "PREFERENCE", "CONSTRAINT"]),
@@ -258,6 +282,7 @@ export const memoryCandidateSchema = z.object({
   evidenceQuote: z.string(),
   strength: z.enum(["SOFT", "HARD"]),
   scope: z.enum(["NEXT_DATE", "ONGOING"]),
+  planDirectives: z.array(memoryPlanDirectiveSchema).default([]),
   createdAt: z.string(),
 });
 export type MemoryCandidate = z.infer<typeof memoryCandidateSchema>;
@@ -274,6 +299,7 @@ export const memorySchema = z.object({
     "OBSERVATION",
   ]),
   reflectionId: z.string(),
+  reflectionVersion: z.number().int().positive().default(1),
   answerId: z.string(),
   evidenceQuote: z.string(),
   confirmation: z.literal("USER_CONFIRMED"),
@@ -282,6 +308,7 @@ export const memorySchema = z.object({
   strength: z.enum(["SOFT", "HARD"]),
   scope: z.enum(["NEXT_DATE", "ONGOING"]),
   targetSessionId: z.string().nullable(),
+  planDirectives: z.array(memoryPlanDirectiveSchema).default([]),
   active: z.boolean(),
   version: z.number().int().positive(),
   supersedes: z.string().nullable(),
@@ -298,6 +325,11 @@ export const approvalSchema = z.object({
   kind: z.enum(["PLAN_APPLY", "MEMORY_SAVE", "MEMORY_EDIT"]),
   status: z.enum(["PENDING", "APPROVED", "REJECTED", "CONSUMED", "EXPIRED"]),
   summary: z.string(),
+  /** MEMORY_SAVE の対象。文章一致ではなく ID で承認する。 */
+  targetCandidateId: z.string().nullable().optional(),
+  /** MEMORY_EDIT の対象。 */
+  targetMemoryId: z.string().nullable().optional(),
+  expectedVersion: z.number().int().positive().nullable().optional(),
   diff: planDiffSchema.nullable(),
   consumedAt: z.string().nullable(),
   createdAt: z.string(),
@@ -354,6 +386,9 @@ export const runSchema = z.object({
     })
     .nullable(),
   waitingApprovalId: z.string().nullable(),
+  /** 振り返り分析ジョブの対象。 */
+  reflectionId: z.string().nullable().optional(),
+  reflectionContentVersion: z.number().int().positive().nullable().optional(),
   error: z.string().nullable(),
   cost: z.object({
     llmUsd: z.number().nullable().optional(),
@@ -440,6 +475,15 @@ export const walkLongAckSchema = z.object({
   routeSpotIds: z.array(z.string()).optional(),
   longestLegMinutes: z.number().optional(),
   totalMinutes: z.number().optional(),
+  /** 承認した長距離徒歩区間（別区間が追加されたら再評価） */
+  acknowledgedLongLegs: z
+    .array(
+      z.object({
+        key: z.string(),
+        minutes: z.number(),
+      }),
+    )
+    .optional(),
 });
 export type WalkLongAck = z.infer<typeof walkLongAckSchema>;
 
@@ -530,12 +574,41 @@ export const publicPlanDtoSchema = z.object({
 });
 export type PublicPlanDTO = z.infer<typeof publicPlanDtoSchema>;
 
+export const reflectionVisitSchema = z.object({
+  planItemId: z.string(),
+  spotId: z.string(),
+  visited: z.boolean(),
+  rating: z.enum(["good", "ok", "bad"]).nullable().default(null),
+  note: z.string().nullable().default(null),
+});
+export type ReflectionVisit = z.infer<typeof reflectionVisitSchema>;
+
+export const reflectionAnalysisStatusSchema = z.enum([
+  "IDLE",
+  "PENDING",
+  "WAITING_INPUT",
+  "SUCCEEDED",
+  "FAILED",
+]);
+export type ReflectionAnalysisStatus = z.infer<typeof reflectionAnalysisStatusSchema>;
+
 export const reflectionSchema = z.object({
   id: z.string(),
   sessionId: z.string(),
   coupleId: z.string(),
+  planVersion: z.number().int().positive().nullable().default(null),
+  dateTokyo: z.string().nullable().default(null),
+  title: z.string().default(""),
+  /** 相手の様子についてのユーザー観察。パートナー感情の確定ではない。 */
+  mood: z.enum(["happy", "relaxed", "tired", "sad"]).nullable().default(null),
   rawNote: z.string(),
   maskedNote: z.string(),
+  visits: z.array(reflectionVisitSchema).default([]),
+  contentVersion: z.number().int().positive().default(1),
+  analysisStatus: reflectionAnalysisStatusSchema.default("IDLE"),
+  analysisRunId: z.string().nullable().default(null),
+  analysisError: z.string().nullable().default(null),
   createdAt: z.string(),
+  updatedAt: z.string().nullable().default(null),
 });
 export type Reflection = z.infer<typeof reflectionSchema>;

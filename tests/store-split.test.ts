@@ -6,7 +6,7 @@ import { emptyCoupleBundle, emptyDb, emptySessionBundle } from "../src/server/re
 import { createCouple, createSession, decideApproval, getSessionSnapshot, startRun } from "../src/server/api/actions";
 import { getSession, withRun, withSession } from "../src/server/repositories/store";
 import { realNowIso } from "../src/lib/time";
-import { evaluateWalkLimits, walkAckFingerprint, walkLongAckMatches, walkLongAcknowledged } from "../src/domain/plan/walkLimits";
+import { evaluateWalkLimits, walkAckFingerprint, walkLongAckMatches, walkLongAcknowledged, longWalkQuestion, describeWalkOverages } from "../src/domain/plan/walkLimits";
 import { WALK_LIMITS } from "../src/config/settings";
 
 const planInput = {
@@ -40,26 +40,80 @@ describe("walk ack scope", () => {
     durationMinutes: { value: minutes, evidenceIds: [] as string[] },
   });
 
-  it("flags a long last-to-end walk without changing the mode", () => {
-    const result = evaluateWalkLimits("WALK", [leg(8), leg(12), leg(103)]);
-    assert.equal(result.exceeds, true);
-    assert.equal(result.overLeg, true);
-    assert.equal(result.longestLegMinutes, 103);
-    assert.ok(result.longestLegMinutes > WALK_LIMITS.legMinutes);
-    assert.equal(evaluateWalkLimits("TRANSIT", [leg(103)]).exceeds, false);
+  it("does not stop on total-only over soft 45 when each leg is under the per-leg limit", () => {
+    const result = evaluateWalkLimits("WALK", [leg(15), leg(15), leg(20)]);
+    assert.equal(result.totalMinutes, 50);
+    assert.equal(result.softTotalExceeded, true);
+    assert.equal(result.overLeg, false);
+    assert.equal(result.exceeds, false);
   });
 
-  it("scopes long-walk consent to session date, mode, and endpoints", () => {
+  it("flags a single long leg without requiring total over soft limit", () => {
+    const result = evaluateWalkLimits("WALK", [leg(8), leg(12), leg(40)]);
+    assert.equal(result.exceeds, true);
+    assert.equal(result.overLeg, true);
+    assert.equal(result.longestLegMinutes, 40);
+    assert.ok(result.longestLegMinutes > WALK_LIMITS.legMinutes);
+    assert.equal(evaluateWalkLimits("TRANSIT", [leg(40)], { enforcePerLeg: false }).exceeds, false);
+  });
+
+  it("enforces an explicit hard total from options", () => {
+    const result = evaluateWalkLimits("WALK", [leg(15), leg(15), leg(20)], {
+      hardTotalMinutes: 40,
+    });
+    assert.equal(result.overTotal, true);
+    assert.equal(result.exceeds, true);
+  });
+
+  it("asks about the problem leg without saying no walkable places exist", () => {
+    const legs = [
+      {
+        id: "l1",
+        mode: "WALK" as const,
+        from: "SPOT" as const,
+        fromSpotId: "museum",
+        to: "SPOT" as const,
+        toSpotId: "dinner",
+        durationMinutes: { value: 38, evidenceIds: [] as string[] },
+      },
+    ];
+    const result = evaluateWalkLimits("WALK", legs);
+    const details = describeWalkOverages(result, legs, {
+      museum: { name: "美術館" },
+      dinner: { name: "夕食のお店" },
+    });
+    const q = longWalkQuestion(result, details, {
+      museum: { name: "美術館" },
+      dinner: { name: "夕食のお店" },
+    });
+    assert.match(q.prompt, /美術館から夕食のお店まで徒歩38分/);
+    assert.match(q.prompt, /この区間で公共交通を使いますか/);
+    assert.equal(/徒歩で行ける場所がな/.test(q.prompt), false);
+  });
+
+  it("scopes long-walk consent to acknowledged long legs and re-asks for a new long leg", () => {
     const fingerprint = walkAckFingerprint({
       dateTokyo: "2026-09-20",
       travelMode: "WALK",
       meetSpotId: "meet",
       endSpotId: "end",
       spotIds: ["a", "b"],
-      longestLegMinutes: 103,
-      totalMinutes: 108,
+      longestLegMinutes: 40,
+      totalMinutes: 55,
+      acknowledgedLongLegs: [{ key: "SPOT:a->SPOT:b", minutes: 40 }],
     });
-    const ack = { fingerprint, at: "2026-09-20T00:00:00.000Z" };
+    const ack = {
+      fingerprint,
+      at: "2026-09-20T00:00:00.000Z",
+      dateTokyo: "2026-09-20",
+      travelMode: "WALK",
+      meetSpotId: "meet",
+      endSpotId: "end",
+      routeSpotIds: ["a", "b"],
+      longestLegMinutes: 40,
+      totalMinutes: 55,
+      acknowledgedLongLegs: [{ key: "SPOT:a->SPOT:b", minutes: 40 }],
+    };
     assert.equal(walkLongAckMatches(ack, fingerprint), true);
     assert.equal(
       walkLongAckMatches(
@@ -68,28 +122,57 @@ describe("walk ack scope", () => {
           dateTokyo: "2026-09-20",
           travelMode: "WALK",
           meetSpotId: "meet",
-          endSpotId: "other-end",
-          spotIds: ["a", "b"],
-          longestLegMinutes: 103,
-          totalMinutes: 108,
+          endSpotId: "end",
+          spotIds: ["a", "c"],
+          longestLegMinutes: 42,
+          totalMinutes: 60,
+          acknowledgedLongLegs: [{ key: "SPOT:a->SPOT:c", minutes: 42 }],
         }),
       ),
       false,
     );
+    assert.equal(
+      walkLongAckMatches(
+        ack,
+        walkAckFingerprint({
+          dateTokyo: "2026-09-20",
+          travelMode: "WALK",
+          meetSpotId: "meet",
+          endSpotId: "end",
+          spotIds: ["a", "b"],
+          longestLegMinutes: 41,
+          totalMinutes: 80,
+          acknowledgedLongLegs: [{ key: "SPOT:a->SPOT:b", minutes: 41 }],
+        }),
+      ),
+      true,
+    );
     assert.equal(walkLongAcknowledged({ walkLongAcknowledged: true }), false);
   });
 
-  it("re-asks when the same endpoints gain a heavier walk, not on display-only changes", () => {
+  it("re-asks when the same long leg grows beyond slack", () => {
     const fingerprint = walkAckFingerprint({
       dateTokyo: "2026-09-20",
       travelMode: "WALK",
       meetSpotId: "meet",
       endSpotId: "end",
       spotIds: ["a", "b"],
-      longestLegMinutes: 103,
-      totalMinutes: 108,
+      longestLegMinutes: 40,
+      totalMinutes: 55,
+      acknowledgedLongLegs: [{ key: "SPOT:a->SPOT:b", minutes: 40 }],
     });
-    const ack = { fingerprint, at: "2026-09-20T00:00:00.000Z" };
+    const ack = {
+      fingerprint,
+      at: "2026-09-20T00:00:00.000Z",
+      dateTokyo: "2026-09-20",
+      travelMode: "WALK",
+      meetSpotId: "meet",
+      endSpotId: "end",
+      routeSpotIds: ["a", "b"],
+      longestLegMinutes: 40,
+      totalMinutes: 55,
+      acknowledgedLongLegs: [{ key: "SPOT:a->SPOT:b", minutes: 40 }],
+    };
     assert.equal(
       walkLongAckMatches(
         ack,
@@ -98,27 +181,13 @@ describe("walk ack scope", () => {
           travelMode: "WALK",
           meetSpotId: "meet",
           endSpotId: "end",
-          spotIds: ["a", "c"],
-          longestLegMinutes: 130,
-          totalMinutes: 150,
+          spotIds: ["a", "b"],
+          longestLegMinutes: 50,
+          totalMinutes: 70,
+          acknowledgedLongLegs: [{ key: "SPOT:a->SPOT:b", minutes: 50 }],
         }),
       ),
       false,
-    );
-    assert.equal(
-      walkLongAckMatches(
-        ack,
-        walkAckFingerprint({
-          dateTokyo: "2026-09-20",
-          travelMode: "WALK",
-          meetSpotId: "meet",
-          endSpotId: "end",
-          spotIds: ["a", "c"],
-          longestLegMinutes: 90,
-          totalMinutes: 100,
-        }),
-      ),
-      true,
     );
   });
 });
@@ -314,6 +383,53 @@ describe("file backend isolation", () => {
     if (!stale.ok) {
       assert.equal(stale.status, 409);
       assert.equal(stale.error, "stale version");
+    }
+
+    const memSaveId = `appr_mem_${created.id}`;
+    const candidateId = `mc_${created.id}`;
+    await withSession(created.id, (found) => {
+      if (!found) return;
+      found.bundle.session.currentPlanVersion = 2;
+      found.couple.memoryCandidates[candidateId] = {
+        id: candidateId,
+        coupleId: couple.id,
+        sessionId: created.id,
+        reflectionId: "ref_x",
+        reflectionVersion: 1,
+        answerId: null,
+        subject: "SELF",
+        type: "CARE",
+        content: "次回は休憩を挟む",
+        sourceType: "SELF_REPORT",
+        evidenceQuote: "疲れた",
+        strength: "SOFT",
+        scope: "NEXT_DATE",
+        planDirectives: [],
+        createdAt: realNowIso(),
+      };
+      found.couple.approvals[memSaveId] = {
+        id: memSaveId,
+        coupleId: couple.id,
+        sessionId: created.id,
+        runId: "run_mem",
+        planVersionFrom: 1,
+        planVersionTo: 1,
+        kind: "MEMORY_SAVE",
+        status: "PENDING",
+        summary: "記憶候補: 次回は休憩を挟む",
+        targetCandidateId: candidateId,
+        targetMemoryId: null,
+        expectedVersion: null,
+        diff: null,
+        consumedAt: null,
+        createdAt: realNowIso(),
+      };
+    });
+    const memStale = await decideApproval(uid, memSaveId, "APPROVE");
+    assert.equal(memStale.ok, false);
+    if (!memStale.ok) {
+      assert.equal(memStale.status, 409);
+      assert.match(memStale.error, /stale plan version/);
     }
   });
 
