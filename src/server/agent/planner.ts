@@ -178,26 +178,37 @@ export function pickFromCandidates(args: {
   const take = (list: Spot[]) =>
     rank(usable(list))[0] ?? (allowAvoidedFallback ? rank(usable(list, true))[0] : undefined);
   const tour = wantsSameKindTour(wishText);
-  // Soft diversity only fills leftover slots; never displaces MUST/PREFER reservations.
-  const softTarget = Math.min(maxStops, Math.max(selected.length, prefs.some((p) => p.priority === "MUST") ? selected.length : 3));
+  // Soft diversity fills leftover slots up to ~3; MUST/PREFER reservations stay first and are never displaced.
+  const softTarget = Math.min(maxStops, Math.max(selected.length, 3));
   if (selected.length < softTarget) rememberSpot(take(args.exhibit));
   if (selected.length < softTarget) rememberSpot(take(args.walk));
   if (selected.length < softTarget) rememberSpot(take(args.sweets));
-  if (selected.length < softTarget) rememberSpot(take(args.other));
+  const kinds = new Set(
+    [...picked.values()].map((spot) => classifySpotKind(spot.name, spot.categories)),
+  );
+  const fulfilledMust = prefs.filter(
+    (pref) => pref.priority === "MUST" && prefFulfilledBy(pref, coveringSpots()),
+  );
+  const softAdd = (spot?: Spot) => {
+    if (!spot) return false;
+    if (fulfilledMust.some((pref) => spotMatchesWish(spot, pref.content))) {
+      rejected.push({ spotId: spot.id, reason: "すでに満たしたMUSTと同じ希望なので見送り" });
+      return false;
+    }
+    const kind = classifySpotKind(spot.name, spot.categories);
+    if (!tour && kinds.has(kind) && kind !== "other" && selected.length >= 2) {
+      rejected.push({ spotId: spot.id, reason: `同じ過ごし方（${kind}）が続きすぎるので見送り` });
+      return false;
+    }
+    if (!rememberSpot(spot)) return false;
+    kinds.add(kind);
+    return true;
+  };
+  if (selected.length < softTarget) softAdd(take(args.other));
   if (selected.length < softTarget) {
-    const pool = rank(usable(allPool, allowAvoidedFallback));
-    const kinds = new Set(
-      [...picked.values()].map((spot) => classifySpotKind(spot.name, spot.categories)),
-    );
-    for (const spot of pool) {
-      const kind = classifySpotKind(spot.name, spot.categories);
-      if (!tour && kinds.has(kind) && kind !== "other" && selected.length >= 2) {
-        rejected.push({ spotId: spot.id, reason: `同じ過ごし方（${kind}）が続きすぎるので見送り` });
-        continue;
-      }
-      if (!rememberSpot(spot)) break;
-      kinds.add(kind);
+    for (const spot of rank(usable(allPool, allowAvoidedFallback))) {
       if (selected.length >= softTarget) break;
+      softAdd(spot);
     }
   }
 
