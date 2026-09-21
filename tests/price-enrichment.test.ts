@@ -14,7 +14,7 @@ import {
   extractSameOriginFeeLinks,
   officialPageTrusted,
 } from "../src/server/catalog/priceEnrich";
-import { stableFactId } from "../src/server/catalog/priceRepo";
+import { stableFactId, legacyStableFactId, isLegacyPriceFact } from "../src/server/catalog/priceRepo";
 import { spotCostLabel } from "../src/features/session/cost-label";
 import { sessionAllowsPriceReapply } from "../src/server/agent/place";
 
@@ -287,6 +287,56 @@ describe("price enrichment accounting", () => {
     assert.notEqual(a, b);
   });
 
+  it("detects legacy fact ids that omit amount from the key", () => {
+    const legacyId = legacyStableFactId({
+      placeId: "ChIJ_x",
+      kind: "ADMISSION",
+      unit: "PER_PERSON",
+      audience: "GENERAL",
+      usageKind: "PERMANENT",
+      sourceUrl: "https://example.com",
+    });
+    const currentId = stableFactId({
+      placeId: "ChIJ_x",
+      kind: "ADMISSION",
+      unit: "PER_PERSON",
+      audience: "GENERAL",
+      usageKind: "PERMANENT",
+      sourceUrl: "https://example.com",
+      amountMinJpy: 500,
+      quote: "一般 500円",
+    });
+    assert.notEqual(legacyId, currentId);
+    assert.equal(
+      isLegacyPriceFact({
+        id: legacyId,
+        placeId: "ChIJ_x",
+        kind: "ADMISSION",
+        unit: "PER_PERSON",
+        audience: "GENERAL",
+        usageKind: "PERMANENT",
+        sourceUrl: "https://example.com",
+        amountMinJpy: 500,
+        quote: "一般 500円",
+      }),
+      true,
+    );
+    assert.equal(
+      isLegacyPriceFact({
+        id: currentId,
+        placeId: "ChIJ_x",
+        kind: "ADMISSION",
+        unit: "PER_PERSON",
+        audience: "GENERAL",
+        usageKind: "PERMANENT",
+        sourceUrl: "https://example.com",
+        amountMinJpy: 500,
+        quote: "一般 500円",
+      }),
+      false,
+    );
+  });
+
   it("extracts admission yen from page body quotes", () => {
     const rows = extractPriceCandidatesFromText(
       "常設展 一般料金は500円です。別途企画展あり。",
@@ -334,16 +384,36 @@ describe("price enrichment accounting", () => {
     assert.ok(rows.some((r) => r.tax === "INCLUDED" && r.amountMinJpy === 2980));
   });
 
-  it("parses comma-separated and fullwidth yen amounts", () => {
+  it("extracts nomihodai with duration like （120分）", () => {
     const rows = extractPriceCandidatesFromText(
-      "一般入場料は1,500円です。コース ５，５００円（税込）。ランチセット 1,200円（税込）。",
-      "https://example.com/fee",
+      "飲み放題（120分） 1,650円（税込）。コース料理 4,500円。",
+      "https://example.com/menu",
     );
-    assert.ok(rows.some((r) => r.kind === "ADMISSION" && r.amountMinJpy === 1500));
-    assert.ok(rows.some((r) => r.kind === "SET_MENU" && r.amountMinJpy === 5500));
-    assert.ok(rows.some((r) => r.kind === "SET_MENU" && r.amountMinJpy === 1200));
-    assert.ok(!rows.some((r) => r.amountMinJpy === 500));
-    assert.ok(!rows.some((r) => r.amountMinJpy === 200));
+    const nomi = rows.find((r) => /飲み放題/.test(r.quote ?? ""));
+    assert.ok(nomi);
+    assert.equal(nomi.kind, "SET_MENU");
+    assert.equal(nomi.amountMinJpy, 1650);
+    assert.equal(nomi.unit, "PER_PERSON");
+    // 税込パターンとの二重登録をしない
+    assert.equal(rows.filter((r) => r.amountMinJpy === 1650).length, 1);
+  });
+
+  it("skips kids lunch/course from SET_MENU estimates", () => {
+    const rows = extractPriceCandidatesFromText(
+      "お子様ランチ 800円。コース 4,500円。",
+      "https://example.com/menu",
+    );
+    assert.ok(!rows.some((r) => r.kind === "SET_MENU" && r.amountMinJpy === 800));
+    assert.ok(rows.some((r) => r.kind === "SET_MENU" && r.amountMinJpy === 4500));
+  });
+
+  it("does not treat Japanese reading comma as thousand separator", () => {
+    const rows = extractPriceCandidatesFromText(
+      "コーヒー 500、600円。大人 800、1,000円。",
+      "https://example.com/menu",
+    );
+    assert.ok(!rows.some((r) => r.amountMinJpy === 500600));
+    assert.ok(!rows.some((r) => r.amountMinJpy === 8001000));
   });
 
   it("skips addon surcharges like +300円", () => {

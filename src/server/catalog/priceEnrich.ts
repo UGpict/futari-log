@@ -4,7 +4,10 @@ import { newId } from "@/lib/ids";
 import { groundedGoogleSearch } from "@/server/llm/search";
 import { fetchPublicHttps } from "./fetchSource";
 import {
+  deleteFact,
+  isLegacyPriceFact,
   listFactsForPlace,
+  purgeLegacyFactsForPlace,
   releasePriceLock,
   saveEnrichRun,
   saveEvidence,
@@ -20,6 +23,8 @@ const MAX_SAME_ORIGIN_LINKS = 3;
 
 /** カンマ区切り・素の3〜5桁の円額。 */
 const YEN_NUM = String.raw`(\d{1,3}(?:,\d{3})+|\d{3,5})`;
+/** 飲み放題の時間表記（120分・2時間など）。 */
+const NOMIHODAI_TIME = String.raw`(?:[（(]?\s*\d{2,3}\s*分\s*[）)]?|\d{1,2}\s*時間)?`;
 
 export type PriceEnrichInput = {
   placeId: string;
@@ -41,11 +46,11 @@ function revalidateBy(fetchedAt: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** 全角数字・全角カンマ・¥ を半角に揃える。 */
+/** 全角数字・全角カンマ・¥ を半角に揃える（和文の読点「、」は桁区切りにしない）。 */
 export function normalizeYenText(text: string): string {
   return text
     .replace(/[０-９]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
-    .replace(/[，、]/g, ",")
+    .replace(/，/g, ",")
     .replace(/[￥¥]/g, "");
 }
 
@@ -66,6 +71,17 @@ function isAddonAmount(body: string, matchIndex: number, matchText = ""): boolea
 }
 
 function pushCandidate(out: PriceCandidate[], row: PriceCandidate) {
+  // SET_MENU と同額の MENU_ITEM（税込パターンの二重抽出）は落とす。
+  if (
+    row.kind === "MENU_ITEM" &&
+    out.some(
+      (item) =>
+        item.amountMinJpy === row.amountMinJpy &&
+        (item.kind === "SET_MENU" || item.kind === "ADMISSION" || item.kind === "SPECIAL_EXHIBITION"),
+    )
+  ) {
+    return;
+  }
   // SET_MENU / ADMISSION は同額を1件に。MENU_ITEM は quote も見て別品を残す。
   const key =
     row.kind === "MENU_ITEM"
@@ -81,6 +97,13 @@ function pushCandidate(out: PriceCandidate[], row: PriceCandidate) {
     })
   ) {
     return;
+  }
+  // 後から SET_MENU が来たとき、同額 MENU_ITEM を置き換える。
+  if (row.kind === "SET_MENU") {
+    const idx = out.findIndex(
+      (item) => item.kind === "MENU_ITEM" && item.amountMinJpy === row.amountMinJpy,
+    );
+    if (idx >= 0) out.splice(idx, 1);
   }
   out.push(row);
 }
@@ -166,7 +189,13 @@ export function extractPriceCandidatesFromText(
   }
 
   const setPatterns: { re: RegExp; label: string }[] = [
-    { re: new RegExp(String.raw`飲み放題[^\d]{0,12}${YEN_NUM}\s*円(?:\s*[（(]税込[）)])?`, "g"), label: "飲み放題" },
+    {
+      re: new RegExp(
+        String.raw`飲み放題\s*${NOMIHODAI_TIME}[^\d]{0,12}${YEN_NUM}\s*円(?:\s*[（(]税込[）)])?`,
+        "g",
+      ),
+      label: "飲み放題",
+    },
     { re: new RegExp(String.raw`コース[^\d]{0,12}${YEN_NUM}\s*円(?:\s*[（(]税込[）)])?`, "g"), label: "コース" },
     { re: new RegExp(String.raw`セット[^\d]{0,12}${YEN_NUM}\s*円(?:\s*[（(]税込[）)])?`, "g"), label: "セット" },
     { re: new RegExp(String.raw`ランチ[^\d]{0,12}${YEN_NUM}\s*円(?:\s*[（(]税込[）)])?`, "g"), label: "ランチ" },
@@ -180,9 +209,21 @@ export function extractPriceCandidatesFromText(
       if (isAddonAmount(body, m.index, m[0])) continue;
       const yen = parseYenCapture(m[1]);
       if (yen == null) continue;
-      // 同一文脈のみ見る（前の文の「駐車場」で後続メニューを落とさない）。
-      const nearby = body.slice(Math.max(0, m.index - 16), m.index + m[0].length);
+      // 同一文の先頭まで（前の文の「お子様」「駐車場」で後続を落とさない）。
+      const sentenceStart = Math.max(
+        body.lastIndexOf("。", m.index - 1) + 1,
+        body.lastIndexOf("\n", m.index - 1) + 1,
+        m.index - 16,
+      );
+      const nearby = body.slice(sentenceStart, m.index + m[0].length);
       if (/駐車|コインパーキング|駐輪|ロッカー|郵便/.test(nearby)) continue;
+      // 子ども向けは二人目安のコースにしない。
+      if (
+        ["コース", "セット", "ランチ"].includes(label) &&
+        /お子様|キッズ|子供|こども/.test(nearby)
+      ) {
+        continue;
+      }
       count += 1;
       const taxIncluded = /税込/.test(m[0]);
       const isNomihodai = label === "飲み放題" || /飲み放題/.test(m[0]);
@@ -195,7 +236,6 @@ export function extractPriceCandidatesFromText(
       pushCandidate(
         out,
         baseDining({
-          // 飲み放題はコースと分け、一人あたりの飲み放題単価として残す。
           kind: isCourse || isNomihodai ? "SET_MENU" : "MENU_ITEM",
           unit: isCourse || isNomihodai ? "PER_PERSON" : "PER_ITEM",
           amountMinJpy: yen,
@@ -434,7 +474,28 @@ export async function enrichSpotPrice(
     let cursor = 0;
     let factsSaved = 0;
 
+    // 旧 ID（金額なし）で残った誤 fact を掃除してから再取得する。
+    await purgeLegacyFactsForPlace(input.placeId);
+
     const pagesRemaining = () => Math.max(0, MAX_PAGES - run.pagesFetched);
+
+    const invalidateMissingFactsForSource = async (sourceUrl: string, keptIds: Set<string>) => {
+      const existing = await listFactsForPlace(input.placeId);
+      for (const fact of existing) {
+        if (fact.sourceUrl !== sourceUrl) continue;
+        if (keptIds.has(fact.id)) continue;
+        if (isLegacyPriceFact(fact)) {
+          await deleteFact(fact.id);
+          continue;
+        }
+        // 同 URL の再取得で見つからなかった額は無効化（料金改定で安い旧額が残らないように）。
+        await saveFact({
+          ...fact,
+          confirmation: "UNKNOWN",
+          revalidateBy: "1970-01-01",
+        });
+      }
+    };
 
     const processQueuedPages = async () => {
       while (cursor < urls.length) {
@@ -473,6 +534,7 @@ export async function enrichSpotPrice(
         };
         await saveEvidence(evidence);
 
+        const keptIds = new Set<string>();
         const candidates = extractPriceCandidatesFromText(page.text, pageUrl);
         for (const c of candidates) {
           if (!quoteInBody(page.text, c.quote)) continue;
@@ -498,6 +560,7 @@ export async function enrichSpotPrice(
             amountMinJpy: c.amountMinJpy,
             quote: c.quote,
           });
+          keptIds.add(id);
           const existing = (await listFactsForPlace(input.placeId)).find((f) => f.id === id);
           if (existing && existing.confirmation === "VERIFIED" && confirmation !== "VERIFIED") {
             continue;
@@ -516,6 +579,7 @@ export async function enrichSpotPrice(
           await saveFact(fact);
           factsSaved += 1;
         }
+        await invalidateMissingFactsForSource(pageUrl, keptIds);
       }
     };
 

@@ -1,7 +1,7 @@
 import { toTokyoParts } from "@/lib/time";
 import type { Spot } from "@/domain/schemas";
 import { budgetCeilingJpy, computeCostAccounting, isStaleFact } from "@/domain/price/accounting";
-import { listFactsForPlace } from "./priceRepo";
+import { isLegacyPriceFact, listFactsForPlace } from "./priceRepo";
 
 function isDiningSpot(spot: Spot): boolean {
   const cats = spot.categories.join(" ").toLowerCase();
@@ -20,7 +20,9 @@ export async function applyStoredPricesToSpot(
 ): Promise<Spot> {
   const facts = await listFactsForPlace(spot.id);
   const now = new Date().toISOString();
-  const fresh = facts.filter((f) => !isStaleFact(f, now) && f.confirmation !== "UNKNOWN");
+  const fresh = facts.filter(
+    (f) => !isStaleFact(f, now) && f.confirmation !== "UNKNOWN" && !isLegacyPriceFact(f),
+  );
   if (fresh.length === 0) {
     return spot;
   }
