@@ -1,0 +1,39 @@
+.page {
+  min-height: 100dvh;
+  background: #eee9ec;
+  color: var(--text-primary);
+}
+
+.app {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: calc(10px + env(safe-area-inset-top)) 20px env(safe-area-inset-bottom);
+  background-color: var(--surface-page);
+  background-image: var(--app-dot-pattern);
+  background-size: var(--app-dot-size);
+  box-shadow: 0 0 70px #6b596309;
+}
+
+.header {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  margin-bottom: 2px;
+}
+
+.logo { width: 108px; }
+
+.closeConfirm { width: min(100%, 330px); padding: 22px; border: 1px solid #eadde4; border-radius: 22px; background: #fffcf9; text-align: center; box-shadow: 0 18px 60px #39262f38; }
+.closeConfirm h2 { color: #644f5d; font-size: 18px; font-weight: 700; }
+.closeConfirm p { margin-top: 8px; color: #907d89; font-size: 12px; line-height: 1.7; }
+.closeConfirmActions { display: grid; gap: 8px; margin-top: 18px; }
+.closeConfirmActions button { min-height: 46px; padding: 10px 14px; border: 1px solid #dfcbd5; border-radius: 999px; color: #986078; background: #fff; font-size: 13px; font-weight: 700; }
+.closeConfirmActions button:last-child { border-color: transparent; color: #fff; background: #cf7096; }
+
+@media (max-width: 350px) {
+  .app { padding-inline: 14px; }
+  .logo { width: 96px; }
+}

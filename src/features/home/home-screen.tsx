@@ -6,6 +6,7 @@ import { Button, IconButton } from "@/components/button";
 
 import { useEffect, useRef, useState, type FormEvent, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowRight, Check, ChevronLeft, ChevronRight, NotebookPen, CalendarHeart, MapPin } from "lucide-react";
 import { useCalendarPlans } from "@/client/hooks/use-calendar-plans";
 import { useMe } from "@/client/hooks/use-me";
@@ -18,10 +19,9 @@ import { HomeLogo } from "@/components/home-logo";
 import { MoodSticker, moods, type Mood } from "@/components/mood-sticker";
 import { HomeSheet } from "./home-sheet";
 import { MemoryScreen } from "@/features/memory/memory-screen";
-import { PlanForm } from "./plan-form";
 import styles from "./home.module.css";
 
-type Panel = "records" | "recommendations" | "memory" | "plan" | null;
+type Panel = "records" | "recommendations" | "memory" | null;
 const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
 const ideas = [
   { mood: "happy" as const, title: "甘いものと、ゆっくり話す日", description: "カフェでひと息。ふたりのペースで。", wish: "カフェで甘いものを食べて、ゆっくり話したい" },
@@ -98,6 +98,7 @@ function FeedbackEditor({ date, record, onSave }: {
 }
 
 export function HomeScreen() {
+  const router = useRouter();
   const { me } = useMe();
   const { plans, error: plansError } = useCalendarPlans(me?.coupleId);
   const [reflecting, setReflecting] = useState(false);
@@ -111,14 +112,11 @@ export function HomeScreen() {
   const cellCount = Math.ceil((firstWeekday + daysInMonth) / 7) * 7;
   const [panel, setPanel] = useState<Panel>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [planDate, setPlanDate] = useState("");
-  const [planWish, setPlanWish] = useState("");
-  const [planStep, setPlanStep] = useState(0);
   const [notice, setNotice] = useState("");
   const [stampedDate, setStampedDate] = useState<string | null>(null);
   const recordsByDate = new Map(records.map((record) => [record.date, record]));
   const panelTitles: Record<Exclude<Panel, null>, string> = {
-    records: "ふたりの記録", recommendations: "AIからの提案", memory: "次のデートに活かすこと", plan: ["過ごし方を選ぶ", "日時と場所を決める", "予算と希望を決める"][planStep],
+    records: "ふたりの記録", recommendations: "AIからの提案", memory: "次のデートに活かすこと",
   };
 
 
@@ -130,10 +128,9 @@ export function HomeScreen() {
 
   function openPlan(date = today, wish = "") {
     setSelectedDate(null);
-    setPlanDate(date);
-    setPlanWish(wish);
-    setPlanStep(0);
-    setPanel("plan");
+    const query = new URLSearchParams({ date, step: "activity" });
+    if (wish) query.set("wish", wish);
+    router.push(`/plans/new?${query.toString()}`);
   }
 
   async function saveMemory(record: DateMemory) {
@@ -360,8 +357,7 @@ export function HomeScreen() {
         </HomeSheet>
       )}
 
-      {panel && <HomeSheet key={panel} fixedHeight={panel === "memory"} confirmClose={panel === "plan"} title={panelTitles[panel]} onClose={() => setPanel(null)}>
-        {panel === "plan" && <PlanForm initialDate={planDate || today} initialWish={planWish} onStepChange={setPlanStep} />}
+      {panel && <HomeSheet key={panel} fixedHeight={panel === "memory"} title={panelTitles[panel]} onClose={() => setPanel(null)}>
         {panel === "records" && <div className={styles.recordList}>
           <p className={styles.sheetDescription}>シールひとつに、ふたりの思い出。{isFixture && " 今はサンプルの記録を表示しています。"}</p>
           {records.length === 0 && <p className={styles.emptyMessage}>まだ記録がありません。カレンダーの日付をタップして、最初のシールを貼ってみよう。</p>}

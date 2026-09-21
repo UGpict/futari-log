@@ -64,15 +64,34 @@ function PlaceSuggest({
   );
 }
 
-export function PlanForm({ initialDate, initialWish, onStepChange }: { initialDate: string; initialWish?: string; onStepChange?: (step: number) => void }) {
+const stepNames = ["activity", "schedule", "details"] as const;
+
+export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage = false, onStepChange }: {
+  initialDate: string;
+  initialWish?: string;
+  initialStep?: number;
+  fullPage?: boolean;
+  onStepChange?: (step: number) => void;
+}) {
   const router = useRouter();
   const { me, error: authError } = useMe();
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(initialStep);
   const [nextCue, setNextCue] = useState(0);
   const [advancing, setAdvancing] = useState(false);
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (advanceTimer.current) clearTimeout(advanceTimer.current); }, []);
-  const [reached, setReached] = useState(0);
+  const [reached, setReached] = useState(initialStep);
+  useEffect(() => {
+    if (!fullPage) return;
+    const syncStepFromHistory = () => {
+      const routeStep = new URLSearchParams(window.location.search).get("step");
+      const next = Math.max(0, stepNames.indexOf(routeStep as (typeof stepNames)[number]));
+      setStep(next);
+      setReached((previous) => Math.max(previous, next));
+    };
+    window.addEventListener("popstate", syncStepFromHistory);
+    return () => window.removeEventListener("popstate", syncStepFromHistory);
+  }, [fullPage]);
   const [selected, setSelected] = useState<string[]>([]);
   const [freeWish, setFreeWish] = useState(Boolean(initialWish));
   const freeWishInput = useRef<HTMLTextAreaElement>(null);
@@ -114,6 +133,11 @@ export function PlanForm({ initialDate, initialWish, onStepChange }: { initialDa
       setStep(next);
       onStepChange?.(next);
       setReached((previous) => Math.max(previous, next));
+      if (fullPage) {
+        const query = new URLSearchParams({ date: initialDate, step: stepNames[next] });
+        if (initialWish) query.set("wish", initialWish);
+        router.push(`/plans/new?${query.toString()}`, { scroll: false });
+      }
       requestAnimationFrame(() => heading.current?.focus());
     };
     if (next !== step && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -304,14 +328,14 @@ export function PlanForm({ initialDate, initialWish, onStepChange }: { initialDa
   if (busy) return <div className={styles.planningOverlay}><PlanLoading demo={fixturesEnabled()} /></div>;
 
   return (
-    <div className={`${styles.planForm} ${styles.compactPlan}`}>
+    <div className={`${styles.planForm} ${styles.compactPlan} ${fullPage ? styles.planPageForm : ""}`}>
       <nav className={styles.planProgress} aria-label="プラン作成の進捗">
         {["過ごし方", "日時・場所", "予算・希望"].map((label, index) => <button type="button" key={label} disabled={index > reached || busy || advancing || selectingCategory} data-complete={index < reached} aria-current={step === index ? "step" : undefined} onClick={() => move(index)}><span>{index < reached ? <Check size={12} /> : index + 1}</span>{label}</button>)}
       </nav>
       <div className={styles.planCompanion}><MemoMascot nextCue={nextCue} /></div>
       <section key={step} className={`${styles.planStage} ${advancing ? styles.stageLeaving : styles.stageEntering}`} inert={advancing || selectingCategory}>
         {step > 0 && <button type="button" className={styles.stepBack} onClick={() => move(step - 1)}><ChevronLeft size={18} />{step === 1 ? "過ごし方に戻る" : "日時と場所に戻る"}</button>}
-        <h3 ref={heading} tabIndex={-1} className={step === 1 ? "sr-only" : undefined}>{["どんな一日にしよう？", "いつ・どこで過ごそう？", "予算を決めよう"][step]}</h3>
+        <h3 ref={heading} tabIndex={-1} className={step === 1 && !fullPage ? "sr-only" : undefined}>{["どんな一日にしよう？", "いつ・どこで過ごそう？", "予算を決めよう"][step]}</h3>
         {step === 2 && <p className={styles.budgetLead}>食事・施設・交通費を含む、ふたり分の目安です</p>}
 
         {step === 0 && <>
