@@ -86,7 +86,7 @@ describe("MOCK travel modes", () => {
         orderedSpotIds: ["park", "cafe"],
         spots,
         memories: [],
-        dataMode: "MOCK",
+        dataMode: "LIVE",
       });
       assert.ok(built.plan.items.length >= 1, `${mode} should place spots`);
       assert.ok(built.plan.legs.length >= 1, `${mode} should have legs`);
