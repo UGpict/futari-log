@@ -24,6 +24,8 @@ main:
         switch:
           - condition: ${kind == "REFLECTION"}
             next: propose
+          - condition: ${kind == "PRICE_ENRICH"}
+            next: propose
           - condition: true
             next: gather
     - gather:

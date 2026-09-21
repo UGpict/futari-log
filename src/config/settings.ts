@@ -21,6 +21,10 @@ export const LIMITS = {
   ingestMaxEvents: 10,
   sourceFetchTimeoutMs: 8_000,
   sourceFetchMaxBytes: 512_000,
+  /** Background venue price enrichment (googleSearch). Cap so plan path stays free of LLM wait. */
+  maxPriceEnrichRunsPerDay: 24,
+  /** Soft USD ceiling for price enrichment searches per Tokyo day (grounded search is costly). */
+  maxPriceEnrichCostUsdPerDay: 2,
 } as const;
 
 export const DEADLINES_MS = {
@@ -28,6 +32,8 @@ export const DEADLINES_MS = {
   REPLAN: 30_000,
   REFLECTION: 10_000,
   NEXT_PLAN: 60_000,
+  /** Search + a few page fetches; align with priceEnrich MAX_MS (~90s) + margin. */
+  PRICE_ENRICH: 120_000,
 } as const;
 
 /** アプリが Routes 予測に足す余裕。API の duration とは別フィールドに持つ */
