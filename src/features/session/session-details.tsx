@@ -20,7 +20,9 @@ export function SessionDetails({ sessionId }: { sessionId: string }) {
   const [draft, setDraft] = useState<string | null>(null);
   const [note, setNote] = useState("カフェは喜んでた。展示は途中で疲れてた");
 
-  const latestRun = data?.runs.at(-1);
+  const latestRun = data?.runs
+    .filter((run) => run.kind !== "PRICE_ENRICH" && run.kind !== "REFLECTION")
+    .at(-1);
 
   const pendingApproval = data?.approvals.find((a) => a.status === "PENDING");
   const autoEvent = data?.events.find((e) => e.type === "PLAN_AUTO_APPLIED");
