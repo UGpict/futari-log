@@ -195,20 +195,28 @@ export async function callLLM<T>(input: {
     ? input.messages
     : [{ role: "system" as const, content: "Respond with a JSON object." }, ...input.messages];
 
-  const body = {
-    model: requestedModel,
-    messages,
-    temperature: MODEL_PARAMS.temperature,
-    max_tokens: MODEL_PARAMS.maxTokens,
-    response_format: {
-      type: "json_object" as const,
-    },
+  type ChatMessage = { role: "system" | "user"; content: string };
+  type AttemptBundle = {
+    result: LlmCallResult<T>;
+    content: string;
+    kind: LlmParseFailureKind | null;
+    zodFlatten: ReturnType<z.ZodError["flatten"]> | null;
   };
 
   const attempt = async (
     attemptNo: number,
     repaired: boolean,
-  ): Promise<LlmCallResult<T>> => {
+    requestMessages: ChatMessage[],
+  ): Promise<AttemptBundle> => {
+    const body = {
+      model: requestedModel,
+      messages: requestMessages,
+      temperature: MODEL_PARAMS.temperature,
+      max_tokens: MODEL_PARAMS.maxTokens,
+      response_format: {
+        type: "json_object" as const,
+      },
+    };
     const res = await fetch(`${orcaBase()}/chat/completions`, {
       method: "POST",
       headers: orcaHeaders(),
@@ -222,18 +230,23 @@ export async function callLLM<T>(input: {
       "unknown";
     if (!res.ok) {
       return {
-        data: null,
-        ok: false,
-        requestedModel,
-        actualModel,
-        pool,
-        promptTokens: null,
-        completionTokens: null,
-        costUsd: null,
-        costJpy: null,
-        latencyMs,
-        repaired: false,
-        error: `orcarouter ${res.status}`,
+        content: "",
+        kind: null,
+        zodFlatten: null,
+        result: {
+          data: null,
+          ok: false,
+          requestedModel,
+          actualModel,
+          pool,
+          promptTokens: null,
+          completionTokens: null,
+          costUsd: null,
+          costJpy: null,
+          latencyMs,
+          repaired: false,
+          error: `orcarouter ${res.status}`,
+        },
       };
     }
     const json = (await res.json()) as {
@@ -277,31 +290,46 @@ export async function callLLM<T>(input: {
       });
     }
     return {
-      data: classified.data,
-      ok: classified.kind == null,
-      requestedModel,
-      actualModel: resolvedModel,
-      pool,
-      promptTokens: usage.promptTokens,
-      completionTokens: usage.completionTokens,
-      costUsd: usage.costUsd,
-      costJpy: usage.costJpy,
-      latencyMs,
-      repaired: false,
-      error: classified.kind ? errorMessageForKind(classified.kind) : null,
+      content,
+      kind: classified.kind,
+      zodFlatten: classified.zodFlatten,
+      result: {
+        data: classified.data,
+        ok: classified.kind == null,
+        requestedModel,
+        actualModel: resolvedModel,
+        pool,
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+        costUsd: usage.costUsd,
+        costJpy: usage.costJpy,
+        latencyMs,
+        repaired: false,
+        error: classified.kind ? errorMessageForKind(classified.kind) : null,
+      },
     };
   };
 
-  const result = await attempt(1, false);
+  const first = await attempt(1, false, messages);
   if (
-    !result.ok &&
-    (result.error === "schema validation failed" || result.error === "json parse failed")
+    !first.result.ok &&
+    (first.result.error === "schema validation failed" || first.result.error === "json parse failed")
   ) {
-    const repaired = await attempt(2, true);
-    repaired.repaired = true;
-    return repaired;
+    const repairUser: ChatMessage = {
+      role: "user",
+      content: [
+        "前回の応答は要求スキーマに合いませんでした。修正した JSON オブジェクトだけを返してください。説明文やコードフェンスは不要です。",
+        `failureKind: ${first.kind ?? "unknown"}`,
+        `zodIssues: ${JSON.stringify(first.zodFlatten)}`,
+        "previousResponse:",
+        first.content.slice(0, MODEL_PARAMS.maxTokens * 4),
+      ].join("\n"),
+    };
+    const second = await attempt(2, true, [...messages, repairUser]);
+    second.result.repaired = true;
+    return second.result;
   }
-  return result;
+  return first.result;
 }
 
 /** OrcaRouter JSON。キーがあるときは MOCK runtime でも実呼び出しする（収集の構造化用） */
