@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check, ChevronLeft, ChevronRight, NotebookPen, CalendarHeart, LogOut, MapPin } from "lucide-react";
 import { useCalendarPlans } from "@/client/hooks/use-calendar-plans";
+import { forgetAuthEntry } from "@/client/auth-entry";
 import { useMe } from "@/client/hooks/use-me";
 import { useDateJournal, type DateMemory } from "@/client/hooks/use-date-journal";
 import { RiveMascot } from "@/components/rive-mascot";
@@ -172,6 +173,7 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
   const eventCarouselRef = useRef<HTMLDivElement>(null);
   const eventDragRef = useRef({ active: false, moved: false, startX: 0, scrollLeft: 0 });
   const [eventsBehindCreateButton, setEventsBehindCreateButton] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
   const [eventScroll, setEventScroll] = useState({ left: false, right: true });
   const [draggingEvents, setDraggingEvents] = useState(false);
   useEffect(() => {
@@ -250,7 +252,17 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
             <div className={styles.headerActions}>
               <DevelopmentLink onResetToday={() => { remove(today); setSelectedDate(null); setReflecting(false); setNotice("今日の記録を削除しました"); }} />
               <IconButton type="button" label="ふたりの記憶を開く" onClick={() => setPanel("memory")}><NotebookPen size={23} /></IconButton>
-              <IconButton type="button" label="ログアウト" onClick={() => router.push("/auth/logout")}><LogOut size={21} /></IconButton>
+              <span className={styles.logoutControl}>
+                <IconButton type="button" label="ログアウト" aria-expanded={logoutOpen} onClick={() => setLogoutOpen((open) => !open)}><LogOut size={21} /></IconButton>
+                {logoutOpen && <span className={styles.logoutPopover} role="dialog" aria-label="ログアウトの確認">
+                  <strong>ログアウトしますか？</strong>
+                  <span>保存済みの記録は消えません。</span>
+                  <span className={styles.logoutActions}>
+                    <Button size="compact" variant="danger" onClick={() => { forgetAuthEntry(); router.replace("/auth"); }}>ログアウト</Button>
+                    <Button size="compact" variant="ghost" onClick={() => setLogoutOpen(false)}>キャンセル</Button>
+                  </span>
+                </span>}
+              </span>
             </div>
           </div>
         </header>

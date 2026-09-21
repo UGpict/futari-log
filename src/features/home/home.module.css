@@ -35,6 +35,13 @@
 .header { padding: 0 4px 12px; }
 .headerRow { display: flex; min-height: 56px; align-items: center; justify-content: space-between; gap: 13px; }
 .headerActions { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
+.logoutControl { position: relative; display: flex; }
+.logoutPopover { position: absolute; z-index: 30; top: calc(100% + 9px); right: 0; width: 220px; padding: 14px; border: 1px solid var(--border-control); border-radius: 17px; background: var(--surface-card); box-shadow: 0 14px 38px #50344226; }
+.logoutPopover::before { content: ''; position: absolute; top: -6px; right: 15px; width: 11px; height: 11px; border-top: 1px solid var(--border-control); border-left: 1px solid var(--border-control); background: var(--surface-card); transform: rotate(45deg); }
+.logoutPopover > strong, .logoutPopover > span { display: block; }
+.logoutPopover > strong { color: var(--text-primary); font-size: 13px; }
+.logoutPopover > span:not(.logoutActions) { margin-top: 3px; color: var(--text-muted); font-size: 10px; }
+.logoutActions { display: grid !important; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 12px; }
 
 .brand { flex: 1; min-width: 0; text-align: left; }
 .logo { display: block; width: 120px; max-width: 100%; height: auto; margin: 0; }

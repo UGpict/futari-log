@@ -6,6 +6,7 @@ import type { Rive } from "@rive-app/canvas";
 import styles from "./rive-mascot.module.css";
 
 const scenes = {
+  welcome: { src: "/animations/futari-welcome.riv?v=1", poster: "/animations/futari-welcome-static.svg", machine: "Welcome", autoBind: false },
   flight: { src: "/animations/futari-flight.riv?v=3", poster: "/animations/futari-flight-static.svg", machine: "Flight", autoBind: false },
   weather: { src: "/animations/planning-weather.riv?v=1", poster: "/animations/planning-weather-static.svg", machine: "Weather", autoBind: false },
   memo: { src: "/animations/futari-memo.riv?v=bold-face-1", poster: "/animations/futari-memo-static.svg?v=bold-face-1", machine: "Memo", autoBind: true },

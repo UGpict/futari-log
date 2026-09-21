@@ -2,7 +2,7 @@
 .header p { margin: 30px 0 4px; color: var(--text-accent); font-size: 11px; font-weight: 700; letter-spacing: .16em; }
 .header h1 { margin: 0; color: var(--text-primary); font-size: clamp(28px, 5vw, 42px); font-weight: 700; }
 .header > span { display: block; margin-top: 9px; color: var(--text-muted); font-size: 13px; }
-.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; margin-top: 34px; }
+.grid { display: grid; grid-template-columns: 1fr; gap: 15px; margin-top: 34px; }
 .grid article { display: grid; grid-template-columns: auto 1fr; gap: 14px; padding: 20px; border: 1px solid var(--border-control); border-radius: var(--radius-card); background: var(--surface-card); }
 .grid article > a { grid-column: 1 / -1; }
 .icon { display: grid; width: 46px; height: 46px; place-items: center; border-radius: 50%; background: var(--surface-accent); color: var(--text-accent); }
