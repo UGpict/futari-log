@@ -6,6 +6,7 @@ import {
   type ScenarioKind,
 } from "@/domain/schemas";
 import { candidateToMemory, bindNextDateMemories } from "@/domain/memory";
+import { reflectionAnalysisProgress } from "@/domain/reflection/analysisProgress";
 import { parseWalkAckScope, hasUnverifiedTravel } from "@/domain/plan/walkLimits";
 import { readMemories, writeMemories } from "@/server/agent/memory";
 import { maskPii } from "@/server/privacy/mask";
@@ -939,6 +940,17 @@ export async function saveReflection(
   }
 
   const reflection = saved.reflection;
+  let runMeta: { status: string; deadlineAt: string | null } | null = null;
+  if (enqueuedRunId) {
+    await withSession(sessionId, (found) => {
+      const r = found?.bundle.runs[enqueuedRunId!];
+      if (r) runMeta = { status: r.status, deadlineAt: r.deadlineAt };
+    });
+  }
+  const progress = reflectionAnalysisProgress({
+    analysisStatus: reflection.analysisStatus,
+    run: runMeta,
+  });
   return {
     ok: true as const,
     analysisEnqueued: Boolean(enqueuedRunId),
@@ -955,6 +967,9 @@ export async function saveReflection(
       analysisStatus: reflection.analysisStatus,
       analysisRunId: enqueuedRunId ?? reflection.analysisRunId,
       analysisError: reflection.analysisError,
+      analysisRunStatus: progress.analysisRunStatus,
+      analysisDeadlineAt: progress.analysisDeadlineAt,
+      analysisStalled: progress.analysisStalled,
       createdAt: reflection.createdAt,
       updatedAt: reflection.updatedAt,
       waitingQuestion: null,
@@ -971,6 +986,10 @@ export async function listSessionReflections(uid: string, sessionId: string) {
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
       .map((r) => {
         const run = r.analysisRunId ? found.bundle.runs[r.analysisRunId] : null;
+        const progress = reflectionAnalysisProgress({
+          analysisStatus: r.analysisStatus,
+          run: run ? { status: run.status, deadlineAt: run.deadlineAt } : null,
+        });
         return {
           id: r.id,
           sessionId: r.sessionId,
@@ -984,6 +1003,9 @@ export async function listSessionReflections(uid: string, sessionId: string) {
           analysisStatus: r.analysisStatus,
           analysisRunId: r.analysisRunId,
           analysisError: r.analysisError,
+          analysisRunStatus: progress.analysisRunStatus,
+          analysisDeadlineAt: progress.analysisDeadlineAt,
+          analysisStalled: progress.analysisStalled,
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
           waitingQuestion: run?.status === "WAITING_INPUT" ? run.waitingQuestion : null,

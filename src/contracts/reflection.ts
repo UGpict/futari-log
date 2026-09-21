@@ -33,6 +33,11 @@ export const reflectionDtoSchema = z.object({
   analysisStatus: z.string(),
   analysisRunId: z.string().nullable(),
   analysisError: z.string().nullable(),
+  /** 紐づく REFLECTION run の status（無ければ null） */
+  analysisRunStatus: z.string().nullable().optional(),
+  analysisDeadlineAt: z.string().nullable().optional(),
+  /** true のとき分析が期限超過または中断で完了していない。クライアントは再試行を促せる。 */
+  analysisStalled: z.boolean().optional(),
   createdAt: z.string(),
   updatedAt: z.string().nullable(),
   waitingQuestion: z
