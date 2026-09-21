@@ -108,9 +108,12 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   const [pending, setPending] = useState(false);
   const [replanningItemId, setReplanningItemId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const latest = data?.runs.at(-1);
+  // PRICE_ENRICH / REFLECTION share the session run list but are background jobs.
+  // Don't treat their FAILED (e.g. no_verified_or_partial_facts) as plan failure.
+  const planRuns = data?.runs.filter((run) => run.kind !== "PRICE_ENRICH" && run.kind !== "REFLECTION") ?? [];
+  const latest = planRuns.at(-1);
   const failed = latest && ["FAILED", "CANCELLED", "INTERRUPTED"].includes(latest.status);
-  const active = data?.runs.some((run) => ["PENDING", "RUNNING", "WAITING_INPUT", "WAITING_APPROVAL"].includes(run.status));
+  const active = planRuns.some((run) => ["PENDING", "RUNNING", "WAITING_INPUT", "WAITING_APPROVAL"].includes(run.status));
   const approval = data?.approvals.find((item) => item.status === "PENDING" && item.kind === "PLAN_APPLY");
   const proposalReady = Boolean(approval && data?.proposedPlan && hasVisibleProposal(approval));
   const attention = latest?.status === "WAITING_INPUT" || proposalReady || Boolean(approval && latest?.status === "WAITING_APPROVAL");
