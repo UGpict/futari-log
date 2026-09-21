@@ -1,4 +1,4 @@
-import { ArrowLeft, KeyRound, LogIn, LogOut, MailCheck, UserPlus } from "lucide-react";
+import { ArrowLeft, KeyRound, LogIn, MailCheck, UserPlus } from "lucide-react";
 
 import { ButtonLink } from "@/components/button";
 
@@ -10,7 +10,6 @@ const views = [
   { href: "/auth/signup", icon: UserPlus, title: "アカウント作成", note: "確認入力を含む新規登録フォーム" },
   { href: "/auth/verify", icon: MailCheck, title: "メール確認", note: "送信完了・確認・再送の状態" },
   { href: "/auth/forgot-password", icon: KeyRound, title: "パスワード再設定", note: "再設定メールの送信フォーム" },
-  { href: "/auth/logout", icon: LogOut, title: "ログアウト", note: "ログアウト前の確認画面" },
 ];
 
 export function AuthCatalog() {

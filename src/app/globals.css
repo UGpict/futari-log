@@ -18,10 +18,13 @@
 }
 
 html {
-  background: var(--color-paper);
+  min-height: 100%;
+  background: #eee9ec;
 }
 
 body {
+  min-height: 100%;
+  margin: 0;
   background-color: var(--surface-page);
   background-image: var(--app-dot-pattern);
   background-size: var(--app-dot-size);
@@ -29,6 +32,40 @@ body {
   font-family: var(--font-noto-sans-jp), "Hiragino Sans", "Yu Gothic", sans-serif;
   font-size: 16px;
   line-height: 1.7;
+}
+
+.app-viewport {
+  position: relative;
+  width: 100%;
+  min-height: 100svh;
+  margin-inline: auto;
+  background-color: var(--surface-page);
+  background-image: var(--app-dot-pattern);
+  background-size: var(--app-dot-size);
+}
+
+@media (min-width: 700px) {
+  body {
+    display: grid;
+    min-height: 100svh;
+    place-items: center;
+    padding: 28px;
+    background: #eee9ec;
+  }
+
+  .app-viewport {
+    width: 430px;
+    height: var(--app-viewport-height);
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    border: 1px solid rgb(232 216 230 / 75%);
+    border-radius: 32px;
+    box-shadow: 0 26px 70px rgb(97 70 91 / 10%);
+    scrollbar-width: none;
+  }
+
+  .app-viewport::-webkit-scrollbar { display: none; }
 }
 
 * {
@@ -47,6 +84,15 @@ svg.lucide {
 :root {
   --app-dot-pattern: radial-gradient(circle, #df9bb630 .85px, transparent 1.1px);
   --app-dot-size: 12px 12px;
+  --app-viewport-height: 100dvh;
+  --app-viewport-edge-y: 0px;
+}
+
+@media (min-width: 700px) {
+  :root {
+    --app-viewport-height: min(860px, calc(100svh - 56px));
+    --app-viewport-edge-y: calc((100svh - var(--app-viewport-height)) / 2);
+  }
 }
 
 /* Product UI tokens. Actions use components/button; feature CSS owns layout only. */

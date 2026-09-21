@@ -28,7 +28,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja" className={`${notoSansJp.variable} h-full antialiased`}>
-      <body className="min-h-full font-sans"><AuthGate>{children}</AuthGate></body>
+      <body className="min-h-full font-sans">
+        <div className="app-viewport"><AuthGate>{children}</AuthGate></div>
+      </body>
     </html>
   );
 }

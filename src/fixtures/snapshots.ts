@@ -375,7 +375,34 @@ export const fixtureReplan = baseSnapshot("fx-replan", {
   },
 });
 
+// Isolated Tokyo dataset for PR screenshots; only served by the UI fixture runtime.
+const fixturePrTokyo = baseSnapshot("fx-pr-tokyo");
+const tokyoInput = fixturePrTokyo.session.input;
+tokyoInput.dateTokyo = "2026-09-24";
+tokyoInput.meet = { name: "上野駅", lat: 35.7138, lng: 139.777, spotId: "mock:pr-ueno-station" };
+tokyoInput.end = { ...tokyoInput.meet };
+tokyoInput.areaName = "東京・上野周辺";
+tokyoInput.areaLat = tokyoInput.meet.lat;
+tokyoInput.areaLng = tokyoInput.meet.lng;
+tokyoInput.fixedAppointments = [];
+fixturePrTokyo.spots = {
+  "mock:pr-ueno-park": { ...baseSpot("mock:pr-ueno-park", "上野恩賜公園"), lat: 35.7148, lng: 139.774, categories: ["park"] },
+  "mock:pr-tokyo-museum": { ...baseSpot("mock:pr-tokyo-museum", "東京都美術館"), lat: 35.7172, lng: 139.7728, categories: ["museum"] },
+  "mock:pr-ueno-cafe": { ...baseSpot("mock:pr-ueno-cafe", "上野のカフェ"), lat: 35.7138, lng: 139.777, categories: ["cafe"] },
+};
+if (fixturePrTokyo.plan) {
+  const spotIds = Object.keys(fixturePrTokyo.spots);
+  const reasons = ["緑の中を、ふたりのペースで散歩", "気になる展示を、ゆっくり楽しむ", "甘いものを食べながら、ひと休み"];
+  fixturePrTokyo.plan.dataMode = "MOCK";
+  fixturePrTokyo.plan.items = fixturePrTokyo.plan.items.map((item, index) => ({
+    ...item, spotId: spotIds[index], reason: reasons[index], locked: false, lockReason: null,
+    startAt: item.startAt.replace("2026-09-19", "2026-09-24"),
+    endAt: item.endAt.replace("2026-09-19", "2026-09-24"),
+  }));
+}
+
 export function snapshotFor(id: string): SessionSnapshot | null {
+  if (id === "fx-pr-tokyo") return fixturePrTokyo;
   if (id === "fx-success") return fixtureSuccess;
   if (id === "fx-failed") return fixtureFailed;
   if (id === "fx-approval") return fixtureApproval;
