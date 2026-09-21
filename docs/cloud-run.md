@@ -49,7 +49,34 @@ DEMO_BASE_URL="$CLOUD_RUN_URL" npm run demo:live
 - `Dockerfile` / `cloudbuild.yaml` … Web + 常駐 worker を 1 コンテナ（`PORT` 対応）
 - `.gcloudignore` … `.env.local` を Cloud Build に送らない
 - サーバーは Admin SDK で Firestore に書き込みます。クライアントからの直接 write はルールで拒否します
-- 認証は **匿名 Auth**（Google ログインは使いません）。セッション Cookie は httpOnly
+- 認証は **匿名 Auth を既定**とし、任意で Google に昇格できる（下記「認証方針」）
+- セッション Cookie（`futari_token`）は httpOnly。ブラウザは Firebase Client SDK の idToken を `/api/auth/session` で交換する
+
+## 認証方針（Google ログイン）
+
+- 現行の匿名認証は残す。ログインは任意。
+- 匿名ユーザーは `linkWithPopup` で Google を紐づけて昇格する。UID を変えないため、既存のカップル・セッション・記憶・`ownerUid` を引き継ぐ。
+- `auth/credential-already-in-use` のときはデータを統合しない。ログイン前に「別アカウントに紐づいている／切り替えると今見えているデータは表示されなくなる」旨を伝え、同意後のみ `signInWithPopup` で切り替える。
+
+### 既存の Cookie のみの匿名セッションは移行しない
+
+理由:
+- カスタムトークン交換は、以前の計測で IAM 拒否（`signBlob` 権限不足）が確認されている
+- サーバ匿名の refresh token をクライアントに渡す方法は、SDK に正式な受け口がない
+- 既存の匿名ユーザーは計測用・テスト用のデータであり、守るべき実利用者がいない
+
+具体的な挙動:
+- クライアントに Firebase ユーザーがいれば、その idToken を `/api/auth/session` で交換する
+- いなくても、有効な既存 Cookie があれば、それを使って匿名のまま利用を継続できる
+- 既存 Cookie のセッションでログインを押した場合は、新しいアカウントで始まり、現在のデータは引き継がれないことを押す前に伝える
+- どちらも無ければ `signInAnonymously` で開始する
+
+`POST /api/auth/anonymous` は計測スクリプト用に残す。
+
+手動設定（コンソール / IAM はスクリプトで変更しない）:
+- Google プロバイダの有効化
+- 承認済みドメインへ `localhost` と Cloud Run ホストを追加
+- OAuth 同意画面の確認
 
 Cloud Run では worker がポーリングし続ける必要があるため、**CPU スロットリングなし・min instances 1** です。課金はその前提です。
 

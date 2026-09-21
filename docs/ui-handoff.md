@@ -41,10 +41,18 @@ http://localhost:3000
 
 禁止: `src/server`, `src/worker`, `src/domain`, `src/config/env.ts`, `src/app/api`
 
+クライアントでの `firebase`（Client SDK）利用は可。`firebase-admin` は不可。
+
 ## API の使い方
 
 画面は `@/client` の `api()` / `ensureAuth()` / hooks だけを使う。型は `@/contracts`。
 契約を変える PR はバックエンド担当の確認が必要。
+
+認証:
+- `ensureAuth()` は Firebase Client のユーザーがいれば idToken を `/api/auth/session` で Cookie に交換する
+- いなくても有効な Cookie があればそのまま続行（旧 Cookie のみの匿名は移行しない）
+- Google ログインは任意。匿名ユーザーは `linkWithPopup` で UID を変えずに昇格する
+- ログアウト UI は Google 紐づけ後のみ表示
 
 ```ts
 import { api, ensureAuth } from "@/client";

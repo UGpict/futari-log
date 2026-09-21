@@ -23,6 +23,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 禁止: `@/server`, `@/worker`, `@/domain`, `@/config/env`, `firebase-admin`, `@/lib/ids`
 
+クライアントでの `firebase`（Client SDK）利用は可。`firebase-admin` は不可。
+
 ## バックエンド（触ってよい）
 
 - `src/server/` 認証・Firestore・LLM・外部 API・ジョブ実行

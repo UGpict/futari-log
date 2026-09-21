@@ -91,7 +91,7 @@ export function AccountMenu({ me, onMe }: Props) {
     <div className={styles.wrap}>
       {linkedGoogle ? (
         <span className={styles.provider} title={me?.uid ?? undefined}>
-          Google
+          Googleでログイン中
         </span>
       ) : (
         <button type="button" className={styles.linkButton} disabled={busy} onClick={() => void onLoginClick()}>
@@ -102,6 +102,11 @@ export function AccountMenu({ me, onMe }: Props) {
         <button type="button" className={styles.logoutButton} disabled={busy} onClick={() => void onLogout()}>
           ログアウト
         </button>
+      )}
+      {me && !linkedGoogle && (
+        <span className={styles.anonHint} title={me.uid}>
+          匿名
+        </span>
       )}
       {error && (
         <p className={styles.error} role="alert">
