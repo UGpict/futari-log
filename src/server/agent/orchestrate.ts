@@ -13,6 +13,7 @@ import {
 import type { LlmCallResult } from "@/server/llm";
 import type { ProviderCtx } from "@/server/providers";
 import { asSpotOpeningHours } from "@/server/providers";
+import { getCatalogSpot } from "@/server/providers/catalog";
 import { withRun, type CoupleBundle } from "@/server/repositories/store";
 import { dailyFresh, pruneTravelFacts, readMemories, remember, writeMemories } from "./memory";
 import { buildPlan, type BuiltPlan } from "./buildPlan";
@@ -297,7 +298,13 @@ export async function orchestratePlanning(input: {
 
   const scoutPoolSpots = [...scout.walk, ...exhibit, ...scout.sweets, ...scout.other];
   const lockedSpots = lockedIds
-    .map((id) => bundleSpots[id] ?? scoutPoolSpots.find((spot) => spot.id === id) ?? catalogSpots.find((spot) => spot.id === id))
+    .map(
+      (id) =>
+        bundleSpots[id] ??
+        scoutPoolSpots.find((spot) => spot.id === id) ??
+        catalogSpots.find((spot) => spot.id === id) ??
+        getCatalogSpot(id),
+    )
     .filter((spot): spot is NonNullable<typeof spot> => Boolean(spot));
 
   const planned = await runPlanner({

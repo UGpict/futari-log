@@ -54,4 +54,11 @@ export type PlanFormSeed = {
   meet?: PlaceCandidate;
   startTime?: string;
   endTime?: string;
+  /** 予約や決まった予定（AI HACK 会場枠など） */
+  fixed?: {
+    label: string;
+    startTime: string;
+    endTime: string;
+    spotId?: string | null;
+  };
 };

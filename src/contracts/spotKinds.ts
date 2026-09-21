@@ -610,10 +610,10 @@ export const WISH_FACETS: readonly WishFacet[] = [
   {
     id: "bar",
     kind: "bar",
-    wish: /バー|ワイン|酒場|お酒|居酒屋/,
+    wish: /バー|ワイン|酒場|お酒|居酒屋|飲み屋/,
     searchTypes: ["bar"],
     fulfillTypes: ["bar", "wine_bar", "night_club", "pub"],
-    name: /バー|ワイン|酒場|居酒屋|bar|wine/i,
+    name: /バー|ワイン|酒場|居酒屋|飲み屋|bar|wine/i,
     bucket: "other",
     rankPreference: "POPULARITY",
     scoutCategory: "バー",

@@ -224,6 +224,37 @@ describe("planner candidate pick", () => {
     assert.deepEqual(picked.overflowMust, []);
   });
 
+  it("still soft-fills toward 3 stops after a single MUST chip", () => {
+    const spot = (id: string, name: string, categories: string[]) => ({
+      id,
+      name,
+      lat: 35.68,
+      lng: 139.76,
+      categories,
+      environment: { value: "INDOOR" as const, evidenceIds: [] as string[] },
+      costForTwoJpy: { value: { min: 1000, max: 2000 }, evidenceIds: [] as string[] },
+      restEase: { value: "EASY" as const, evidenceIds: [] as string[] },
+      standingBurden: { value: "LOW" as const, evidenceIds: [] as string[] },
+      officialUrl: null,
+    });
+    const picked = pickFromCandidates({
+      walk: [spot("mock:park", "公園", ["park"])],
+      exhibit: [spot("mock:museum", "美術館", ["art_gallery", "museum"])],
+      sweets: [spot("mock:cafe", "カフェ", ["cafe"])],
+      other: [],
+      lockedIds: [],
+      rain: false,
+      avoidIds: [],
+      preferences: [
+        { id: "pref_category", content: "おいしいものを楽しむデート", priority: "PREFER" },
+        { id: "pref_chip_0", content: "カフェ", priority: "MUST" },
+      ],
+    });
+    assert.ok(picked.selected.includes("mock:cafe"));
+    assert.equal(picked.selected.length, 3);
+    assert.deepEqual(picked.unmetMust, []);
+  });
+
   it("does not add another spot when a locked appointment already fulfills the wish", () => {
     const spot = (id: string, name: string, categories: string[]) => ({
       id,

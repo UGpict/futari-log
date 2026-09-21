@@ -322,10 +322,11 @@ export function PlanForm({ initialDate, initialWish, seed, seedParam, initialSte
     transit: "1000",
     self: seedWish,
     partner: "",
-    locked: false,
-    fixedName: "",
-    fixedStart: "15:00",
-    fixedEnd: "16:00",
+    locked: Boolean(seed?.fixed),
+    fixedName: seed?.fixed?.label ?? "",
+    fixedStart: seed?.fixed?.startTime ?? "15:00",
+    fixedEnd: seed?.fixed?.endTime ?? "16:00",
+    fixedSpotId: seed?.fixed?.spotId ?? null as string | null,
     travelMode: "WALK" as TravelMode,
     auto: false,
   });
@@ -508,7 +509,7 @@ export function PlanForm({ initialDate, initialWish, seed, seedParam, initialSte
                 {
                   id: "fix_art",
                   label: form.fixedName.trim(),
-                  spotId: null,
+                  spotId: form.fixedSpotId,
                   spotNameHint: form.fixedName.trim(),
                   startAt: lockedStart,
                   endAt: lockedEnd,
@@ -663,13 +664,13 @@ export function PlanForm({ initialDate, initialWish, seed, seedParam, initialSte
               </div></details>
             </div>
           </section>
-          <details className={styles.fixedPlanCard} onToggle={(event) => {
+          <details className={styles.fixedPlanCard} open={Boolean(seed?.fixed)} onToggle={(event) => {
             const locked = event.currentTarget.open;
             setForm((current) => current.locked === locked ? current : { ...current, locked });
           }}>
             <summary><span className={styles.fixedPlanIcon}><PlanStickerIcon kind="time" /></span><span><strong>予約や決まった予定</strong><small>動かせない予定があるときだけ</small></span><Plus size={16} /></summary>
             <div className={styles.fixedPlanEditor}>
-              <div className={styles.fixedPlaceRow}><span className={styles.fixedPlaceIcon}><PlanStickerIcon kind="start" /></span><TextInput aria-label="場所・予定の名前" value={form.fixedName} onChange={(e) => setForm({ ...form, fixedName: e.target.value })} placeholder="場所や予定の名前" /></div>
+              <div className={styles.fixedPlaceRow}><span className={styles.fixedPlaceIcon}><PlanStickerIcon kind="start" /></span><TextInput aria-label="場所・予定の名前" value={form.fixedName} onChange={(e) => setForm({ ...form, fixedName: e.target.value, fixedSpotId: null })} placeholder="場所や予定の名前" /></div>
               <div className={`${styles.inlineTimes} ${styles.fixedPlanTimes}`}><label><SelectInput aria-label="予定の開始時刻" value={form.fixedStart} onChange={(e) => setForm({ ...form, fixedStart: e.target.value })}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</SelectInput><ChevronDown size={16} aria-hidden="true" /></label><span>〜</span><label><SelectInput aria-label="予定の終了時刻" value={form.fixedEnd} onChange={(e) => setForm({ ...form, fixedEnd: e.target.value })}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</SelectInput><ChevronDown size={16} aria-hidden="true" /></label></div>
               {fixedTimeInvalid && <p className={styles.error} role="alert">デート時間内で指定してください。</p>}
             </div>

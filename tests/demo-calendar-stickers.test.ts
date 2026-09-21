@@ -21,6 +21,10 @@ describe("demo calendar stickers", () => {
       assert.equal(row.demo, true);
       assert.ok(row.title.length > 0);
       assert.ok(row.note.length > 0);
+      assert.ok(row.stickerDataUrls && row.stickerDataUrls.length >= 1);
+      for (const url of row.stickerDataUrls!) {
+        assert.match(url, /^\/images\/demo-stickers\/.+\.webp$/);
+      }
     }
   });
 

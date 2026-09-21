@@ -73,6 +73,20 @@ describe("plan seed resolution", () => {
     assert.equal(seed?.startTime, undefined);
     assert.equal(seed?.endTime, undefined);
   });
+
+  it("loads AI HACK seed with Tomoshibi venue and fixed afternoon block", () => {
+    const seed = resolvePlanFormSeed("sample:ai-hack");
+    assert.ok(seed);
+    assert.equal(seed.meet?.name, "燈株式会社オフィス");
+    assert.ok(seed.meet?.address?.includes("神田駿河台4丁目6"));
+    assert.equal(seed.startTime, "10:00");
+    assert.equal(seed.endTime, "21:00");
+    assert.equal(seed.fixed?.label, "AI HACK 2026");
+    assert.equal(seed.fixed?.startTime, "10:00");
+    assert.equal(seed.fixed?.endTime, "16:00");
+    assert.equal(seed.fixed?.spotId, "demo:tomoshibi-surugadai");
+    assert.ok(seed.wish?.includes("飲み屋"));
+  });
 });
 
 describe("feedback quick append (3691949)", () => {
