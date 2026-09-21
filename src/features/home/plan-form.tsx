@@ -12,7 +12,7 @@ import { api, fixturesEnabled } from "@/client/api";
 import { useMe } from "@/client/hooks/use-me";
 import { usePlaceSearch } from "@/client/hooks/use-place-search";
 import { tokyoToday } from "@/config/public";
-import type { PlaceCandidate } from "@/contracts";
+import type { PlaceCandidate, TravelMode } from "@/contracts";
 import { MemoMascot } from "@/components/memo-mascot";
 import { AiSparkIcon } from "@/components/ai-spark-icon";
 import { PlanStickerIcon } from "@/components/plan-sticker-icon";
@@ -271,6 +271,7 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
     fixedName: "",
     fixedStart: "15:00",
     fixedEnd: "16:00",
+    travelMode: "WALK" as TravelMode,
     auto: false,
   });
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -414,7 +415,7 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
               : null,
             validUntil: form.auto ? new Date(Date.now() + 86400000).toISOString() : null,
           },
-          travelMode: "WALK",
+          travelMode: form.travelMode,
           areaName: meetPlace.name,
           areaLat: meetPlace.lat,
           areaLng: meetPlace.lng,
@@ -527,6 +528,16 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
             </div>
           </section>
           {!timingValid && <p className={styles.error} role="alert">終了は開始よりあとの時刻にしてね。</p>}
+          <fieldset className={styles.transportPicker}>
+            <legend>移動手段</legend>
+            <div>
+              {([
+                ["WALK", "徒歩", "walk"],
+                ["DRIVE", "車", "drive"],
+                ["TRANSIT", "交通機関", "transit"],
+              ] as const).map(([value, label, icon]) => <button type="button" key={value} aria-pressed={form.travelMode === value} onClick={() => setForm({ ...form, travelMode: value })}><span><PlanStickerIcon kind={icon} /></span>{label}{form.travelMode === value && <Check size={13} />}</button>)}
+            </div>
+          </fieldset>
           <section className={styles.scheduleSection} aria-label="集合と解散">
             <div className={styles.meetingCard}>
               <div className={styles.routeStart}>

@@ -1,7 +1,7 @@
 import { useId } from "react";
 
 /** Illustrated plan facts, with the same cut-paper edge as mood stickers. */
-export function PlanStickerIcon({ kind }: { kind: "time" | "budget" | "spots" | "wave" | "calendar" | "start" | "goal" }) {
+export function PlanStickerIcon({ kind }: { kind: "time" | "budget" | "spots" | "wave" | "calendar" | "start" | "goal" | "walk" | "drive" | "transit" }) {
   const shadow = `plan-sticker-${useId().replaceAll(":", "")}`;
   return <svg viewBox="0 0 80 84" fill="none" aria-hidden="true">
     <defs><filter id={shadow} x="-30%" y="-30%" width="160%" height="170%" colorInterpolationFilters="sRGB"><feDropShadow dx="0" dy="2.5" stdDeviation="1.3" floodColor="#63594e" floodOpacity=".23" /></filter></defs>
@@ -47,6 +47,25 @@ export function PlanStickerIcon({ kind }: { kind: "time" | "budget" | "spots" | 
         <path d="M19 8Q25 8 25 14V16H68V47H25V72H13V14Q13 8 19 8Z" fill="#59645f" stroke="#fffdfb" strokeWidth="7" />
         <path d="M22 18H65V44H22Z" fill="#dc716d" />
         <path d="M60 20V42" stroke="#ed8d83" strokeWidth="6" strokeLinecap="round" />
+      </>}
+      {kind === "walk" && <>
+        <path d="M18 47Q23 41 31 43L39 48L55 53Q64 56 63 63Q62 69 53 69H24Q14 69 14 60Q14 53 18 47Z" fill="#d79a76" stroke="#fffdfb" strokeWidth="6" />
+        <path d="M27 21Q35 18 40 24L46 37L36 44L27 37Q21 32 22 26Q23 23 27 21Z" fill="#ebbd92" stroke="#fffdfb" strokeWidth="6" />
+        <path d="M29 55H54M31 29L40 35" stroke="#fff4e9" strokeWidth="4" strokeLinecap="round" />
+      </>}
+      {kind === "drive" && <>
+        <path d="M17 37L23 23Q25 18 31 18H51Q57 18 59 23L64 37Q69 39 69 45V60Q69 65 64 65H17Q12 65 12 60V45Q12 39 17 37Z" fill="#78a69b" stroke="#fffdfb" strokeWidth="6" />
+        <path d="M24 36L29 25H52L57 36Z" fill="#dff0ea" />
+        <circle cx="24" cy="50" r="5" fill="#fff8ee" />
+        <circle cx="57" cy="50" r="5" fill="#fff8ee" />
+        <path d="M31 51H50" stroke="#b9d5cb" strokeWidth="4" strokeLinecap="round" />
+      </>}
+      {kind === "transit" && <>
+        <path d="M20 15Q20 10 26 10H55Q61 10 61 16V57Q61 64 54 64H27Q20 64 20 57Z" fill="#7f91bd" stroke="#fffdfb" strokeWidth="6" />
+        <path d="M27 20H54V39H27Z" fill="#eaf2f6" />
+        <circle cx="29" cy="51" r="4" fill="#fff8ee" />
+        <circle cx="52" cy="51" r="4" fill="#fff8ee" />
+        <path d="M27 69L34 61M54 69L47 61" stroke="#616d8e" strokeWidth="5" strokeLinecap="round" />
       </>}
     </g>
   </svg>;

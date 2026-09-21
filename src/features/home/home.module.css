@@ -607,6 +607,15 @@
 .inlineTimes label > select { width: 100%; min-height: 42px; padding: 6px 29px 6px 8px; border: 1px solid #eadfe5; border-radius: 11px; appearance: none; -webkit-appearance: none; background: #fff; color: #6f5867; font-size: 16px; font-weight: 600; }
 .inlineTimes label > svg { position: absolute; right: 9px; bottom: 13px; color: #bd7798; pointer-events: none; }
 .inlineTimes > span { align-self: center; color: #bba5b3; }
+.transportPicker { min-width: 0; padding: 10px 11px 11px; border: 1px solid #ebdfe6; border-radius: 20px; background: linear-gradient(145deg, #fff 0%, #fff9fb 100%); box-shadow: 0 7px 24px #7653650a; }
+.transportPicker legend { padding: 0 3px; color: #8f7887; font-size: 10px; font-weight: 650; }
+.transportPicker > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.transportPicker button { position: relative; display: flex; min-width: 0; min-height: 58px; align-items: center; justify-content: center; gap: 3px; padding: 5px 4px; border: 1px solid #eee3e9; border-radius: 15px; background: #fff; color: #806b78; font-size: 10px; transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease; }
+.transportPicker button:active { transform: scale(.96); }
+.transportPicker button > span { display: grid; width: 36px; height: 38px; flex: 0 0 36px; place-items: center; }
+.transportPicker button > span svg { width: 36px; height: 38px; }
+.transportPicker button > svg { position: absolute; top: 5px; right: 5px; }
+.transportPicker button[aria-pressed="true"] { border-color: #d58aa7; background: linear-gradient(145deg, #fff8fb, #f8efff); color: #9a5275; font-weight: 700; box-shadow: 0 4px 12px #a8587b1c; }
 .meetingCard { position: relative; border: 1px solid #ebdfe6; border-radius: 20px; background: linear-gradient(145deg, #fff, #fffafb); padding: 12px; box-shadow: 0 7px 24px #7653650a; }
 .routePath { position: absolute; z-index: 0; top: 34px; left: 0; width: 35px; height: calc(100% - 9px); overflow: visible; pointer-events: none; }
 .routePath path { fill: none; stroke: #ad876f; stroke-width: 3; stroke-linecap: round; stroke-dasharray: 1 9; vector-effect: non-scaling-stroke; filter: drop-shadow(0 1px 0 #fff); }
