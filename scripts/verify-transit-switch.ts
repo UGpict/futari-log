@@ -112,6 +112,7 @@ async function runOnce(
 
   return {
     label,
+    sessionId: session.id,
     steps,
     finalRunId: found.run.id,
     finalStatus: found.run.status,
@@ -124,6 +125,7 @@ async function runOnce(
     confirmOk: confirm.ok,
     confirmError: confirm.ok ? null : confirm.error,
     sessionStatus: snap?.bundle.session.status ?? null,
+    walkLongAck: found.bundle.session.walkLongAck,
   };
 }
 
@@ -194,17 +196,50 @@ async function runTransitDirect(label: string) {
 
 async function main() {
   const env = getEnv();
+  const near = await runOnce("near_end", {
+    name: "東京駅",
+    lat: 35.681236,
+    lng: 139.767125,
+    spotId: "ChIJ35r7EABjUjoRIqY6CClYKqs",
+  });
+  // Persist check after confirm (criterion 5)
+  let nearReload: Record<string, unknown> | null = null;
+  if (near.confirmOk && near.sessionId) {
+    const snap = await getSession(near.sessionId);
+    const version = snap?.bundle.session.currentPlanVersion;
+    const plan = version ? snap?.bundle.planHistory[String(version)] : null;
+    nearReload = {
+      sessionStatus: snap?.bundle.session.status ?? null,
+      travelMode: snap?.bundle.session.input.travelMode ?? null,
+      walkLongAck: snap?.bundle.session.walkLongAck ?? null,
+      legs:
+        plan?.legs.map((leg) => ({
+          from: leg.from,
+          to: leg.to,
+          mode: leg.mode,
+          durationMinutes: leg.durationMinutes.value,
+        })) ?? [],
+    };
+  }
+
+  const far = await runOnce("far_end", {
+    name: "新宿駅",
+    lat: 35.689487,
+    lng: 139.691706,
+    spotId: "ChIJ5aHh9wqNGGARKfwN1ZCK_3w",
+  });
+
+  const transitDirect = await runTransitDirect("shinjuku_end");
+
   const report = {
     runtime: env.runtime,
     dataBackend: env.dataBackend,
     maps: env.mapsConfigured,
-    near: await runOnce("near_end", {
-      name: "東京駅",
-      lat: 35.681236,
-      lng: 139.767125,
-      spotId: "ChIJ35r7EABjUjoRIqY6CClYKqs",
-    }),
-    transitDirect: await runTransitDirect("shinjuku_end"),
+    commit: process.env.GIT_COMMIT ?? null,
+    near,
+    nearReload,
+    far,
+    transitDirect,
   };
   const path = resolve("docs/reports/transit-switch-verify.json");
   writeFileSync(path, JSON.stringify(report, null, 2));
@@ -213,17 +248,31 @@ async function main() {
     JSON.stringify(
       {
         runtime: report.runtime,
-        nearRunId: report.near.finalRunId,
-        nearStatus: report.near.finalStatus,
-        nearConfirmOk: report.near.confirmOk,
-        nearLegs: report.near.legs.map((l) => `${l.mode}:${l.durationMinutes}`),
-        transitRunId: report.transitDirect.runId,
-        transitStatus: report.transitDirect.status,
-        transitQuestion: report.transitDirect.question?.id ?? null,
-        transitUnverified: report.transitDirect.travelUnverified,
-        transitConfirmOk: report.transitDirect.confirmOk,
-        transitConfirmError: report.transitDirect.confirmError,
-        transitLegs: report.transitDirect.legs.map((l) => `${l.mode}:${l.durationMinutes}`),
+        nearRunId: near.finalRunId,
+        nearStatus: near.finalStatus,
+        nearConfirmOk: near.confirmOk,
+        nearLegs: near.legs.map((l) => `${l.mode}:${l.durationMinutes}`),
+        nearReloadLegs: (nearReload?.legs as { mode: string; durationMinutes: number | null }[] | undefined)?.map(
+          (l) => `${l.mode}:${l.durationMinutes}`,
+        ),
+        farRunId: far.finalRunId,
+        farStatus: far.finalStatus,
+        farQuestion: far.waitingQuestion?.id ?? far.steps.find((s) => (s as { question?: { id?: string } }).question)?.["question"] ?? null,
+        farSteps: far.steps.map((s) => ({
+          step: (s as { step?: string }).step,
+          status: (s as { status?: string }).status,
+          q: (s as { question?: { id?: string; prompt?: string } }).question?.id ?? null,
+          promptHead: ((s as { question?: { prompt?: string } }).question?.prompt ?? "").slice(0, 120),
+        })),
+        farLegs: far.legs.map((l) => `${l.mode}:${l.durationMinutes}`),
+        farConfirmOk: far.confirmOk,
+        transitRunId: transitDirect.runId,
+        transitStatus: transitDirect.status,
+        transitQuestion: transitDirect.question?.id ?? null,
+        transitUnverified: transitDirect.travelUnverified,
+        transitConfirmOk: transitDirect.confirmOk,
+        transitConfirmError: transitDirect.confirmError,
+        transitLegs: transitDirect.legs.map((l) => `${l.mode}:${l.durationMinutes}`),
       },
       null,
       2,
