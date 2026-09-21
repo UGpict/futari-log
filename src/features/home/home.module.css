@@ -565,13 +565,7 @@
 .planChips button { transition: background .18s, border-color .18s, box-shadow .18s, transform .18s; }
 .planChips button:active { transform: scale(.94); }
 .schedulePanel { position: relative; display: grid; gap: 14px; }
-.scheduleSection { display: grid; gap: 8px; min-width: 0; }
-.scheduleSectionHeading { display: flex; min-width: 0; align-items: center; gap: 8px; padding: 0 3px; }
-.scheduleSectionIcon { display: grid; width: 29px; height: 29px; flex: 0 0 29px; place-items: center; border-radius: 10px; background: linear-gradient(145deg, #ffe5ee, #f2e7ff); color: #d26891; box-shadow: inset 0 0 0 1px #eebbcf80; }
-.scheduleSectionHeading > div { display: grid; gap: 0; }
-.scheduleSectionHeading small { color: #c28ba3; font-size: 7px; font-weight: 800; letter-spacing: .14em; line-height: 1; }
-.scheduleSectionHeading h4 { margin: 1px 0 0; color: #684f5f; font-size: 15px; line-height: 1.1; }
-.scheduleSectionHeading > p { overflow: hidden; margin: 0 0 0 auto; color: #a18b98; font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.scheduleSection { display: grid; min-width: 0; }
 .scheduleSectionBody { display: grid; gap: 9px; padding: 9px; border: 1px solid #eadfe6; border-radius: 22px; background: linear-gradient(145deg, #fff 0%, #fff9fb 100%); box-shadow: 0 7px 24px #7653650a; }
 .scheduleDatePicker { position: relative; }
 .scheduleDate { display: flex; width: 100%; min-height: 54px; align-items: center; gap: 11px; border: 1px solid #f0e5eb; border-radius: 15px; padding: 8px 12px; background: white; color: #bd7798; text-align: left; }
@@ -631,7 +625,6 @@
 .routeEnd[open] summary > svg { transform: rotate(180deg); }
 .routeEndEditor { margin: 6px 0 0 38px; padding: 8px 10px; border-radius: 13px; background: #faf5f8; animation: planEnter .2s ease both; }
 .routeEndEditor input { width: 100%; border-bottom: 1px solid #eadce4; }
-.scheduleSection > .areaNotice { margin: -1px 4px 0; color: #aa929f; font-size: 9px; }
 .placeSuggest { display: grid; gap: 4px; margin: 8px 0 0; max-height: min(240px, 36dvh); overflow: auto; }
 .placeSuggest button { display: grid; gap: 2px; text-align: left; border: 0; border-radius: 12px; padding: 8px 10px; background: #faf6f8; color: #695362; font-size: 12px; }
 .placeSuggest button small { color: #9d8796; font-size: 10px; }

@@ -10,11 +10,11 @@ import { PlanLoading } from "@/features/session/plan-loading";
 import { api, fixturesEnabled } from "@/client/api";
 import { useMe } from "@/client/hooks/use-me";
 import { usePlaceSearch } from "@/client/hooks/use-place-search";
-import { SERVICE_AREA_NOTICE, tokyoToday } from "@/config/public";
+import { tokyoToday } from "@/config/public";
 import type { PlaceCandidate } from "@/contracts";
 import { MemoMascot } from "@/components/memo-mascot";
 import { AiSparkIcon } from "@/components/ai-spark-icon";
-import { Plus, ChevronLeft, ChevronRight, ArrowRight, Check, ChevronDown, Sparkles, CalendarHeart, Clock3, MapPinned, MapPin, Flag, Beef, Fish, Pizza, CakeSlice, Utensils, Coffee, TreePine, Waves, Sandwich, Flame, Film, PawPrint, Gamepad2, Palette, ShoppingBag, Store, Landmark, BookOpen, Camera, Sunrise, Sun, Sunset, Moon, type LucideIcon } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, ArrowRight, Check, ChevronDown, Sparkles, CalendarHeart, Clock3, MapPin, Flag, Beef, Fish, Pizza, CakeSlice, Utensils, Coffee, TreePine, Waves, Sandwich, Flame, Film, PawPrint, Gamepad2, Palette, ShoppingBag, Store, Landmark, BookOpen, Camera, Sunrise, Sun, Sunset, Moon, type LucideIcon } from "lucide-react";
 import styles from "./home.module.css";
 
 const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
@@ -479,12 +479,7 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
           </div>}
         </>}
         {step === 1 && <div className={styles.schedulePanel}>
-          <section className={styles.scheduleSection} aria-labelledby="schedule-when-title">
-            <div className={styles.scheduleSectionHeading}>
-              <span className={styles.scheduleSectionIcon}><CalendarHeart size={16} /></span>
-              <div><small>WHEN</small><h4 id="schedule-when-title">いつ</h4></div>
-              <p>{form.startTime}〜{form.endTime}</p>
-            </div>
+          <section className={styles.scheduleSection} aria-label="日時">
             <div className={styles.scheduleSectionBody}>
           <div className={styles.scheduleDatePicker}>
             <button type="button" className={styles.scheduleDate} aria-expanded={calendarOpen} aria-controls="plan-calendar" onClick={() => { if (calendarTimer.current) return; setCalendarMonth(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1)); setCalendarOpen(!calendarOpen); }}>
@@ -514,12 +509,7 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
             </div>
           </section>
           {!timingValid && <p className={styles.error} role="alert">終了は開始よりあとの時刻にしてね。</p>}
-          <section className={styles.scheduleSection} aria-labelledby="schedule-where-title">
-            <div className={styles.scheduleSectionHeading}>
-              <span className={styles.scheduleSectionIcon}><MapPinned size={16} /></span>
-              <div><small>WHERE</small><h4 id="schedule-where-title">どこ</h4></div>
-              <p>東京エリア</p>
-            </div>
+          <section className={styles.scheduleSection} aria-label="集合と解散">
             <div className={styles.meetingCard}>
               <div className={styles.routeStart}>
                 <span className={styles.routeMarker}><MapPin size={14} /></span>
@@ -531,7 +521,6 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
                 {form.endName.trim().length >= 2 || endPlace ? <PlaceSuggest query={form.endName} selected={endPlace} search={endSearch} label="解散場所の候補" onPick={(place) => { setEndPlace(place); setForm((current) => ({ ...current, endName: place.name })); }} /> : <p className={styles.placeHint}>別の場所で解散するときだけ入力できます。</p>}
               </div></details>
             </div>
-            <p className={styles.areaNotice}>{SERVICE_AREA_NOTICE}。都外の場所は確認します。</p>
           </section>
         </div>}
         {step === 2 && <div className={styles.finishPanel}>
