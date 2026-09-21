@@ -4,7 +4,7 @@ import { TextInput, TextArea, SelectInput } from "@/components/text-input";
 
 import { Button } from "@/components/button";
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { useRouter } from "next/navigation";
 import { PlanLoading } from "@/features/session/plan-loading";
 import { api, fixturesEnabled } from "@/client/api";
@@ -14,7 +14,7 @@ import { tokyoToday } from "@/config/public";
 import type { PlaceCandidate } from "@/contracts";
 import { MemoMascot } from "@/components/memo-mascot";
 import { AiSparkIcon } from "@/components/ai-spark-icon";
-import { Plus, ChevronLeft, ChevronRight, ArrowRight, Check, ChevronDown, Sparkles, CalendarHeart, Clock3, MapPinned, Beef, Fish, Pizza, CakeSlice, Utensils, Coffee, TreePine, Waves, Sandwich, Flame, Film, PawPrint, Gamepad2, Palette, ShoppingBag, Store, Landmark, BookOpen, Camera, type LucideIcon } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, ArrowRight, Check, ChevronDown, Sparkles, CalendarHeart, Clock3, MapPinned, Beef, Fish, Pizza, CakeSlice, Utensils, Coffee, TreePine, Waves, Sandwich, Flame, Film, PawPrint, Gamepad2, Palette, ShoppingBag, Store, Landmark, BookOpen, Camera, Sunrise, Sun, Sunset, Moon, type LucideIcon } from "lucide-react";
 import styles from "./home.module.css";
 
 const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
@@ -24,6 +24,12 @@ const timeOptions = Array.from({ length: 34 }, (_, index) => {
   const minute = minutes % 60;
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 });
+const timePresets = [
+  { label: "朝から", start: "09:00", end: "15:00", icon: Sunrise },
+  { label: "昼から", start: "11:00", end: "17:00", icon: Sun },
+  { label: "午後から", start: "13:00", end: "18:00", icon: Sunset },
+  { label: "夜から", start: "17:00", end: "21:00", icon: Moon },
+] as const;
 
 function parseDate(value: string) {
   const [year, month, day] = value.split("-").map(Number);
@@ -100,9 +106,10 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
     const viewport = window.visualViewport;
     let frame = 0;
     let field: HTMLElement | null = null;
+    let followingFocus = false;
 
     const reveal = () => {
-      if (!field?.isConnected || document.activeElement !== field) return;
+      if (!followingFocus || !field?.isConnected || document.activeElement !== field) return;
       if (viewport && Math.abs(viewport.scale - 1) > 0.05) return;
       const top = (viewport?.offsetTop ?? 0) + 16;
       const bottom = (viewport?.offsetTop ?? 0) + (viewport?.height ?? window.innerHeight) - 16;
@@ -111,23 +118,32 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
       if (Math.abs(delta) > 1) window.scrollBy({ top: delta, behavior: "instant" });
     };
     const schedule = () => {
+      if (!followingFocus) return;
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => { frame = requestAnimationFrame(reveal); });
     };
     const trackFocus = (event: FocusEvent) => {
       const target = event.target;
       field = target instanceof HTMLElement && target.matches("input:not([type=checkbox]):not([type=radio]), textarea") ? target : null;
-      if (field) schedule();
+      followingFocus = Boolean(field);
+      if (followingFocus) schedule();
+    };
+    const stopFollowing = () => {
+      if (!followingFocus) return;
+      followingFocus = false;
+      cancelAnimationFrame(frame);
     };
 
     root.addEventListener("focusin", trackFocus);
     viewport?.addEventListener("resize", schedule);
-    viewport?.addEventListener("scroll", schedule);
+    window.addEventListener("pointerdown", stopFollowing, true);
+    window.addEventListener("wheel", stopFollowing, { passive: true, capture: true });
     return () => {
       cancelAnimationFrame(frame);
       root.removeEventListener("focusin", trackFocus);
       viewport?.removeEventListener("resize", schedule);
-      viewport?.removeEventListener("scroll", schedule);
+      window.removeEventListener("pointerdown", stopFollowing, true);
+      window.removeEventListener("wheel", stopFollowing, true);
     };
   }, [fullPage]);
   const [selected, setSelected] = useState<string[]>([]);
@@ -258,6 +274,7 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
   const total = Number(form.meals) + Number(form.facilities) + Number(form.transit);
   const budgetTotalValue = [form.meals, form.facilities, form.transit].every((value) => value.trim() !== "") ? String(total) : "";
   const timingValid = Boolean(dateTokyo && form.startTime && form.endTime && form.startTime < form.endTime);
+  const selectedTimePreset = timePresets.findIndex((item) => form.startTime === item.start && form.endTime === item.end);
   const placeValid = Boolean(meetPlace && (form.endName.trim() ? endPlace : true));
   const valid = Boolean(category || selected.length || form.self.trim()) && timingValid && placeValid && [form.meals, form.facilities, form.transit].every((value) => value.trim() !== "" && Number.isFinite(Number(value)) && Number(value) >= 0) && (!form.locked || (form.fixedName.trim() && form.fixedStart >= form.startTime && form.fixedEnd <= form.endTime && form.fixedStart < form.fixedEnd));
   const selectedDate = parseDate(dateTokyo);
@@ -481,7 +498,10 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
             </div>}
           </div>
           <fieldset className={styles.scheduleTime}><legend className="sr-only">時間帯</legend>
-            <div className={styles.timePresets}>{[{ label: "朝から", start: "09:00", end: "15:00" }, { label: "昼から", start: "11:00", end: "17:00" }, { label: "午後から", start: "13:00", end: "18:00" }, { label: "夜から", start: "17:00", end: "21:00" }].map((item) => <button type="button" key={item.label} aria-pressed={form.startTime === item.start && form.endTime === item.end} onClick={() => setForm({ ...form, startTime: item.start, endTime: item.end })}>{item.label}</button>)}</div>
+            <div className={styles.timePresets} data-has-selection={selectedTimePreset >= 0} style={{ "--time-index": Math.max(0, selectedTimePreset) } as CSSProperties}>
+              <span className={styles.timePresetIndicator} aria-hidden="true" />
+              {timePresets.map((item) => { const TimeIcon = item.icon; return <button type="button" key={item.label} aria-pressed={form.startTime === item.start && form.endTime === item.end} onClick={() => setForm({ ...form, startTime: item.start, endTime: item.end })}><TimeIcon size={13} aria-hidden="true" />{item.label}</button>; })}
+            </div>
             <div className={styles.inlineTimes}><Clock3 size={17} aria-hidden="true" /><label><span>開始</span><SelectInput aria-label="開始時刻" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</SelectInput><ChevronDown size={16} aria-hidden="true" /></label><span>〜</span><label><span>終了</span><SelectInput aria-label="終了時刻" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</SelectInput><ChevronDown size={16} aria-hidden="true" /></label></div>
           </fieldset>
           {!timingValid && <p className={styles.error} role="alert">終了は開始よりあとの時刻にしてね。</p>}

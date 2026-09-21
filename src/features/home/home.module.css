@@ -543,10 +543,6 @@
 .planPageForm:has(input:focus, textarea:focus) .planFooter { position: static; }
 .planPageForm input, .planPageForm textarea { scroll-margin-block: 16px; }
 @media (max-height: 620px) {
-  .planGuide { gap: 7px; margin: -2px 2px 1px; }
-  .planGuideMascot { width: 42px; height: 43px; flex-basis: 42px; }
-  .planGuideMascot > span { transform: translateX(-50%) scale(.3); }
-  .planPageForm .planStage .planGuideSpeech { padding-block: 6px; font-size: 12px; }
   .planPageForm .dateMoodGrid { gap: 6px 8px; margin: 4px 0 5px; }
   .planPageForm .dateMoodPhoto { height: 48px; }
   .planPageForm .dateMoodCaption { padding-block: 5px; }
@@ -597,10 +593,13 @@
 @keyframes chosenDateText { 45% { color: #fff; } }
 @keyframes chosenDatePop { 0% { transform: translate(-50%, -50%) scale(.72); } 58% { transform: translate(-50%, -50%) scale(1.18); } 100% { transform: translate(-50%, -50%) scale(1); } }
 @keyframes calendarPop { from { opacity: 0; transform: translateY(-7px) scale(.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
-.scheduleTime { min-width: 0; border: 1px solid #ebdfe6; border-radius: 18px; padding: 10px 12px; background: white; }
-.timePresets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px; background: #f8f1f5; border-radius: 12px; }
-.timePresets button { min-height: 40px; padding-inline: 2px; border-radius: 9px; font-size: 11px; color: #98818f; }
-.timePresets button[aria-pressed="true"] { background: #fff; color: #b55f85; box-shadow: 0 2px 7px #77516612; }
+.scheduleTime { min-width: 0; border: 1px solid #eee3ea; border-radius: 20px; padding: 11px 12px 12px; background: linear-gradient(145deg, #fff 0%, #fdf9fb 100%); box-shadow: 0 6px 20px #7653650b; }
+.timePresets { position: relative; isolation: isolate; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px; border: 1px solid #f0e4eb; background: #f8f1f5; border-radius: 999px; }
+.timePresetIndicator { position: absolute; z-index: -1; top: 4px; bottom: 4px; left: 4px; width: calc((100% - 20px) / 4); border-radius: 999px; background: linear-gradient(135deg, #ea7096 0%, #f09ab1 55%, #b79ada 100%); box-shadow: 0 4px 11px #d56f9830; opacity: 0; transform: translateX(calc(var(--time-index) * (100% + 4px))); transition: transform .34s cubic-bezier(.22, 1, .36, 1), opacity .18s ease; }
+.timePresets[data-has-selection="true"] .timePresetIndicator { opacity: 1; }
+.timePresets button { position: relative; display: flex; min-width: 0; min-height: 42px; align-items: center; justify-content: center; gap: 3px; padding-inline: 2px; border-radius: 999px; font-size: 10px; color: #98818f; transition: color .22s ease, transform .18s ease; }
+.timePresets button > svg { flex-shrink: 0; }
+.timePresets button[aria-pressed="true"] { color: #fff; font-weight: 650; }
 .inlineTimes { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; gap: 8px; margin-top: 10px; }
 .inlineTimes > svg { align-self: center; color: #c07898; }
 .inlineTimes label { position: relative; display: flex; min-width: 0; flex-direction: column; gap: 3px; color: #a08c99; font-size: 9px; }
