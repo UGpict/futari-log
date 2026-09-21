@@ -1,5 +1,7 @@
 /** ホーム「近くのイベント」大会用サンプル。表示専用 — カタログ selectedEventIds には入れない。 */
 
+import { AI_HACK_VENUE } from "@/config/demo-ai-hack";
+
 export type HomeSampleEvent = {
   id: `sample:${string}`;
   demo: true;
@@ -85,19 +87,13 @@ export const nearbySampleEvents: HomeSampleEvent[] = [
     id: "sample:ai-hack",
     demo: true,
     dateLabel: "9/19–9/23",
-    area: "東京都内・最終日",
+    area: "神田駿河台・最終日",
     title: "AI HACK 2026",
     kicker: "賞金最大100万円、5日間のAIハッカソン",
     theme: "ai-hack",
-    areaWishToken: "東京",
-    planWish: "東京でテクノロジーを楽しむ屋内デートにしたい",
-    meet: {
-      id: "ChIJC3Cf2PuLGGAROO00ukl8JwA",
-      name: "東京駅",
-      lat: 35.681236,
-      lng: 139.767125,
-      address: "東京都千代田区",
-    },
+    areaWishToken: AI_HACK_VENUE.areaWishToken,
+    planWish: AI_HACK_VENUE.wish,
+    meet: AI_HACK_VENUE.place,
     sponsored: false,
   },
 ];
