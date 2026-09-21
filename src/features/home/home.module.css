@@ -607,15 +607,17 @@
 .inlineTimes label > select { width: 100%; min-height: 42px; padding: 6px 29px 6px 8px; border: 1px solid #eadfe5; border-radius: 11px; appearance: none; -webkit-appearance: none; background: #fff; color: #6f5867; font-size: 16px; font-weight: 600; }
 .inlineTimes label > svg { position: absolute; right: 9px; bottom: 13px; color: #bd7798; pointer-events: none; }
 .inlineTimes > span { align-self: center; color: #bba5b3; }
-.transportPicker { min-width: 0; padding: 10px 11px 11px; border: 1px solid #ebdfe6; border-radius: 20px; background: linear-gradient(145deg, #fff 0%, #fff9fb 100%); box-shadow: 0 7px 24px #7653650a; }
-.transportPicker legend { padding: 0 3px; color: #8f7887; font-size: 10px; font-weight: 650; }
-.transportPicker > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
-.transportPicker button { position: relative; display: flex; min-width: 0; min-height: 58px; align-items: center; justify-content: center; gap: 3px; padding: 5px 4px; border: 1px solid #eee3e9; border-radius: 15px; background: #fff; color: #806b78; font-size: 10px; transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease; }
+.transportPicker { min-width: 0; padding: 11px; border: 1px solid #ebdfe6; border-radius: 20px; background: linear-gradient(145deg, #fff 0%, #fff9fb 100%); box-shadow: 0 7px 24px #7653650a; }
+.transportHeading { margin: 0 2px 8px; color: #806b78; font-size: 11px; font-weight: 650; }
+.transportPicker > div { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, .82fr) minmax(0, 1.28fr); gap: 7px; }
+.transportPicker button { position: relative; display: flex; min-width: 0; min-height: 58px; align-items: center; justify-content: flex-start; gap: 5px; padding: 7px 7px 7px 6px; border: 2px solid transparent; border-radius: 15px; background: #fff; color: #806b78; text-align: left; transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease, padding .18s ease; box-shadow: 0 3px 15px #7455660b; }
 .transportPicker button:active { transform: scale(.96); }
-.transportPicker button > span { display: grid; width: 36px; height: 38px; flex: 0 0 36px; place-items: center; }
-.transportPicker button > span svg { width: 36px; height: 38px; }
-.transportPicker button > svg { position: absolute; top: 5px; right: 5px; }
-.transportPicker button[aria-pressed="true"] { border-color: #d58aa7; background: linear-gradient(145deg, #fff8fb, #f8efff); color: #9a5275; font-weight: 700; box-shadow: 0 4px 12px #a8587b1c; }
+.transportPicker button strong { overflow: hidden; font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.transportIcon { display: grid; width: 34px; height: 36px; flex: 0 0 34px; place-items: center; }
+.transportIcon svg { width: 34px; height: 36px; }
+.transportCheck { position: absolute; top: 6px; right: 6px; display: grid; width: 20px; height: 20px; place-items: center; border: 1.5px solid #fff; border-radius: 50%; background: #ffffffa8; color: transparent; }
+.transportPicker button[aria-pressed="true"] { padding-right: 24px; border-color: #cb7999; background: #fff0f5; color: #9a5275; box-shadow: 0 3px 15px #7455660b; }
+.transportPicker button[aria-pressed="true"] .transportCheck { color: #fff; background: linear-gradient(135deg, #ea7096 0%, #f09ab1 54%, #aa95da 100%); box-shadow: 0 2px 7px #e979a64d; }
 .meetingCard { position: relative; border: 1px solid #ebdfe6; border-radius: 20px; background: linear-gradient(145deg, #fff, #fffafb); padding: 12px; box-shadow: 0 7px 24px #7653650a; }
 .routePath { position: absolute; z-index: 0; top: 34px; left: 0; width: 35px; height: calc(100% - 9px); overflow: visible; pointer-events: none; }
 .routePath path { fill: none; stroke: #ad876f; stroke-width: 3; stroke-linecap: round; stroke-dasharray: 1 9; vector-effect: non-scaling-stroke; filter: drop-shadow(0 1px 0 #fff); }

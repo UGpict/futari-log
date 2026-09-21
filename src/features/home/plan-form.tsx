@@ -542,13 +542,14 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
           </section>
           {!timingValid && <p className={styles.error} role="alert">終了は開始よりあとの時刻にしてね。</p>}
           <fieldset className={styles.transportPicker}>
-            <legend>移動手段</legend>
+            <legend className="sr-only">移動手段</legend>
+            <p className={styles.transportHeading}>移動手段</p>
             <div>
               {([
                 ["WALK", "徒歩", "walk"],
                 ["DRIVE", "車", "drive"],
                 ["TRANSIT", "交通機関", "transit"],
-              ] as const).map(([value, label, icon]) => <button type="button" key={value} aria-pressed={form.travelMode === value} onClick={() => setForm({ ...form, travelMode: value })}><span><PlanStickerIcon kind={icon} /></span>{label}{form.travelMode === value && <Check size={13} />}</button>)}
+              ] as const).map(([value, label, icon]) => <button type="button" key={value} aria-pressed={form.travelMode === value} onClick={() => setForm({ ...form, travelMode: value })}><span className={styles.transportIcon}><PlanStickerIcon kind={icon} /></span><strong>{label}</strong><span className={styles.transportCheck} aria-hidden="true">{form.travelMode === value && <Check size={13} />}</span></button>)}
             </div>
           </fieldset>
           <section className={styles.scheduleSection} aria-label="集合と解散">
