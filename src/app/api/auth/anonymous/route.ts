@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getEnv } from "@/config/env";
-import { issueAnonymous, tokenCookieName } from "@/server/auth";
+import { issueAnonymous, sessionCookieOptions, tokenCookieName } from "@/server/auth";
 
 export async function POST() {
   const env = getEnv();
@@ -12,12 +12,6 @@ export async function POST() {
     dataBackend: env.dataBackend,
     emulator: env.emulator,
   });
-  res.cookies.set(tokenCookieName(), token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: env.cookieSecure,
-    path: "/",
-    maxAge: 60 * 60 * 24 * 14,
-  });
+  res.cookies.set(tokenCookieName(), token, sessionCookieOptions(env));
   return res;
 }

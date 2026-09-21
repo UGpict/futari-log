@@ -38,6 +38,17 @@ export async function fixtureResponse<T>(path: string, init?: RequestInit): Prom
   if (url === "/api/auth/anonymous" && method === "POST") {
     return { uid: fixtureMe.uid, runtime: "MOCK" } as T;
   }
+  if (url === "/api/auth/session" && method === "POST") {
+    return {
+      uid: fixtureMe.uid,
+      runtime: "MOCK",
+      isAnonymous: fixtureMe.isAnonymous,
+      authProviders: fixtureMe.authProviders,
+    } as T;
+  }
+  if (url === "/api/auth/logout" && method === "POST") {
+    return { ok: true } as T;
+  }
   if (url === "/api/places/search" && method === "GET") {
     const q = (path.split("?")[1] ? new URLSearchParams(path.split("?")[1]).get("q") : "") ?? "";
     const places = [

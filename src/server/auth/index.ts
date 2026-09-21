@@ -115,6 +115,67 @@ export async function verifyToken(token: string | null | undefined): Promise<str
   }
 }
 
+export type AuthIdentity = {
+  uid: string;
+  isAnonymous: boolean;
+  authProviders: string[];
+};
+
+function identityFromProviderData(
+  uid: string,
+  providerData: { providerId: string }[],
+): AuthIdentity {
+  const authProviders =
+    providerData.length === 0 ? ["anonymous"] : providerData.map((p) => p.providerId);
+  const isAnonymous = !authProviders.some((p) => p !== "anonymous");
+  return { uid, isAnonymous, authProviders };
+}
+
+export async function resolveAuthIdentity(uid: string): Promise<AuthIdentity> {
+  const env = getEnv();
+  if (env.authBackend !== "firebase" || !hasAdminCredentials()) {
+    return { uid, isAnonymous: true, authProviders: ["anonymous"] };
+  }
+  try {
+    const user = await adminAuth().getUser(uid);
+    return identityFromProviderData(uid, user.providerData);
+  } catch {
+    return { uid, isAnonymous: true, authProviders: ["anonymous"] };
+  }
+}
+
+/**
+ * Exchange a Firebase ID token for an httpOnly session cookie.
+ * Returns null when the token is invalid or credentials are unavailable.
+ */
+export async function issueSessionFromIdToken(
+  idToken: string,
+): Promise<{ uid: string; token: string; identity: AuthIdentity } | null> {
+  if (!idToken || idToken.startsWith("mock.")) return null;
+  const env = getEnv();
+  if (env.authBackend !== "firebase") return null;
+  if (!hasAdminCredentials()) return null;
+
+  try {
+    const decoded = await adminAuth().verifyIdToken(idToken, true);
+    const token = await adminAuth().createSessionCookie(idToken, { expiresIn: SESSION_MS });
+    const identity = await resolveAuthIdentity(decoded.uid);
+    return { uid: decoded.uid, token, identity };
+  } catch {
+    return null;
+  }
+}
+
+export function sessionCookieOptions(env: { cookieSecure: boolean }) {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: env.cookieSecure,
+    path: "/",
+    maxAge: 60 * 60 * 24 * 14,
+  };
+}
+
 export async function issueAnonymous(): Promise<{ uid: string; token: string }> {
   const env = getEnv();
   if (env.authBackend === "firebase") {

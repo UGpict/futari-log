@@ -256,6 +256,8 @@ export const fixtureMe: MeResponse = {
   demoDate: "2026-09-19",
   demoLat: 35.681236,
   demoLng: 139.767125,
+  isAnonymous: true,
+  authProviders: ["anonymous"],
   blockers: [{ code: "VENUE", item: "発表会場の住所は未提供。検索中心は東京駅周辺（会場そのものではない）" }],
 };
 
