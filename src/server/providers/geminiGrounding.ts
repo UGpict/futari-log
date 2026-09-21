@@ -110,33 +110,8 @@ export async function attachSpotImages(args: {
     for (const ev of places.evidence) evidence[ev.id] = ev;
   }
 
-  const targets = Object.values(spots).filter((s) => !s.imageUrl).slice(0, 4);
-  if (env.geminiVia && targets.length) {
-    const grounded = await groundedFromGemini({
-      ctx: args.ctx,
-      spots: targets,
-      areaName: args.areaName,
-      via: env.geminiVia,
-      orcaBaseUrl: env.orcaBaseUrl,
-      orcaApiKey: env.orcaApiKey,
-      googleApiKey: env.geminiApiKey,
-      model: env.geminiModel,
-      signal: args.signal,
-    });
-    queries = grounded.queries;
-    searchEntryPointHtml = grounded.searchEntryPointHtml;
-    for (const ev of grounded.evidence) evidence[ev.id] = ev;
-    for (const img of grounded.images) {
-      const spot = spots[img.spotId];
-      if (!spot) continue;
-      spots[img.spotId] = {
-        ...spot,
-        imageUrl: img.imageUrl,
-        imageSourceUrl: img.imageSourceUrl,
-        imageProvider: img.provider,
-      };
-    }
-  }
+  // Places で写真が無いスポットはプレースホルダのまま。
+  // groundedFromGemini は同期の初回プラン経路では呼ばない（関数は残す）。
 
   for (const spot of Object.values(spots)) {
     if (spot.imageUrl || !spot.officialUrl) continue;

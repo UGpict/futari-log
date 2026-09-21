@@ -292,9 +292,7 @@ export async function executeRun(
       await appendEvent(
         runId,
         "HTTP_ATTEMPT",
-        imaged.queries.length
-          ? `Gemini grounding でスポット画像 ${Object.values(imaged.spots).filter((s) => s.imageUrl).length} 件`
-          : "スポット画像（Gemini 未設定または未ヒット）",
+        "スポット画像（Places。未取得はプレースホルダ。Gemini grounding は同期では呼ばない）",
         {
           payload: { queries: imaged.queries, providers: Object.values(imaged.spots).map((s) => s.imageProvider) },
         },
