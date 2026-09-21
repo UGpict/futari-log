@@ -413,6 +413,9 @@ export async function orchestratePlanning(input: {
     memories,
     spotIds: [...new Set([...planned.selected, ...orderedSpotIds])],
     spots: spotMap,
+    uid: input.session.ownerUid,
+    sessionId: input.session.id,
+    sessionStatus: input.session.status,
   });
 
   await input.log("travel", "TOOL_STARTED", "区間の移動時間を調べる");
@@ -503,6 +506,9 @@ export async function orchestratePlanning(input: {
       memories,
       spotIds: retryIds,
       spots: { ...detailed.spots, ...built.spots },
+      uid: input.session.ownerUid,
+      sessionId: input.session.id,
+      sessionStatus: input.session.status,
     });
     built = await buildPlan({
       version: (current?.version ?? 0) + 1,
