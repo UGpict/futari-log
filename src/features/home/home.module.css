@@ -160,18 +160,28 @@
 .closeConfirmActions button:last-child { border-color: transparent; color: #fff; background: #cf7096; }
 
 .sheetDescription { margin-bottom: 15px; font-size: 12px; color: #8b8190; line-height: 1.9; }
-.feedbackForm { display: flex; flex-direction: column; gap: 19px; }
+.feedbackForm { display: flex; flex-direction: column; gap: 14px; }
 .feedbackIntro { text-align: center; }
 .eyebrow { display: block; color: #a384a5; font-size: 12px; font-weight: 500; letter-spacing: .08em; }
 .feedbackIntro h3 { font-size: 19px; font-weight: 600; margin: 7px 0; }
 .feedbackIntro p { font-size: 11px; color: var(--text-muted); }
-.moodPicker { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; border: 0; margin: 0 -9px; }
-.moodOption { position: relative; display: flex; flex-direction: column; align-items: center; min-width: 0; padding: 5px 1px 9px; cursor: pointer; border: 1.5px solid transparent; border-radius: 17px; }
+.reflectionEditorCard { padding: 12px 10px 10px; border: 1px solid #ebdfe6; border-radius: 20px; background: linear-gradient(145deg, #fff 0%, #fff9fb 100%); box-shadow: 0 7px 24px #7653650a; }
+.reflectionCardHeading, .recordSectionHeading { display: flex; align-items: center; gap: 8px; text-align: left; }
+.reflectionCardHeading > span, .recordSectionHeading > span { display: grid; width: 32px; height: 32px; flex: 0 0 32px; place-items: center; border-radius: 11px; color: #bd668b; background: linear-gradient(145deg, #fff0f5, #f4efff); box-shadow: 0 3px 10px #76536512; }
+.reflectionCardHeading > div, .recordSectionHeading > div { display: grid; gap: 1px; }
+.reflectionCardHeading strong, .recordSectionHeading strong { color: #705867; font-size: 12px; font-weight: 700; }
+.reflectionCardHeading small, .recordSectionHeading small { color: #a08c99; font-size: 9px; }
+.moodPicker { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; border: 0; margin: 9px -2px 0; }
+.moodOption { position: relative; display: flex; flex-direction: column; align-items: center; min-width: 0; padding: 5px 1px 9px; cursor: pointer; border: 2px solid transparent; border-radius: 17px; background: #fff; box-shadow: 0 3px 12px #7653650d; }
 .moodOption svg { width: 100%; max-width: 80px; }
 .moodOption span { font-size: 9px; letter-spacing: -.04em; white-space: nowrap; }
-.moodSelected { background: #fff0f5; border-color: #efa4bb; }
+.moodSelected { background: #fff0f5; border-color: #cb7999; }
 .moodOption:has(input:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-.moodOption .moodCheck { position: absolute; top: 0; right: 1px; width: 16px; height: 16px; padding: 2px; border-radius: 50%; color: #fff; background: #e783a6; }
+.moodOption .moodCheck { position: absolute; top: 4px; right: 4px; display: grid; width: 19px; height: 19px; place-items: center; border: 1.5px solid #fff; border-radius: 50%; color: transparent; background: #ffffffa8; }
+.moodOption.moodSelected .moodCheck { color: #fff; background: linear-gradient(135deg, #ea7096 0%, #f09ab1 54%, #aa95da 100%); box-shadow: 0 2px 7px #e979a64d; }
+.reflectionFields { display: grid; gap: 9px; }
+.reflectionFieldCard { padding: 12px; border: 1px solid #ebdfe6; border-radius: 18px; background: #fff; box-shadow: 0 5px 18px #7653650a; }
+.reflectionFieldCard input, .reflectionFieldCard textarea { background: #fffdfd; }
 .formLabel { display: block; font-size: 12px; font-weight: 600; }
 .formLabel > span { font-size: 10px; color: #a79aa8; font-weight: 400; margin-left: 5px; }
 .formLabel input, .formLabel textarea { display: block; width: 100%; margin-top: 8px; padding: 12px; border: 1px solid #e7dfe5; border-radius: 12px; color: #625666; background: white; font-size: 16px; font-weight: 400; resize: vertical; }
@@ -728,14 +738,17 @@
 @media (prefers-reduced-motion: reduce) { .stampArrival { animation: none; } }
 
 .page .day:disabled { opacity: 1; cursor: default; transform: none; background: transparent; box-shadow: none; }
-.recordSummary { text-align: center; }
-.recordSummarySticker { display: block; width: 88px; height: 76px; margin: 10px auto 4px; }
+.recordSummary { display: grid; gap: 12px; text-align: center; }
+.recordHero { padding-bottom: 2px; }
+.recordSummarySticker { display: block; width: 88px; height: 76px; margin: 8px auto 3px; }
 .recordMoodLabel { font-size: 11px; color: #a58a9f; }
-.recordSummary h3 { margin: 10px 0; font-size: 17px; font-weight: 600; }
-.recordNote { text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.9; padding: 14px; border-radius: var(--radius-field); background: #f7eff6; margin: 14px 0; }
-.recordSummary .planOpenLink { text-align: left; }
-.recordSummary .planOpenLink small { font-size: 10px; color: #a58a9f; }
-.recordSummary .primaryButton { margin-top: 16px; }
+.recordSummary h3 { margin: 8px 0 0; color: #66505f; font-size: 17px; font-weight: 650; }
+.recordReflectionCard, .recordPlanSection { padding: 13px; border: 1px solid #ebdfe6; border-radius: 20px; background: #fff; box-shadow: 0 7px 24px #7653650a; }
+.recordReflectionCard { background: linear-gradient(145deg, #fff 0%, #fffaf7 100%); }
+.recordNote { margin: 12px 2px 1px; color: #705e69; font-size: 13px; line-height: 1.85; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
+.recordPlanSection .planOpenLink { margin: 10px 0 0; border-radius: 14px; text-align: left; box-shadow: 0 3px 12px #7653650a; }
+.recordPlanSection .planOpenLink span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recordEditButton { margin-top: 2px; }
 
 /* Keep the heart visually centered without shifting the date or today's underline. */
 .heartOffset, .plannedSticker { translate: 2px 0; }

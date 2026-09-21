@@ -70,26 +70,31 @@ function FeedbackEditor({ date, record, onSave }: {
     <form className={styles.feedbackForm} onSubmit={submit}>
       <div className={styles.feedbackIntro}>
         <span className={styles.eyebrow}>{dateLabel(date)}</span>
-        <h3>相手はどんな様子だった？</h3>
-        <p>印象に近いスタンプを選んで、振り返りを完了しよう。</p>
+        <h3>この日のことを残そう</h3>
+        <p>ふたりの一日を、スタンプと言葉で振り返ります。</p>
       </div>
-      <fieldset className={styles.moodPicker}>
-        <legend className="sr-only">相手の様子</legend>
-        {moods.map((item) => (
-          <label key={item.id} className={`${styles.moodOption} ${mood === item.id ? styles.moodSelected : ""}`}>
-            <input className="sr-only" type="radio" name="mood" value={item.id} checked={mood === item.id} onChange={() => setMood(item.id)} required />
-            <MoodSticker mood={item.id} />
-            <span>{item.label}</span>
-            {mood === item.id && <Check className={styles.moodCheck} size={14} />}
-          </label>
-        ))}
-      </fieldset>
-      <label className={styles.formLabel}>この日のタイトル <span>任意</span>
-        <TextInput value={title} maxLength={60} onChange={(event) => setTitle(event.target.value)} placeholder="カフェで過ごした、のんびりな午後" />
-      </label>
-      <label className={styles.formLabel}>どんな場面で、そう感じた？ <span>任意</span>
-        <TextArea value={note} maxLength={500} rows={3} onChange={(event) => setNote(event.target.value)} placeholder="カフェで「また来たい」と言っていた。散歩の途中は少し疲れていそうだった。" />
-      </label>
+      <section className={styles.reflectionEditorCard}>
+        <div className={styles.reflectionCardHeading}><span><NotebookPen size={17} /></span><div><strong>相手はどんな様子だった？</strong><small>いちばん近いスタンプをひとつ</small></div></div>
+        <fieldset className={styles.moodPicker}>
+          <legend className="sr-only">相手の様子</legend>
+          {moods.map((item) => (
+            <label key={item.id} className={`${styles.moodOption} ${mood === item.id ? styles.moodSelected : ""}`}>
+              <input className="sr-only" type="radio" name="mood" value={item.id} checked={mood === item.id} onChange={() => setMood(item.id)} required />
+              <MoodSticker mood={item.id} />
+              <span>{item.label}</span>
+              <span className={styles.moodCheck} aria-hidden="true">{mood === item.id && <Check size={13} />}</span>
+            </label>
+          ))}
+        </fieldset>
+      </section>
+      <div className={styles.reflectionFields}>
+        <label className={`${styles.formLabel} ${styles.reflectionFieldCard}`}>この日のタイトル <span>任意</span>
+          <TextInput value={title} maxLength={60} onChange={(event) => setTitle(event.target.value)} placeholder="カフェで過ごした、のんびりな午後" />
+        </label>
+        <label className={`${styles.formLabel} ${styles.reflectionFieldCard}`}>この日のこと <span>任意</span>
+          <TextArea value={note} maxLength={500} rows={3} onChange={(event) => setNote(event.target.value)} placeholder="楽しかった場面や、相手の様子を残しておこう" />
+        </label>
+      </div>
       {error && <p className={styles.error} role="alert">{error}</p>}
       <Button fullWidth className={styles.primaryButton} type="submit" disabled={!mood || saving}><Check size={20} />{saving ? "保存しています…" : record ? "スタンプと記録を更新する" : "振り返りを完了してスタンプを押す"}</Button>
       <p className={styles.localNote}>この端末のブラウザに保存されます。</p>
@@ -332,14 +337,11 @@ export function HomeScreen() {
       {selectedDate && !showCreatePrompt && (
         <HomeSheet key={selectedDate} title={reflecting ? "今回のデート、どうだった？" : recordsByDate.has(selectedDate) ? "あの日の記録" : "ふたりの一日"} onClose={() => setSelectedDate(null)}>
           {selectedRecord && !reflecting ? <div className={styles.recordSummary}>
-            <span className={styles.eyebrow}>{dateLabel(selectedDate)}</span>
-            <MoodSticker mood={selectedRecord.mood} className={styles.recordSummarySticker} />
-            <span className={styles.recordMoodLabel}>{moods.find((mood) => mood.id === selectedRecord.mood)?.label}</span>
-            <h3>{selectedRecord.title}</h3>
-            {selectedRecord.note && <p className={styles.recordNote}>{selectedRecord.note}</p>}
-            {selectedPlans.map((plan) => <Link key={plan.id} className={styles.planOpenLink} href={`/sessions/${plan.id}`}><span>この日のプランを見る<br /><small>{plan.title}</small></span><ChevronRight size={17} /></Link>)}
+            <header className={styles.recordHero}><span className={styles.eyebrow}>{dateLabel(selectedDate)}</span><MoodSticker mood={selectedRecord.mood} className={styles.recordSummarySticker} /><span className={styles.recordMoodLabel}>{moods.find((mood) => mood.id === selectedRecord.mood)?.label}</span><h3>{selectedRecord.title}</h3></header>
+            {selectedRecord.note && <section className={styles.recordReflectionCard}><div className={styles.recordSectionHeading}><span><NotebookPen size={16} /></span><div><small>ふたりの振り返り</small><strong>この日のこと</strong></div></div><p className={styles.recordNote}>{selectedRecord.note}</p></section>}
+            {selectedPlans.length > 0 && <section className={styles.recordPlanSection}><div className={styles.recordSectionHeading}><span><CalendarHeart size={16} /></span><div><small>関連するプラン</small><strong>この日のプラン</strong></div></div>{selectedPlans.map((plan) => <Link key={plan.id} className={styles.planOpenLink} href={`/sessions/${plan.id}`}><span>{plan.title}</span><ChevronRight size={17} /></Link>)}</section>}
             {!selectedPlans.length && <p className={styles.localNote}>この記録に紐づくプランはありません。</p>}
-            <Button fullWidth type="button" className={styles.primaryButton} onClick={() => setReflecting(true)}>振り返りを編集する<ChevronRight size={17} /></Button>
+            <Button fullWidth variant="secondary" type="button" className={styles.recordEditButton} onClick={() => setReflecting(true)}>振り返りを編集する<ChevronRight size={17} /></Button>
           </div> : selectedPlans.length > 0 && !reflecting ? <div className={styles.plannedDay}>
             <span className={styles.eyebrow}>{dateLabel(selectedDate)}</span>
             {selectedPlans.map((plan) => {
