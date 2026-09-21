@@ -246,7 +246,21 @@ export async function callLLM<T>(input: {
       };
     };
     const content = json.choices?.[0]?.message?.content ?? "";
-    const classified = classifyLlmJsonAgainstSchema(content, input.schema);
+    let classified = classifyLlmJsonAgainstSchema(content, input.schema);
+    // Fence / embedded object: same extractor as callOrcaJson (no schema relaxation).
+    if (classified.kind === "json_parse_failed") {
+      const extracted = extractJsonObject(content);
+      if (extracted != null) {
+        const checked = input.schema.safeParse(extracted);
+        classified = checked.success
+          ? { kind: null, data: checked.data, zodFlatten: null }
+          : {
+              kind: "schema_validation_failed",
+              data: null,
+              zodFlatten: checked.error.flatten(),
+            };
+      }
+    }
     const usage = usageFromOrca(json);
     const resolvedModel = json.model ?? actualModel;
     if (classified.kind) {
@@ -379,7 +393,8 @@ export async function callOrcaJson<T>(input: {
   };
 }
 
-function extractJsonObject(content: string): unknown {
+/** Shared by callLLM and callOrcaJson: fenced or embedded JSON object/array. */
+export function extractJsonObject(content: string): unknown {
   const fence = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = fence?.[1] ?? content;
   const start = candidate.indexOf("{");

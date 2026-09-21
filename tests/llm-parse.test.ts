@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { z } from "zod";
 import {
   classifyLlmJsonAgainstSchema,
+  extractJsonObject,
   LLM_FAILURE_CONTENT_CHARS,
   previewMaskedLlmContent,
 } from "../src/server/llm/index";
@@ -26,6 +27,16 @@ describe("classifyLlmJsonAgainstSchema", () => {
     const ok = classifyLlmJsonAgainstSchema(JSON.stringify({ action: "DONE" }), tiny);
     assert.equal(ok.kind, null);
     assert.equal(ok.data?.action, "DONE");
+  });
+});
+
+describe("extractJsonObject", () => {
+  it("pulls fenced and embedded JSON without relaxing schema", () => {
+    const fenced = extractJsonObject('Sure.\n```json\n{"action":"DONE"}\n```\n');
+    assert.deepEqual(fenced, { action: "DONE" });
+    const embedded = extractJsonObject('prefix {"action":"ASK_ONE"} suffix');
+    assert.deepEqual(embedded, { action: "ASK_ONE" });
+    assert.equal(extractJsonObject("no json here"), null);
   });
 });
 
