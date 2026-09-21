@@ -148,10 +148,10 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
   }
   const [category, setCategory] = useState<string | null>(null);
   const categories = [
-    { id: "food", label: "おいしいもの", subtitle: "好きな味を、ふたりで。", wish: "おいしいものを楽しむデート", position: "0% 0%", question: "何か食べたいもの、ある？", options: [{ label: "お肉", icon: Beef }, { label: "お寿司", icon: Fish }, { label: "イタリアン", icon: Pizza }, { label: "スイーツ", icon: CakeSlice }, { label: "食べ歩き", icon: Utensils }] },
-    { id: "relax", label: "のんびり過ごす", subtitle: "今日は、ふたりのペースで。", wish: "のんびり過ごすデート", position: "100% 0%", question: "どんなふうに、ひと息つこう？", options: [{ label: "カフェ", icon: Coffee }, { label: "公園さんぽ", icon: TreePine }, { label: "海を眺める", icon: Waves }, { label: "ピクニック", icon: Sandwich }, { label: "温泉", icon: Flame }] },
-    { id: "play", label: "遊びにいく", subtitle: "一緒なら、もっと楽しい。", wish: "遊びや体験を楽しむデート", position: "0% 100%", question: "気になる遊びは、ある？", options: [{ label: "水族館", icon: Fish }, { label: "映画", icon: Film }, { label: "動物園", icon: PawPrint }, { label: "遊園地", icon: Gamepad2 }, { label: "ものづくり体験", icon: Palette }] },
-    { id: "town", label: "街をぶらぶら", subtitle: "寄り道から、小さな発見。", wish: "街歩きや寄り道を楽しむデート", position: "100% 100%", question: "どんな寄り道をしよう？", options: [{ label: "ショッピング", icon: ShoppingBag }, { label: "雑貨屋めぐり", icon: Store }, { label: "美術館・展示", icon: Landmark }, { label: "本屋めぐり", icon: BookOpen }, { label: "街の写真を撮る", icon: Camera }] },
+    { id: "food", label: "おいしいもの", subtitle: "好きな味を、ふたりで。", wish: "おいしいものを楽しむデート", position: "0% 0%", options: [{ label: "お肉", icon: Beef }, { label: "お寿司", icon: Fish }, { label: "イタリアン", icon: Pizza }, { label: "スイーツ", icon: CakeSlice }, { label: "食べ歩き", icon: Utensils }] },
+    { id: "relax", label: "のんびり過ごす", subtitle: "今日は、ふたりのペースで。", wish: "のんびり過ごすデート", position: "100% 0%", options: [{ label: "カフェ", icon: Coffee }, { label: "公園さんぽ", icon: TreePine }, { label: "海を眺める", icon: Waves }, { label: "ピクニック", icon: Sandwich }, { label: "温泉", icon: Flame }] },
+    { id: "play", label: "遊びにいく", subtitle: "一緒なら、もっと楽しい。", wish: "遊びや体験を楽しむデート", position: "0% 100%", options: [{ label: "水族館", icon: Fish }, { label: "映画", icon: Film }, { label: "動物園", icon: PawPrint }, { label: "遊園地", icon: Gamepad2 }, { label: "ものづくり体験", icon: Palette }] },
+    { id: "town", label: "街をぶらぶら", subtitle: "寄り道から、小さな発見。", wish: "街歩きや寄り道を楽しむデート", position: "100% 100%", options: [{ label: "ショッピング", icon: ShoppingBag }, { label: "雑貨屋めぐり", icon: Store }, { label: "美術館・展示", icon: Landmark }, { label: "本屋めぐり", icon: BookOpen }, { label: "街の写真を撮る", icon: Camera }] },
   ];
   const currentCategory = categories.find((item) => item.id === category) as (typeof categories)[number] | undefined;
   useEffect(() => {
@@ -388,11 +388,10 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
           {!showCategories && currentCategory && <div className={styles.dateDetails} key={currentCategory.id}>
             <button type="button" className={styles.categorySummary} aria-label={`気分を選び直す（現在：${currentCategory.label}）`} onClick={() => setShowCategories(true)}>
               <span className={styles.categorySummaryBack}><ChevronLeft size={18} /></span>
-              <strong>{currentCategory.label}</strong>
               <span className={styles.categoryThumbnail} style={{ backgroundPosition: currentCategory.position }} aria-hidden="true" />
+              <strong>{currentCategory.label}</strong>
+              <small>複数選択可</small>
             </button>
-            <h4 className={styles.categoryQuestion}>{currentCategory.question}</h4>
-            <p className={styles.planHint}>選ばずにおまかせでもOK・複数選択可</p>
             <div ref={optionCarouselRef} className={`${styles.planChips} ${styles.optionCarousel}`} data-dragging={draggingOptions} data-more-right={moreOptionsRight} aria-label="気になること（任意）" tabIndex={0} onScroll={updateOptionScroll}
               onPointerDown={startOptionDrag} onPointerMove={moveOptionDrag} onPointerUp={endOptionDrag} onPointerCancel={endOptionDrag}
               onClickCapture={(event) => {
