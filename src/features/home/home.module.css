@@ -602,30 +602,34 @@
 .timePresets[data-has-selection="true"] .timePresetIndicator { opacity: 1; }
 .timePresets button { position: relative; display: flex; min-width: 0; min-height: 42px; align-items: center; justify-content: center; padding-inline: 3px; border-radius: 999px; font-size: 11px; color: #98818f; transition: color .22s ease, transform .18s ease; }
 .timePresets button[aria-pressed="true"] { color: #fff; font-weight: 650; }
-.inlineTimes { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; gap: 8px; margin-top: 10px; }
+.inlineTimes { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; margin-top: 10px; }
 .inlineTimes label { position: relative; display: flex; min-width: 0; flex-direction: column; gap: 3px; color: #a08c99; font-size: 9px; }
 .inlineTimes label > select { width: 100%; min-height: 42px; padding: 6px 29px 6px 8px; border: 1px solid #eadfe5; border-radius: 11px; appearance: none; -webkit-appearance: none; background: #fff; color: #6f5867; font-size: 16px; font-weight: 600; }
 .inlineTimes label > svg { position: absolute; right: 9px; bottom: 13px; color: #bd7798; pointer-events: none; }
 .inlineTimes > span { align-self: center; color: #bba5b3; }
 .meetingCard { position: relative; border: 1px solid #ebdfe6; border-radius: 20px; background: linear-gradient(145deg, #fff, #fffafb); padding: 12px; box-shadow: 0 7px 24px #7653650a; }
 .routePath { position: absolute; z-index: 0; top: 34px; bottom: -34px; left: 0; width: 35px; height: calc(100% - 0px); overflow: visible; pointer-events: none; }
-.routePath path { fill: none; stroke: #8fa89b; stroke-width: 3; stroke-linecap: round; stroke-dasharray: 1 9; vector-effect: non-scaling-stroke; filter: drop-shadow(0 1px 0 #fff); }
+.routePath path { fill: none; stroke: #ad876f; stroke-width: 3; stroke-linecap: round; stroke-dasharray: 1 9; vector-effect: non-scaling-stroke; filter: drop-shadow(0 1px 0 #fff); }
 .routeStart { position: relative; display: grid; grid-template-columns: 35px minmax(0, 1fr); gap: 9px; }
 .routeMarker { position: relative; z-index: 1; display: grid; width: 35px; height: 37px; place-items: center; }
 .routeMarker > svg { display: block; width: 35px; height: 37px; }
 .routeContent { min-width: 0; }
 .routeContent label { display: grid; gap: 2px; }
 .routeContent label > span, .routeEnd summary small { color: #a18c99; font-size: 9px; }
-.meetingCard input { min-height: 32px; border: 0; padding: 2px 0; background: transparent; color: #695362; }
+.meetingCard input { min-height: 35px; border: 0; border-bottom: 1.5px solid #ddcfd7; border-radius: 0; padding: 3px 1px 5px; background: transparent; color: #695362; transition: border-color .18s, box-shadow .18s; }
+.meetingCard input:hover { border-bottom-color: #c7adb9; }
+.meetingCard input:focus { border-bottom-color: #bc7897; box-shadow: 0 2px 0 #bc789726; outline: 0; }
+.meetingCard input::placeholder { color: #ab98a4; opacity: 1; }
 .routeEnd { position: relative; margin-top: 10px; }
 .routeEnd summary { display: grid; grid-template-columns: 35px minmax(0, 1fr) 18px; align-items: center; gap: 9px; min-height: 37px; color: #9d8796; cursor: pointer; list-style: none; }
 .routeEnd summary::-webkit-details-marker { display: none; }
 .routeEnd summary > span:nth-child(2) { display: grid; min-width: 0; gap: 1px; }
 .routeEnd summary strong { overflow: hidden; color: #715968; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.routeEnd[open] summary strong { display: none; }
 .routeEnd summary > svg { transition: transform .2s ease; }
 .routeEnd[open] summary > svg { transform: rotate(180deg); }
-.routeEndEditor { margin: 6px 0 0 44px; padding: 8px 10px; border-radius: 13px; background: #faf5f8; animation: planEnter .2s ease both; }
-.routeEndEditor input { width: 100%; border-bottom: 1px solid #eadce4; }
+.routeEndEditor { margin: 0 0 0 44px; padding: 0; background: transparent; animation: planEnter .2s ease both; }
+.routeEndEditor input { width: 100%; }
 .placeSuggest { display: grid; gap: 4px; margin: 8px 0 0; max-height: min(240px, 36dvh); overflow: auto; }
 .placeSuggest button { display: grid; gap: 2px; text-align: left; border: 0; border-radius: 12px; padding: 8px 10px; background: #faf6f8; color: #695362; font-size: 12px; }
 .placeSuggest button small { color: #9d8796; font-size: 10px; }

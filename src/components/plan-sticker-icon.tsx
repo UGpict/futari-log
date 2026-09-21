@@ -33,7 +33,6 @@ export function PlanStickerIcon({ kind }: { kind: "time" | "budget" | "spots" | 
         <path d="M23 27Q26 20 32 19" stroke="#bdd1c4" strokeWidth="4" strokeLinecap="round" />
       </>}
       {kind === "calendar" && <>
-        <path d="M20 25H63V67Q63 73 56 73H25Q20 73 20 67Z" fill="#dccfe2" stroke="#fffdfb" strokeWidth="7" />
         <path d="M15 22Q15 16 22 16H57Q64 16 64 22V60Q64 67 57 67H22Q15 67 15 60Z" fill="#fff8f2" stroke="#fffdfb" strokeWidth="7" />
         <path d="M15 22Q15 16 22 16H57Q64 16 64 22V33H15Z" fill="#dc7b72" />
         <path d="M27 11V23M52 11V23" stroke="#a9605f" strokeWidth="7" strokeLinecap="round" />

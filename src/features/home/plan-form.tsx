@@ -116,7 +116,13 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
       const bottom = (viewport?.offsetTop ?? 0) + (viewport?.height ?? window.innerHeight) - 16;
       const rect = field.getBoundingClientRect();
       const delta = rect.top < top ? rect.top - top : Math.max(0, rect.bottom - bottom);
-      if (Math.abs(delta) > 1) window.scrollBy({ top: delta, behavior: "instant" });
+      if (Math.abs(delta) > 1) {
+        followingFocus = false;
+        window.scrollBy({
+          top: delta,
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+        });
+      }
     };
     const schedule = () => {
       if (!followingFocus) return;
@@ -505,7 +511,7 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
               <span className={styles.timePresetIndicator} aria-hidden="true" />
               {timePresets.map((item) => <button type="button" key={item.label} aria-pressed={form.startTime === item.start && form.endTime === item.end} onClick={() => setForm({ ...form, startTime: item.start, endTime: item.end })}>{item.label}</button>)}
             </div>
-            <div className={styles.inlineTimes}><label><span>開始</span><SelectInput aria-label="開始時刻" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</SelectInput><ChevronDown size={16} aria-hidden="true" /></label><span>〜</span><label><span>終了</span><SelectInput aria-label="終了時刻" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</SelectInput><ChevronDown size={16} aria-hidden="true" /></label></div>
+            <div className={styles.inlineTimes}><label><SelectInput aria-label="開始時刻" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</SelectInput><ChevronDown size={16} aria-hidden="true" /></label><span>〜</span><label><SelectInput aria-label="終了時刻" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</SelectInput><ChevronDown size={16} aria-hidden="true" /></label></div>
           </fieldset>
             </div>
           </section>
