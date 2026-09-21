@@ -1,6 +1,14 @@
 import { LIMITS } from "@/config/settings";
 import type { Spot } from "@/domain/schemas";
-import { getSpotDetails, type PlaceHoursRule, type ProviderCtx } from "@/server/providers";
+import {
+  asSpotOpeningHours,
+  emptySpotOpeningHours,
+  getSpotDetails,
+  hasOpeningData,
+  type PlaceHoursRule,
+  type ProviderCtx,
+  type SpotOpeningHours,
+} from "@/server/providers";
 import { getCatalogSpot } from "@/server/providers/catalog";
 import { dailyFresh, remember } from "./memory";
 import type { AgentLog, AgentMemories } from "./types";
@@ -8,7 +16,7 @@ import type { AgentLog, AgentMemories } from "./types";
 type PlaceDaily = {
   fetchedAt: string;
   spot?: Spot;
-  hours?: PlaceHoursRule[];
+  hours?: SpotOpeningHours | PlaceHoursRule[];
   cost?: { min: number; max: number } | null;
   name?: string;
 };
@@ -19,9 +27,12 @@ export async function runPlace(input: {
   memories: AgentMemories;
   spotIds: string[];
   spots: Record<string, Spot>;
-}): Promise<{ spots: Record<string, Spot>; hours: Record<string, PlaceHoursRule[]> }> {
+}): Promise<{ spots: Record<string, Spot>; hours: Record<string, SpotOpeningHours> }> {
   await input.log("place", "TOOL_STARTED", "営業と料金を調べる");
-  const hours: Record<string, PlaceHoursRule[]> = { ...(input.ctx.placeHours ?? {}) };
+  const hours: Record<string, SpotOpeningHours> = {};
+  for (const [id, raw] of Object.entries(input.ctx.placeHours ?? {})) {
+    hours[id] = asSpotOpeningHours(raw);
+  }
   const spots = { ...input.spots };
   const ids = input.spotIds.filter(Boolean).slice(0, LIMITS.maxDetailCandidates);
   let fetched = 0;
@@ -31,7 +42,7 @@ export async function runPlace(input: {
     const remembered = input.memories.place?.facts[`spot:${id}`] as PlaceDaily | undefined;
     if (remembered?.spot && dailyFresh(remembered.fetchedAt)) {
       spots[id] = remembered.spot;
-      hours[id] = remembered.hours ?? [];
+      hours[id] = asSpotOpeningHours(remembered.hours);
       reused += 1;
       continue;
     }
@@ -40,11 +51,13 @@ export async function runPlace(input: {
     fetched += 1;
     if (details.spot) spots[id] = details.spot;
     const catalog = getCatalogSpot(id);
-    const resolvedHours = details.hours.length
+    const resolvedHours = hasOpeningData(details.hours)
       ? details.hours
-      : remembered?.hours?.length
-        ? remembered.hours
-        : (catalog?.hours ?? []);
+      : remembered?.hours
+        ? asSpotOpeningHours(remembered.hours)
+        : catalog
+          ? { regular: catalog.hours, dated: catalog.datedHours ?? {} }
+          : emptySpotOpeningHours();
     hours[id] = resolvedHours;
     if (details.spot && details.spot.costForTwoJpy.value == null && remembered?.cost) {
       details.spot.costForTwoJpy = {
@@ -54,7 +67,7 @@ export async function runPlace(input: {
       spots[id] = details.spot;
     }
     remember(input.memories, "place", {
-      note: `${details.spot?.name ?? id} 営業${resolvedHours.length ? "取得" : "不明"} 料金${
+      note: `${details.spot?.name ?? id} 営業${hasOpeningData(resolvedHours) ? "取得" : "不明"} 料金${
         spots[id]?.costForTwoJpy.value ? "取得" : "不明"
       }`,
       factKey: `spot:${id}`,

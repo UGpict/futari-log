@@ -25,14 +25,27 @@ import {
 import { getEvent, getVenue } from "@/server/catalog/repo";
 import { catalogEventToSpot, venueHours } from "@/server/catalog/toSpot";
 import {
-  assessHours,
+  assessSpotOpening,
+  asSpotOpeningHours,
+  emptySpotOpeningHours,
+  hasOpeningData,
+  parseCurrentDatedHours,
   parsePlaceHours,
   parseYenRange,
   type PlaceHoursRule,
+  type SpotOpeningHours,
 } from "./placeFacts";
 import type { ProviderCtx } from "./types";
 
-export type { PlaceHoursRule };
+export type { PlaceHoursRule, SpotOpeningHours };
+export {
+  assessSpotOpening,
+  asSpotOpeningHours,
+  emptySpotOpeningHours,
+  hasOpeningData,
+  parseCurrentDatedHours,
+  parsePlaceHours,
+};
 
 export type { ProviderCtx } from "./types";
 
@@ -153,7 +166,7 @@ export async function searchSpots(
 export type SpotDetails = {
   spot: Spot | null;
   evidence: Evidence[];
-  hours: PlaceHoursRule[];
+  hours: SpotOpeningHours;
 };
 
 export async function getSpotDetails(
@@ -174,7 +187,7 @@ export async function getSpotDetails(
     const venue = event?.venueId ? await getVenue(event.venueId) : null;
     const result: SpotDetails = {
       spot,
-      hours: venueHours(venue),
+      hours: asSpotOpeningHours(venueHours(venue)),
       evidence: [
         evidence({
           kind: event ? "API" : "UNKNOWN",
@@ -197,10 +210,10 @@ export async function getSpotDetails(
   }
   const result = await counted(ctx, "mock-places", async () => {
     const c = getCatalogSpot(args.spotId);
-    if (!c) return { spot: null, evidence: [], hours: [] };
+    if (!c) return { spot: null, evidence: [], hours: emptySpotOpeningHours() };
     return {
       spot: toSpot(c),
-      hours: c.hours,
+      hours: { regular: c.hours, dated: c.datedHours ?? {} },
       evidence: [
         evidence({
           kind: "API",
@@ -489,8 +502,13 @@ export async function checkOpen(
     (o) => o.kind === "SPOT_FULL" && o.target.spotId === args.spotId,
   );
   const result = await counted(ctx, env.runtime === "LIVE" ? "places" : "mock-places", async () => {
-    const hours = ctx.placeHours?.[args.spotId] ?? getCatalogSpot(args.spotId)?.hours;
-    const state = assessHours(hours, args.startAt, args.endAt, toTokyoParts);
+    const catalog = getCatalogSpot(args.spotId);
+    const hours =
+      ctx.placeHours?.[args.spotId] ??
+      (catalog
+        ? { regular: catalog.hours, dated: catalog.datedHours ?? {} }
+        : emptySpotOpeningHours());
+    const state = assessSpotOpening(hours, args.startAt, args.endAt, toTokyoParts);
     return {
       spotId: args.spotId,
       startAt: args.startAt,
@@ -616,6 +634,22 @@ async function liveDetails(
         close?: { day?: number; hour?: number; minute?: number };
       }[];
     };
+    currentOpeningHours?: {
+      periods?: {
+        open?: {
+          day?: number;
+          hour?: number;
+          minute?: number;
+          date?: { year?: number; month?: number; day?: number };
+        };
+        close?: {
+          day?: number;
+          hour?: number;
+          minute?: number;
+          date?: { year?: number; month?: number; day?: number };
+        };
+      }[];
+    };
     priceRange?: {
       startPrice?: { currencyCode?: string; units?: string };
       endPrice?: { currencyCode?: string; units?: string };
@@ -624,7 +658,10 @@ async function liveDetails(
   const fetchedAt = realNowIso();
   const types = placeTypeList(p.primaryType, p.types);
   const envEst = estimateEnvironment(types);
-  const hours = parsePlaceHours(p.regularOpeningHours);
+  const hours: SpotOpeningHours = {
+    regular: parsePlaceHours(p.regularOpeningHours),
+    dated: parseCurrentDatedHours(p.currentOpeningHours),
+  };
   const yen = parseYenRange(p.priceRange);
   const photo = firstPhotoRef(p.photos);
   const imageUrl = photo ? await resolvePhotoMedia(ctx, apiKey, photo.name) : null;
@@ -665,8 +702,8 @@ async function liveDetails(
         fetchedAt,
         validFor: null,
         note: photo
-          ? `Place Details (New) + Place Photos。店舗IDの写真${hours.length ? "・営業時間あり" : "・営業時間なし"}`
-          : `Place Details (New)。photos なし${hours.length ? "・営業時間あり" : "・営業時間なし"}`,
+          ? `Place Details (New) + Place Photos。店舗IDの写真${hasOpeningData(hours) ? "・営業時間あり" : "・営業時間なし"}`
+          : `Place Details (New)。photos なし${hasOpeningData(hours) ? "・営業時間あり" : "・営業時間なし"}`,
       }),
       costEvidence,
     ],

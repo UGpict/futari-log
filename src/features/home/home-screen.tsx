@@ -17,6 +17,7 @@ import { MoodSticker, moods, type Mood } from "@/components/mood-sticker";
 import { HomeSheet } from "./home-sheet";
 import { MemoryScreen } from "@/features/memory/memory-screen";
 import { PlanForm } from "./plan-form";
+import { HOME_SUGGESTION, type PlanFormSeed } from "./home-suggestion";
 import styles from "./home.module.css";
 
 type Panel = "records" | "recommendations" | "memory" | "plan" | null;
@@ -26,11 +27,6 @@ const ideas = [
   { mood: "happy" as const, title: "いつもと違う道を、ふたりで", description: "公園さんぽと、小さな寄り道。", wish: "公園を散歩して、途中でカフェに寄りたい" },
   { mood: "relaxed" as const, title: "雨の日は、アートに会いに", description: "屋内で楽しむ、のんびりデート。", wish: "美術館や屋内の展示を、休憩を挟みながら楽しみたい" },
 ];
-const homeSuggestion = {
-  title: "アートと夜カフェ",
-  area: "清澄白河",
-  wish: "清澄白河で美術館や展示を楽しんだあと、夜カフェでゆっくり話すデートにしたい",
-};
 const nearbyEvents = [
   { id: "odd-exhibition", date: "2026-10-04", dateLabel: "10/4まで", area: "上野エリア", title: "ちょっと不思議なもの展", kicker: "会話が弾む、ユニークな企画展", theme: "exhibition", wish: "上野のちょっと不思議なもの展を見に行くデート", sponsored: false },
   { id: "night-garden", date: "2026-09-23", dateLabel: "9/23–10/4", area: "清澄白河エリア", title: "夜の庭園ライトアップ", kicker: "秋の夜を、ゆっくり散歩", theme: "garden", wish: "清澄白河の夜の庭園ライトアップを組み込んだ、ゆっくり楽しめるデート", sponsored: false },
@@ -110,7 +106,7 @@ export function HomeScreen() {
   const [panel, setPanel] = useState<Panel>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [planDate, setPlanDate] = useState("");
-  const [planWish, setPlanWish] = useState("");
+  const [planSeed, setPlanSeed] = useState<PlanFormSeed | undefined>(undefined);
   const [planStep, setPlanStep] = useState(0);
   const [notice, setNotice] = useState("");
   const [stampedDate, setStampedDate] = useState<string | null>(null);
@@ -126,10 +122,10 @@ export function HomeScreen() {
     setMonthOverride(`${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`);
   }
 
-  function openPlan(date = today, wish = "") {
+  function openPlan(date = today, seed?: PlanFormSeed) {
     setSelectedDate(null);
     setPlanDate(date);
-    setPlanWish(wish);
+    setPlanSeed(seed);
     setPlanStep(0);
     setPanel("plan");
   }
@@ -262,15 +258,22 @@ export function HomeScreen() {
           <button
             type="button"
             className={styles.suggestionCard}
-            onClick={() => openPlan(today, homeSuggestion.wish)}
-            aria-label={`${homeSuggestion.area}で、${homeSuggestion.title}。この案でプランをつくる`}
+            onClick={() =>
+              openPlan(today, {
+                wish: HOME_SUGGESTION.wish,
+                meet: HOME_SUGGESTION.meetPlace,
+                startTime: HOME_SUGGESTION.startTime,
+                endTime: HOME_SUGGESTION.endTime,
+              })
+            }
+            aria-label={`${HOME_SUGGESTION.area}で、${HOME_SUGGESTION.title}。この案でプランをつくる`}
             aria-haspopup="dialog"
           >
             <span className={styles.suggestionPhoto} aria-hidden="true" />
             <span className={styles.suggestionCopy}>
-              <span className={styles.suggestionArea}><MapPin size={12} aria-hidden="true" />{homeSuggestion.area}</span>
-              <strong>{homeSuggestion.title}</strong>
-              <span className={styles.suggestionRoute}>美術館・展示<ArrowRight size={12} aria-hidden="true" />夜カフェ</span>
+              <span className={styles.suggestionArea}><MapPin size={12} aria-hidden="true" />{HOME_SUGGESTION.area}</span>
+              <strong>{HOME_SUGGESTION.title}</strong>
+              <span className={styles.suggestionRoute}>{HOME_SUGGESTION.routeLabels[0]}<ArrowRight size={12} aria-hidden="true" />{HOME_SUGGESTION.routeLabels[1]}</span>
               <span className={styles.suggestionAction}>この案でプランをつくる<ArrowRight size={15} aria-hidden="true" /></span>
             </span>
           </button>
@@ -318,7 +321,7 @@ export function HomeScreen() {
 
         {plansError && <p className={styles.localNote} role="alert">{plansError}</p>}
         {plans.length > 0 && <p className={styles.calendarLegend}><span><MoodSticker mood="happy" /></span>淡いシールは予定。デートのあとに、気持ちを貼ろう。</p>}
-        {isFixture && <section ref={eventSectionRef} className={styles.nearbyEvents} aria-labelledby="nearby-events-title">
+        <section ref={eventSectionRef} className={styles.nearbyEvents} aria-labelledby="nearby-events-title">
           <header><div><h2 id="nearby-events-title">近くのイベントから探す</h2></div><small><MapPin size={11} aria-hidden="true" />東京周辺</small></header>
           <button type="button" className={`${styles.carouselButton} ${styles.carouselPrevious}`} aria-label="前のイベントを見る" disabled={!eventScroll.left} onClick={() => scrollEvents(-1)}><ChevronLeft aria-hidden="true" /></button>
           <div ref={eventCarouselRef} className={styles.eventCarousel} data-dragging={draggingEvents} aria-label="近隣イベント" tabIndex={0} onScroll={updateEventScroll} onPointerDown={startEventDrag} onPointerMove={moveEventDrag} onPointerUp={endEventDrag} onPointerCancel={endEventDrag} onClickCapture={(event) => {
@@ -332,7 +335,7 @@ export function HomeScreen() {
             event.preventDefault();
             carousel.scrollLeft += event.deltaY;
           }}>
-            {nearbyEvents.map((event) => <button type="button" key={event.id} className={styles.eventBanner} data-theme={event.theme} onClick={() => openPlan(event.date, event.wish)} aria-label={`${event.title}、${event.dateLabel}、${event.area}。このイベントでデートをつくる`}>
+            {nearbyEvents.map((event) => <button type="button" key={event.id} className={styles.eventBanner} data-theme={event.theme} onClick={() => openPlan(event.date, { wish: event.wish })} aria-label={`${event.title}、${event.dateLabel}、${event.area}。このイベントでデートをつくる`}>
               <span className={styles.eventArtwork} aria-hidden="true"><span className={styles.eventShade} /></span>
               <span className={styles.eventDetails}>
                 <span className={styles.eventMeta}><span>{event.dateLabel}</span><span><MapPin size={10} />{event.area}</span>{event.sponsored && <span>PR</span>}</span>
@@ -343,7 +346,7 @@ export function HomeScreen() {
           </div>
           <button type="button" className={`${styles.carouselButton} ${styles.carouselNext}`} aria-label="次のイベントを見る" disabled={!eventScroll.right} onClick={() => scrollEvents(1)}><ChevronRight aria-hidden="true" /></button>
           <p className={styles.eventDisclosure}>イベント情報はUI確認用のサンプルです。</p>
-        </section>}
+        </section>
       </main>
       <div className={styles.createDateFab} data-over-events={eventsBehindCreateButton}><DateCreateButton onClick={() => openPlan()} /></div>
 
@@ -378,7 +381,7 @@ export function HomeScreen() {
       )}
 
       {panel && <HomeSheet key={panel} fixedHeight={panel === "memory"} title={panelTitles[panel]} onClose={() => setPanel(null)}>
-        {panel === "plan" && <PlanForm initialDate={planDate || today} initialWish={planWish} onStepChange={setPlanStep} />}
+        {panel === "plan" && <PlanForm key={`${planDate}:${planSeed?.wish ?? ""}:${planSeed?.meet?.id ?? ""}`} initialDate={planDate || today} seed={planSeed} onStepChange={setPlanStep} />}
         {panel === "records" && <div className={styles.recordList}>
           <p className={styles.sheetDescription}>シールひとつに、ふたりの思い出。{isFixture && " 今はサンプルの記録を表示しています。"}</p>
           {records.length === 0 && <p className={styles.emptyMessage}>まだ記録がありません。カレンダーの日付をタップして、最初のシールを貼ってみよう。</p>}
@@ -390,7 +393,7 @@ export function HomeScreen() {
         </div>}
         {panel === "recommendations" && <div className={styles.recordList}>
           <p className={styles.sheetDescription}>気になる過ごし方から、ふたりのプランをつくろう。</p>
-          {ideas.map((idea) => <button type="button" className={styles.ideaCard} key={idea.title} onClick={() => openPlan(today, idea.wish)}>
+          {ideas.map((idea) => <button type="button" className={styles.ideaCard} key={idea.title} onClick={() => openPlan(today, { wish: idea.wish })}>
             <MoodSticker mood={idea.mood} /><span><strong>{idea.title}</strong><small>{idea.description}</small><span className={styles.ideaLink}>この気分でプランをつくる <ArrowRight size={14} /></span></span>
           </button>)}
         </div>}

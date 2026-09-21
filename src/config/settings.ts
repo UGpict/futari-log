@@ -12,6 +12,8 @@ export const LIMITS = {
   maxConcurrentExternal: 4,
   maxSearchCandidates: 20,
   maxDetailCandidates: 6,
+  /** self-correct 補充で Place Details / 営業確認する候補の上限（決定論・課金の両方）。 */
+  maxSelfCorrectRefillLookups: 6,
   maxConcurrentRunsPerSession: 1,
   maxRunsPerCouplePerDay: 20,
   maxInputChars: 2000,

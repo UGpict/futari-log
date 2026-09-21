@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      # MOCK-only CI: no cloud secrets, no LIVE APIs.
+      APP_RUNTIME: MOCK
+      DATA_BACKEND: file
+      USE_FIREBASE_EMULATOR: "false"
+      ENABLE_EVENT_CATALOG: "false"
+      ENABLE_DEMO_CONTROLS: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Boundaries
+        run: npm run check:boundaries
+
+      - name: Unit tests
+        run: npm test

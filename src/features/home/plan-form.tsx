@@ -10,6 +10,7 @@ import { useMe } from "@/client/hooks/use-me";
 import { usePlaceSearch } from "@/client/hooks/use-place-search";
 import { SERVICE_AREA_NOTICE, tokyoToday } from "@/config/public";
 import type { PlaceCandidate } from "@/contracts";
+import type { PlanFormSeed } from "./home-suggestion";
 import { MemoMascot } from "@/components/memo-mascot";
 import { Plus, ChevronLeft, ChevronRight, ArrowRight, Check, ChevronDown, Sparkles, CalendarHeart, Clock3, MapPinned } from "lucide-react";
 import styles from "./home.module.css";
@@ -67,7 +68,15 @@ function PlaceSuggest({
   );
 }
 
-export function PlanForm({ initialDate, initialWish, onStepChange }: { initialDate: string; initialWish?: string; onStepChange?: (step: number) => void }) {
+export function PlanForm({
+  initialDate,
+  seed,
+  onStepChange,
+}: {
+  initialDate: string;
+  seed?: PlanFormSeed;
+  onStepChange?: (step: number) => void;
+}) {
   const router = useRouter();
   const { me, error: authError } = useMe();
   const [step, setStep] = useState(0);
@@ -77,6 +86,7 @@ export function PlanForm({ initialDate, initialWish, onStepChange }: { initialDa
   useEffect(() => () => { if (advanceTimer.current) clearTimeout(advanceTimer.current); }, []);
   const [reached, setReached] = useState(0);
   const [selected, setSelected] = useState<string[]>([]);
+  const initialWish = seed?.wish?.trim() ?? "";
   const [freeWish, setFreeWish] = useState(Boolean(initialWish));
   const heading = useRef<HTMLHeadingElement>(null);
   const [showCategories, setShowCategories] = useState(true);
@@ -128,14 +138,14 @@ export function PlanForm({ initialDate, initialWish, onStepChange }: { initialDa
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
     dateTokyo: initialDate,
-    startTime: "13:00",
-    endTime: "18:00",
-    meetName: "",
+    startTime: seed?.startTime ?? "13:00",
+    endTime: seed?.endTime ?? "18:00",
+    meetName: seed?.meet?.name ?? "",
     endName: "",
     meals: "6000",
     facilities: "3000",
     transit: "1000",
-    self: initialWish || "",
+    self: initialWish,
     partner: "",
     locked: false,
     fixedName: "",
@@ -151,7 +161,7 @@ export function PlanForm({ initialDate, initialWish, onStepChange }: { initialDa
     const initial = parseDate(initialDate);
     return new Date(initial.getFullYear(), initial.getMonth(), 1);
   });
-  const [meetPlace, setMeetPlace] = useState<PlaceCandidate | null>(null);
+  const [meetPlace, setMeetPlace] = useState<PlaceCandidate | null>(seed?.meet ?? null);
   const [endPlace, setEndPlace] = useState<PlaceCandidate | null>(null);
   const bias = me ? { lat: me.demoLat, lng: me.demoLng } : null;
   const meetSearch = usePlaceSearch(form.meetName, bias);
