@@ -12,6 +12,7 @@ import { useSession } from "@/client/hooks/use-session";
 import { Card } from "@/components/card";
 import { formatTokyoHm } from "@/lib/time";
 import { HomeLogo } from "@/components/home-logo";
+import { spotCostLabel, spotCostSourceNote } from "./cost-label";
 
 export function SessionDetails({ sessionId }: { sessionId: string }) {
   const router = useRouter();
@@ -135,13 +136,18 @@ export function SessionDetails({ sessionId }: { sessionId: string }) {
                   </div>
                 </div>
                 <p className="mt-2 text-sm">{item.reason}</p>
-                {spot?.costForTwoJpy.value ? (
-                  <p className="text-sm text-ink-soft">
-                    二人料金 上限¥{spot.costForTwoJpy.value.max}（取得）
-                  </p>
-                ) : (
-                  <p className="text-sm text-ink-soft">料金不明。予算内とは断定しません</p>
-                )}
+                <p className="text-sm text-ink-soft">
+                  {spotCostLabel(spot)}
+                  {spotCostSourceNote(spot) ? ` · ${spotCostSourceNote(spot)}` : ""}
+                </p>
+                {spot?.costAccounting?.assumptionLabel ? (
+                  <p className="text-xs text-ink-soft">{spot.costAccounting.assumptionLabel}</p>
+                ) : null}
+                {spot?.costAccounting?.sourceUrl ? (
+                  <a className="text-sm text-rose underline" href={spot.costAccounting.sourceUrl} target="_blank" rel="noreferrer">
+                    料金の出典
+                  </a>
+                ) : null}
                 {spot?.officialUrl ? (
                   <a className="text-sm text-rose underline" href={spot.officialUrl} target="_blank" rel="noreferrer">
                     公式サイト
