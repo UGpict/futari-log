@@ -132,10 +132,84 @@
 - **現象**: 承認後メモリは `scope=ONGOING` / `甘いものが好き` / `planDirectives=[]` のみ。NEXT_DATE 候補が無いため next session への束縛 0 件。
 - **承認**: `MEMORY_SAVE` が 2 件 PENDING → スクリプトは先頭 1 件のみ APPROVE。もう 1 件は PENDING のまま。
 - **WAITING_INPUT**: REFLECTION が質問せず `CREATE_CANDIDATES` で完了したためスキップ。
+- **補足（第3回で判明）**: 第2回 REFLECTION の未承認 PENDING に `NEXT_DATE` + `PREFER_SEATED_REST` 候補（`mc_f4b42bd3567b4d67`）が残っていた。第2回スクリプトは別候補（ONGOING）を先に承認したため束縛検証に使われなかった。
+
+---
+
+### 第3回（2026-09-21・NEXT_DATE 束縛 + directive 効果）
+
+| 項目 | 値 |
+| --- | --- |
+| revision | `futari-log-00022-vn9`（再デプロイなし） |
+| commit（稼働） | `6d5ef79` |
+| couple | `cpl_12021f0e14f50f62`（**isDemo=true**、第2回計測スクリプト作成。`createdAt=2026-09-21T04:54:18.256Z`、raw `coupleId` 一致） |
+| 振り返り投稿先 | `ses_6fb5e8716a56cad4`（第2回プラン session） |
+| 文面 | 「次のデートだけ、長く立つのがつらいので座れる休憩を多めにしたい」 |
+| REFLECTION | `run_a6b27aba9022bb19` → **SUCCEEDED** |
+| 承認 | `appr_ee626391e9b64e7b` / candidate `mc_069e72e71365e36d` |
+| 新セッション | `ses_20c6113af0f1ffbf` |
+| INITIAL_PLAN | `run_4652a646b7ba0cbb` → **SUCCEEDED**（≈17.9 s） |
+| リトライ | なし |
+
+#### 条件1: 認証
+
+- カスタムトークン（IAM `signJwt`）は TokenCreator 付与後も org/IAM で拒否。
+- **代替**: isDemo カップルの `ownerUid` を一時的に新規匿名 UID へ差し替え → API 実行 → **元の ownerUid に復元済み**（確認: prefix `dh33Ruhi`）。
+- SA 鍵ファイルは作成せず（作成は組織ポリシーで禁止）。一時スクリプト／トークンはリポジトリに未コミット。
+
+#### REFLECTION 出力
+
+| 項目 | 値 |
+| --- | --- |
+| action | `CREATE_CANDIDATES` |
+| model | `gpt-4o-mini-2024-07-18`（prompt 1033 / completion 180 / $0.000262 / 1834 ms） |
+| candidate | `mc_069e72e71365e36d` |
+| scope | **NEXT_DATE** |
+| type | CARE |
+| strength | SOFT |
+| planDirectives | **`PREFER_SEATED_REST`**（categories/spot/maxStay/walkCap は null） |
+
+→ 期待どおりのため停止せず続行。
+
+#### NEXT_DATE 束縛
+
+| 記憶 | targetSessionId |
+| --- | --- |
+| `mem_069e72e71365e36d`（承認後） | **`ses_20c6113af0f1ffbf`**（新セッション作成時に束縛） |
+
+#### 第3回 INITIAL_PLAN（LIVE）
+
+| spot | 名称（Firestore） | 滞在 | standing / rest | memoryIds |
+| --- | --- | --- | --- | --- |
+| `ChIJ6UVSHl2JGGARDurMrMPwvdk` | ART AQUARIUM MUSEUM | **35** | HIGH / LIMITED | `mem_069e72e71365e36d` |
+| `ChIJ484bdgCLGGARczIjpHFH_-Y` | KITTE テラス | 50 | null / null | （なし） |
+| `ChIJZc0V9vuLGGAR33NDBc1Sl6w` | DEAN & DELUCA Market Store Yaesu | 50 | LOW / EASY | `mem_069e72e71365e36d` |
+
+区間所要（WALK）: meet→1 **23** / 1→2 **21** / 2→3 **6** / 3→end **6**。
+
+初回プラン `MODEL_SELECTED` は `deterministic/planner` のみ（実 LLM **なし**）。
+
+#### 条件2: ローカル buildPlan 一致確認 → 記憶なし比較
+
+**材料復元**: Firestore の `spots` + `planVersions/1` + `memories`。`ProviderCtx.cache` に LIVE の区間所要を `travel:{from}:{to}:WALK:{date}T{HH}` で seed。`orderedSpotIds` は LIVE プラン順で固定。`APP_RUNTIME=MOCK`（実 Routes を叩かない）。
+
+| 確認 | 結果 |
+| --- | --- |
+| 記憶あり local vs LIVE（spot / 滞在分 / memoryIds / 区間所要） | **完全一致**（mismatches=[]） |
+| 一致しなかった場合 | （該当なし。不一致なら記憶なし比較は実施しない） |
+
+一致したため、同じ材料で **記憶なし** `buildPlan` を実行:
+
+| spot | LIVE/記憶あり滞在 | 記憶なし滞在 | Δ | 説明 |
+| --- | --- | --- | --- | --- |
+| ART AQUARIUM | 35 | 50 | **−15** | `PREFER_SEATED_REST` × standing=HIGH → `min(stay,35)` |
+| KITTE テラス | 50 | 50 | 0 | standing/rest が null のため directive 条件に非該当 |
+| DEAN & DELUCA | 50 | 50 | 0 | rest=EASY → `max(stay,40)` で 50 のまま。ただし memoryIds に当該記憶が付く（休憩配置） |
+
+区間所要は記憶あり／なしで同一（seed 同一）。差分はすべて `PREFER_SEATED_REST` から説明できる。
 
 ## 未実施 / TODO
 
 - 同日複数セッションの明示選択 UI
 - 承認待ち専用画面（候補は memory API に `approvalId` 付与済み）
-- LIVE 通しの NEXT_DATE 束縛までの成功完走（第2回で未達）
 - 本番マージ・定時ジョブ有効化（別判断）
