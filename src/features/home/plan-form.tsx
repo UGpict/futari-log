@@ -435,22 +435,74 @@ export function PlanForm({ initialDate, initialWish, seed, seedParam, initialSte
             facilitiesJpy: Number(form.facilities),
             transitJpy: Number(form.transit),
           },
-          preferences: [
-            {
-              id: "pref_self",
-              subject: "SELF",
-              content: wish,
-              priority: "PREFER",
-              source: "SELF_REPORT",
-            },
-            ...(form.partner.trim() ? [{
-              id: "pref_partner",
-              subject: "PARTNER" as const,
-              content: form.partner.trim(),
-              priority: "PREFER" as const,
-              source: "PARTNER_STATEMENT_REPORTED" as const,
-            }] : []),
-          ],
+          preferences: (() => {
+            const prefs = [
+              ...(currentCategory
+                ? [
+                    {
+                      id: "pref_category",
+                      subject: "SELF" as const,
+                      content: currentCategory.wish,
+                      priority: "PREFER" as const,
+                      source: "SELF_REPORT" as const,
+                    },
+                  ]
+                : []),
+              ...selected
+                .filter((item) => item !== "おまかせ")
+                .map((label, index) => ({
+                  id: `pref_chip_${index}`,
+                  subject: "SELF" as const,
+                  content: label,
+                  // Chip picks are concrete asks — planner must cover each fulfillable facet.
+                  priority: "MUST" as const,
+                  source: "SELF_REPORT" as const,
+                })),
+              ...(selected.includes("おまかせ") && !currentCategory
+                ? [
+                    {
+                      id: "pref_omakase",
+                      subject: "SELF" as const,
+                      content: "おまかせで楽しめるデート",
+                      priority: "PREFER" as const,
+                      source: "SELF_REPORT" as const,
+                    },
+                  ]
+                : []),
+              ...(form.self.trim()
+                ? [
+                    {
+                      id: "pref_self",
+                      subject: "SELF" as const,
+                      content: form.self.trim(),
+                      priority: "PREFER" as const,
+                      source: "SELF_REPORT" as const,
+                    },
+                  ]
+                : []),
+              ...(form.partner.trim()
+                ? [
+                    {
+                      id: "pref_partner",
+                      subject: "PARTNER" as const,
+                      content: form.partner.trim(),
+                      priority: "PREFER" as const,
+                      source: "PARTNER_STATEMENT_REPORTED" as const,
+                    },
+                  ]
+                : []),
+            ];
+            if (prefs.length) return prefs;
+            return [
+              {
+                id: "pref_self",
+                subject: "SELF" as const,
+                content: wish,
+                priority: "PREFER" as const,
+                source: "SELF_REPORT" as const,
+              },
+            ];
+          })(),
           fixedAppointments: form.locked
             ? [
                 {

@@ -1,5 +1,5 @@
 import { getEnv } from "@/config/env";
-import { classifySpotKind, wantsSameKindTour } from "@/contracts";
+import { classifySpotKind, planningFacetsFromWish, spotFulfillsFacet, wantsSameKindTour } from "@/contracts";
 import type { Memory, Spot } from "@/domain/schemas";
 import type { LlmCallResult } from "@/server/llm";
 import { addMinutes, tokyoDateTime, toTokyoParts } from "@/lib/time";
@@ -78,12 +78,20 @@ export function pickFromCandidates(args: {
     picked.set(spot.id, spot);
     addId(spot.id);
   };
+  const allPool = [...args.exhibit, ...args.walk, ...args.sweets, ...args.other];
+  const wishFacets = planningFacetsFromWish(args.wishText ?? "");
+  // Activity chips / concrete wishes: reserve one spot per fulfillable facet first.
+  for (const facetId of wishFacets) {
+    const matched = rank(usable(allPool.filter((spot) => spotFulfillsFacet(spot, facetId))));
+    rememberSpot(matched[0] ?? (allowAvoidedFallback ? rank(usable(allPool.filter((spot) => spotFulfillsFacet(spot, facetId)), true))[0] : undefined));
+  }
   rememberSpot(take(args.exhibit));
   rememberSpot(take(args.walk));
   rememberSpot(take(args.sweets));
   if (selected.length < 3) rememberSpot(take(args.other));
-  if (selected.length < 3) {
-    const pool = rank(usable([...args.exhibit, ...args.walk, ...args.sweets, ...args.other], allowAvoidedFallback));
+  const targetCount = Math.min(6, Math.max(3, wishFacets.length || 3));
+  if (selected.length < targetCount) {
+    const pool = rank(usable(allPool, allowAvoidedFallback));
     const kinds = new Set(
       [...picked.values()].map((spot) => classifySpotKind(spot.name, spot.categories)),
     );
@@ -95,17 +103,17 @@ export function pickFromCandidates(args: {
       }
       rememberSpot(spot);
       kinds.add(kind);
-      if (selected.length >= 3) break;
+      if (selected.length >= targetCount) break;
     }
   }
-  if (selected.length < 3) {
-    for (const s of [...args.exhibit, ...args.walk, ...args.sweets, ...args.other]) {
+  if (selected.length < targetCount) {
+    for (const s of allPool) {
       if (!allowAvoidedFallback && args.avoidIds.includes(s.id)) continue;
       addId(s.id);
-      if (selected.length >= 3) break;
+      if (selected.length >= targetCount) break;
     }
   }
-  return { selected: selected.slice(0, 4), rejected };
+  return { selected: selected.slice(0, targetCount), rejected };
 }
 
 export function pickReplacementCandidate(args: {
