@@ -10,6 +10,7 @@ import type { LlmCallResult } from "@/server/llm";
 import { addMinutes, tokyoDateTime, toTokyoParts } from "@/lib/time";
 import { getCatalogSpot } from "@/server/providers/catalog";
 import { assessHours } from "@/server/providers/placeFacts";
+import { isAiHackCompanionSpotId } from "@/config/demo-ai-hack";
 import { remember } from "./memory";
 import type { AgentLog, AgentMemories } from "./types";
 
@@ -300,6 +301,8 @@ export async function runPlanner(input: {
   endTime?: string;
   avoidIds?: string[];
   instruction?: string | null;
+  /** AI HACK LIVE: keep catalog companion drink spots through live-only filtering. */
+  allowDemoCatalogOnLive?: boolean;
 }): Promise<{
   selected: string[];
   rejected: { spotId: string; reason: string }[];
@@ -373,7 +376,8 @@ export async function runPlanner(input: {
   }
   for (const id of fallback.selected) {
     if (input.lockedIds.includes(id)) continue;
-    if (!known.has(id) || (liveOnly && id.startsWith("mock:"))) {
+    const demoCompanionOk = input.allowDemoCatalogOnLive && isAiHackCompanionSpotId(id);
+    if (!known.has(id) || (liveOnly && id.startsWith("mock:") && !demoCompanionOk)) {
       await input.log("planner", "CANDIDATE_REJECTED", `未知ID ${id} は採用しない`);
       continue;
     }

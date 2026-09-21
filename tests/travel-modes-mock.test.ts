@@ -165,4 +165,83 @@ describe("MOCK travel modes", () => {
     assert.equal(meetLeg?.durationMinutes.value, 0);
     assert.equal(meetLeg?.bufferMinutes ?? 0, 0);
   });
+
+  it("verifies catalog travel between Tomoshibi office and nearby demo drinks", async () => {
+    const office: Spot = {
+      id: "demo:tomoshibi-surugadai",
+      name: "燈株式会社オフィス",
+      lat: 35.69955,
+      lng: 139.76405,
+      categories: ["point_of_interest"],
+      environment: fact("INDOOR"),
+      costForTwoJpy: fact({ min: 0, max: 0 }),
+      restEase: fact("EASY"),
+      standingBurden: fact("MEDIUM"),
+      officialUrl: null,
+    };
+    const izakaya: Spot = {
+      id: "mock:surugadai-izakaya",
+      name: "駿河台モック居酒屋",
+      lat: 35.6991,
+      lng: 139.7634,
+      categories: ["japanese_restaurant", "bar"],
+      environment: fact("INDOOR"),
+      costForTwoJpy: fact({ min: 6000, max: 10000 }),
+      restEase: fact("EASY"),
+      standingBurden: fact("LOW"),
+      officialUrl: null,
+    };
+    const input = baseInput("WALK");
+    input.startTime = "10:00";
+    input.endTime = "21:00";
+    input.meet = {
+      name: office.name,
+      lat: office.lat,
+      lng: office.lng,
+      spotId: office.id,
+      address: "東京都千代田区神田駿河台4丁目6",
+    };
+    input.end = { ...input.meet };
+    input.fixedAppointments = [
+      {
+        id: "fix_hack",
+        label: "AI HACK 2026",
+        spotId: office.id,
+        spotNameHint: "AI HACK 2026",
+        startAt: "2026-09-21T10:00:00+09:00",
+        endAt: "2026-09-21T16:00:00+09:00",
+        kind: "TIME_FIXED",
+      },
+    ];
+    input.preferences = [
+      {
+        id: "p",
+        subject: "SELF",
+        content: "近くの飲み屋で乾杯したい",
+        priority: "PREFER",
+        source: "SELF_REPORT",
+      },
+    ];
+    const built = await buildPlan({
+      version: 1,
+      ctx: ctx(),
+      input,
+      orderedSpotIds: [office.id, izakaya.id],
+      spots: { [office.id]: office, [izakaya.id]: izakaya },
+      memories: [],
+      dataMode: "LIVE",
+    });
+    assert.equal(
+      built.plan.validation.state,
+      "PASS",
+      JSON.stringify(built.plan.validation.issues),
+    );
+    assert.equal(
+      built.plan.validation.issues.some((i) =>
+        ["TRAVEL_UNKNOWN", "END_TRAVEL_UNKNOWN"].includes(i.code),
+      ),
+      false,
+    );
+    assert.ok(built.plan.items.some((item) => item.spotId === izakaya.id));
+  });
 });

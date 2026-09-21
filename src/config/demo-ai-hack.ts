@@ -19,8 +19,24 @@ export const AI_HACK_VENUE = {
   dayEnd: "21:00",
   wish: "神田駿河台の会場で日中のハッカソンのあと、17時ごろから近くの飲み屋で乾杯したい",
   areaWishToken: "神田駿河台",
+  /** LIVE でも Routes に依存せず締められる近場カタログ飲み */
+  companionSpotIds: ["mock:surugadai-izakaya", "mock:ochanomizu-bar"] as const,
 } as const;
 
 export function isAiHackDemoSpotId(id: string | null | undefined): boolean {
   return id === AI_HACK_VENUE.spotId;
+}
+
+export function isAiHackCompanionSpotId(id: string | null | undefined): boolean {
+  if (!id) return false;
+  return (AI_HACK_VENUE.companionSpotIds as readonly string[]).includes(id);
+}
+
+export function sessionUsesAiHackVenue(input: {
+  meet?: { spotId?: string | null };
+  end?: { spotId?: string | null };
+  fixedAppointments?: { spotId?: string | null }[];
+}): boolean {
+  if (isAiHackDemoSpotId(input.meet?.spotId) || isAiHackDemoSpotId(input.end?.spotId)) return true;
+  return Boolean(input.fixedAppointments?.some((item) => isAiHackDemoSpotId(item.spotId)));
 }

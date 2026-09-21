@@ -322,13 +322,22 @@ export async function computeLiveRoute(args: {
   mode: TravelMode;
   departureAt: string;
 }): Promise<RouteEstimate> {
+  // Catalog-backed ids must never be sent as Google placeIds; prefer coordinates.
+  const from: RoutePoint =
+    args.from.spotId && (args.from.spotId.startsWith("mock:") || args.from.spotId.startsWith("demo:"))
+      ? { lat: args.from.lat, lng: args.from.lng }
+      : args.from;
+  const to: RoutePoint =
+    args.to.spotId && (args.to.spotId.startsWith("mock:") || args.to.spotId.startsWith("demo:"))
+      ? { lat: args.to.lat, lng: args.to.lng }
+      : args.to;
   const bufferMinutes = travelBufferMinutes(args.mode);
   const attempts: RouteAttempt[] = [];
   const fieldMask = args.mode === "TRANSIT" ? ROUTES_FIELD_MASK_TRANSIT : ROUTES_FIELD_MASK;
 
-  const attempt = async (from: RoutePoint, to: RoutePoint): Promise<RouteEstimate> => {
-    const via = attemptVia(from, to);
-    const built = buildComputeRoutesBody({ from, to, mode: args.mode, departureAt: args.departureAt });
+  const attempt = async (fromPt: RoutePoint, toPt: RoutePoint): Promise<RouteEstimate> => {
+    const via = attemptVia(fromPt, toPt);
+    const built = buildComputeRoutesBody({ from: fromPt, to: toPt, mode: args.mode, departureAt: args.departureAt });
     let res: Response;
     try {
       res = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
@@ -469,14 +478,14 @@ export async function computeLiveRoute(args: {
     };
   };
 
-  const first = await attempt(args.from, args.to);
+  const first = await attempt(from, to);
   const usedPlace =
-    Boolean(args.from.spotId && !args.from.spotId.startsWith("mock:") && !args.from.spotId.startsWith("demo:")) ||
-    Boolean(args.to.spotId && !args.to.spotId.startsWith("mock:") && !args.to.spotId.startsWith("demo:"));
+    Boolean(from.spotId && !from.spotId.startsWith("mock:") && !from.spotId.startsWith("demo:")) ||
+    Boolean(to.spotId && !to.spotId.startsWith("mock:") && !to.spotId.startsWith("demo:"));
   if ((first.failure === "NO_ROUTE" || first.failure === "INVALID") && usedPlace) {
     const retry = await attempt(
-      { lat: args.from.lat, lng: args.from.lng },
-      { lat: args.to.lat, lng: args.to.lng },
+      { lat: from.lat, lng: from.lng },
+      { lat: to.lat, lng: to.lng },
     );
     if (retry.durationMinutes != null) {
       return {

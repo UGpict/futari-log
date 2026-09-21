@@ -1,4 +1,5 @@
 import { getEnv } from "@/config/env";
+import { isCatalogBackedSpotId } from "@/contracts/places";
 import {
   CACHE_TTL_MS,
   PLACES_FIELD_MASK_DETAILS,
@@ -400,6 +401,36 @@ export async function estimateTravel(
         fetchedAt: realNowIso(),
         validFor: null,
         note: "同一地点のため移動なし（余裕分も加算しない）",
+      }),
+    };
+  }
+  const fromCatalog = isCatalogBackedSpotId(args.from.spotId ?? "");
+  const toCatalog = isCatalogBackedSpotId(args.to.spotId ?? "");
+  // Catalog endpoints are not Google placeIds; keep LIVE demo legs deterministic without Routes.
+  if (fromCatalog && toCatalog) {
+    const meters = haversineMeters(args.from, args.to);
+    const speed = args.mode === "WALK" ? 80 : args.mode === "TRANSIT" ? 250 : 400;
+    const durationMinutes = Math.max(1, Math.round(meters / speed));
+    const bufferMinutes = travelBufferMinutes(args.mode);
+    return {
+      durationMinutes,
+      distanceMeters: Math.round(meters),
+      walkMinutesWithin: args.mode === "WALK" ? durationMinutes : args.mode === "TRANSIT" ? null : 0,
+      bufferMinutes,
+      kind: "API",
+      failure: null,
+      cached: false,
+      attempts: [],
+      ...driveDepartureFields(args.mode, args.departureAt),
+      delayMinutes: 0,
+      evidence: evidence({
+        kind: "API",
+        provider: "mock-routes",
+        sourceRef: `${args.from.spotId}->${args.to.spotId}`,
+        sourceField: "duration",
+        fetchedAt: realNowIso(),
+        validFor: null,
+        note: `カタログ地点間のデモ経路 ${durationMinutes}分。余裕 ${bufferMinutes}分はアプリ加算。Google Routes は使っていない`,
       }),
     };
   }
