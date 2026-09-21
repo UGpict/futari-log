@@ -134,6 +134,24 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [stampedDate, setStampedDate] = useState<string | null>(null);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("notice") !== "plan-created") return;
+    const createdDate = url.searchParams.get("date");
+    const timer = window.setTimeout(() => {
+      setNotice("プランを作成しました");
+      if (createdDate && /^\d{4}-\d{2}-\d{2}$/.test(createdDate)) {
+        setMonthOverride(createdDate.slice(0, 7));
+        setStampedDate(createdDate);
+      }
+      url.searchParams.delete("notice");
+      url.searchParams.delete("date");
+      window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   const recordsByDate = new Map(records.map((record) => [record.date, record]));
   const panelTitles: Record<Exclude<Panel, null>, string> = {
     records: "ふたりの記録", recommendations: "AIからの提案", memory: "次のデートに活かすこと",
@@ -347,7 +365,7 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
                   aria-controls={!record && !dayPlans.length && !inactive ? "calendar-create-prompt" : undefined}
                   aria-label={`${year}年${month}月${day}日${record ? `、${record.title}、${moods.find((m) => m.id === record.mood)?.label}` : dayPlans.length ? `、予定${dayPlans.length}件、${date <= today ? "振り返る" : "プランをひらく"}` : inactive ? "、予定・記録なし" : "、この日のプランをつくる"}`}>
                   {!record && <span className={styles.dayNumber}>{day}</span>}
-                  {!record && dayPlans.length > 0 && <span className={styles.plannedSticker} aria-hidden="true"><MoodSticker mood="happy" /></span>}
+                  {!record && dayPlans.length > 0 && <span className={`${styles.plannedSticker} ${stampedDate === date ? styles.planArrival : ""}`} aria-hidden="true"><MoodSticker mood="happy" /></span>}
                   {record && <MoodSticker mood={record.mood} className={`${styles.calendarSticker} ${record.mood === "happy" ? styles.heartOffset : ""} ${stampedDate === date ? styles.stampArrival : ""}`} />}
                 </button>
               );

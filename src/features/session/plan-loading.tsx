@@ -61,8 +61,8 @@ export function PlanningAgentTicker() {
   </div>;
 }
 
-export function PlanLoading({ demo = false, compact = false }: { demo?: boolean; compact?: boolean }) {
-  return <div className={`${styles.loading} ${compact ? styles.loadingCompact : ""}`} role="status" aria-label="プランを準備しています">
+export function PlanLoading({ demo = false, compact = false, centered = false }: { demo?: boolean; compact?: boolean; centered?: boolean }) {
+  return <div className={`${styles.loading} ${compact ? styles.loadingCompact : ""} ${centered ? styles.loadingCentered : ""}`} role="status" aria-label="プランを準備しています">
     {!compact && <><div className={styles.loadingMascot}><RiveMascot variant="flight" /></div><h1 className={styles.loadingLead}>ふたりのプランを考えはじめます</h1></>}
     {compact && <div className={styles.agentList} aria-hidden="true">{agents.map((agent, index) => <div key={agent.character} className={styles.agentRow} style={{ animationDelay: `${index * 350}ms` }}>
       <PlanningAgentArt character={agent.character} />

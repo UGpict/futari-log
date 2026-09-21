@@ -5,6 +5,7 @@ import { TextArea } from "@/components/text-input";
 import { Button, ButtonLink } from "@/components/button";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Check, MessageCircle, ArrowUpRight, ExternalLink, Clock3, SlidersHorizontal } from "lucide-react";
 import { useSession } from "@/client/hooks/use-session";
 import { usePlacePhotos } from "@/client/hooks/use-place-photos";
@@ -99,6 +100,7 @@ function SessionPlanningSkeleton({ data }: { data: SessionSnapshot | null }) {
 }
 
 export function SessionScreen({ sessionId }: { sessionId: string }) {
+  const router = useRouter();
   const { data, error, reload, startReplan } = useSession(sessionId);
   const [sheet, setSheet] = useState<"conditions" | "feedback" | null>(null);
   const [target, setTarget] = useState<{ id: string; name: string; locked: boolean } | null>(null);
@@ -235,7 +237,18 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
       <div className={styles.meeting}><span className={styles.endpointSticker}><PlanStickerIcon kind="goal" /></span><div><small>{input.endTime}ごろ 解散</small><strong>{input.end.name}</strong></div></div>
     </section>
     {!["DONE", "REFLECTED"].includes(data.session.status) && <button className={styles.wholeFeedback} disabled={Boolean(active) || pending} onClick={() => openFeedback()}><MoodSticker mood="relaxed" /><span><strong>もう少し、こんな一日にしたい</strong><small>プラン全体の希望を伝える</small></span><ArrowUpRight size={16} /></button>}
-    <footer className={styles.footer} inert={sheet ? true : undefined}>{confirmed ? <ButtonLink variant="secondary" fullWidth href="/"><Check size={17} />カレンダーで予定を見る</ButtonLink> : <Button fullWidth disabled={saving || pending || Boolean(active) || !data.plan?.items.length || data.plan.validation.state === "FAIL" || travelUnverified || Boolean(attention)} onClick={async () => { setSaving(true); try { await act(`/api/sessions/${sessionId}/progress`, { confirm: true, status: "CONFIRMED" }, "カレンダーに予定を追加しました"); } finally { setSaving(false); } }}>{saving ? "保存しています…" : travelUnverified ? "移動確認後に確定できます" : "このプランで決める"}<Check size={17} /></Button>}</footer>
+    <footer className={styles.footer} inert={sheet ? true : undefined}>{confirmed ? <ButtonLink variant="secondary" fullWidth href="/"><Check size={17} />カレンダーで予定を見る</ButtonLink> : <Button fullWidth disabled={saving || pending || Boolean(active) || !data.plan?.items.length || data.plan.validation.state === "FAIL" || travelUnverified || Boolean(attention)} onClick={async () => {
+      setSaving(true);
+      try {
+        const saved = await act(`/api/sessions/${sessionId}/progress`, { confirm: true, status: "CONFIRMED" }, "カレンダーに予定を追加しました");
+        if (saved) {
+          const query = new URLSearchParams({ notice: "plan-created", date: input.dateTokyo });
+          router.replace(`/?${query.toString()}`);
+        }
+      } finally {
+        setSaving(false);
+      }
+    }}>{saving ? "保存しています…" : travelUnverified ? "移動確認後に確定できます" : "このプランで決める"}<Check size={17} /></Button>}</footer>
     {sheet === "feedback" && <HomeSheet title={target ? "ここ、少し変えよう" : "プランの希望を伝える"} onClose={() => setSheet(null)}>
       <form className={styles.feedbackForm} onSubmit={async (event) => {
         event.preventDefault();
