@@ -817,3 +817,8 @@
 .sheet.fixedSheet { height: min(760px, 90dvh); overflow: hidden; }
 .fixedSheet .sheetInner { height: 100%; min-height: 0; display: flex; flex-direction: column; }
 .fixedSheet .sheetHandle, .fixedSheet .sheetHeader { flex-shrink: 0; }
+
+.areaNotice { margin: 8px 0 0; color: #917e8b; font-size: 11px; line-height: 1.6; }
+.partnerWishField { margin-top: 14px; }
+.partnerWishField span { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.partnerWishField small { color: #a28e9a; font-size: 10px; font-weight: 500; }
