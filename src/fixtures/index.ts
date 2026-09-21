@@ -25,6 +25,9 @@ for (const item of upcoming.plan?.items ?? []) {
 const calendarSnapshots = new Map<string, SessionSnapshot>([
   [fixtureSuccess.session.id, fixtureSuccess], [upcoming.session.id, upcoming],
 ]);
+const generatedSnapshots = new Map<string, SessionSnapshot>();
+const generationReadyAt = new Map<string, number>();
+const FIXTURE_GENERATION_MS = 5_000;
 
 function delay(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -68,12 +71,22 @@ export async function fixtureResponse<T>(path: string, init?: RequestInit): Prom
     return { plans: [...calendarSnapshots.values()].map((snap) => ({ id: snap.session.id, date: snap.session.input.dateTokyo, startTime: snap.session.input.startTime, endTime: snap.session.input.endTime, status: snap.session.status, title: snap.plan?.items.map((item) => snap.spots[item.spotId]?.name).filter(Boolean).join("・") || "作成中のプラン" })) } as T;
   }
   if (url.endsWith("/sessions") && method === "POST") {
-    const snap = structuredClone(fixtureSuccess);
-    snap.session.input = planningInputSchema.parse(JSON.parse(String(init?.body ?? "{}")));
-    snap.session.id = `fx-created-${calendarSnapshots.size}`;
-    snap.session.status = "DRAFT";
-    calendarSnapshots.set(snap.session.id, snap);
-    return { sessionId: snap.session.id, input: snap.session.input } as T;
+    const completed = structuredClone(fixtureSuccess);
+    completed.session.input = planningInputSchema.parse(JSON.parse(String(init?.body ?? "{}")));
+    completed.session.id = `fx-created-${calendarSnapshots.size}`;
+    completed.session.status = "DRAFT";
+    completed.runs = completed.runs.map((run) => ({ ...run, sessionId: completed.session.id }));
+
+    const pending = structuredClone(completed);
+    pending.session.currentPlanVersion = null;
+    pending.plan = null;
+    pending.spots = {};
+    pending.runs = [];
+    pending.events = [];
+
+    generatedSnapshots.set(completed.session.id, completed);
+    calendarSnapshots.set(completed.session.id, pending);
+    return { sessionId: completed.session.id, input: completed.session.input } as T;
   }
   if (url === "/api/sessions/fx-error") {
     throw new Error("fixture failure");
@@ -84,11 +97,32 @@ export async function fixtureResponse<T>(path: string, init?: RequestInit): Prom
   }
   const sessionMatch = url.match(/^\/api\/sessions\/([^/]+)$/);
   if (sessionMatch && method === "GET") {
-    const snap = calendarSnapshots.get(sessionMatch[1]) ?? snapshotFor(sessionMatch[1]);
+    const sessionId = sessionMatch[1];
+    const completed = generatedSnapshots.get(sessionId);
+    const readyAt = generationReadyAt.get(sessionId);
+    if (completed && readyAt != null && Date.now() >= readyAt) {
+      calendarSnapshots.set(sessionId, completed);
+      generatedSnapshots.delete(sessionId);
+      generationReadyAt.delete(sessionId);
+    }
+    const snap = calendarSnapshots.get(sessionId) ?? snapshotFor(sessionId);
     if (!snap) throw new Error("読み込み中…");
     return snap as T;
   }
   if (/\/api\/sessions\/[^/]+\/runs$/.test(url) && method === "POST") {
+    const sessionId = url.split("/")[3];
+    const pending = calendarSnapshots.get(sessionId);
+    const completed = generatedSnapshots.get(sessionId);
+    if (pending && completed) {
+      pending.runs = completed.runs.map((run) => ({
+        ...run,
+        status: "RUNNING",
+        resultPlanVersion: null,
+        finishedAt: null,
+      }));
+      pending.events = completed.events.slice(0, 1);
+      generationReadyAt.set(sessionId, Date.now() + FIXTURE_GENERATION_MS);
+    }
     return { runId: "run_fx" } as T;
   }
   if (/\/api\/sessions\/[^/]+\/progress$/.test(url) && method === "POST") {

@@ -17,6 +17,7 @@ import { Toast } from "@/components/toast";
 import { DevelopmentLink } from "@/components/development-link";
 import { HomeLogo } from "@/components/home-logo";
 import { MoodSticker, moods, type Mood } from "@/components/mood-sticker";
+import { PlanStickerIcon } from "@/components/plan-sticker-icon";
 import { HomeSheet } from "./home-sheet";
 import { MemoryScreen } from "@/features/memory/memory-screen";
 import styles from "./home.module.css";
@@ -70,11 +71,9 @@ function FeedbackEditor({ date, record, onSave }: {
     <form className={styles.feedbackForm} onSubmit={submit}>
       <div className={styles.feedbackIntro}>
         <span className={styles.eyebrow}>{dateLabel(date)}</span>
-        <h3>この日のことを残そう</h3>
-        <p>ふたりの一日を、スタンプと言葉で振り返ります。</p>
       </div>
       <section className={styles.reflectionEditorCard}>
-        <div className={styles.reflectionCardHeading}><span><NotebookPen size={17} /></span><div><strong>相手はどんな様子だった？</strong><small>いちばん近いスタンプをひとつ</small></div></div>
+        <div className={styles.reflectionCardHeading}><strong>相手はどんな様子だった？</strong></div>
         <fieldset className={styles.moodPicker}>
           <legend className="sr-only">相手の様子</legend>
           {moods.map((item) => (
@@ -82,22 +81,21 @@ function FeedbackEditor({ date, record, onSave }: {
               <input className="sr-only" type="radio" name="mood" value={item.id} checked={mood === item.id} onChange={() => setMood(item.id)} required />
               <MoodSticker mood={item.id} />
               <span>{item.label}</span>
-              <span className={styles.moodCheck} aria-hidden="true">{mood === item.id && <Check size={13} />}</span>
+              {mood === item.id && <span className={styles.moodCheck} aria-hidden="true"><Check size={14} /></span>}
             </label>
           ))}
         </fieldset>
       </section>
       <div className={styles.reflectionFields}>
-        <label className={`${styles.formLabel} ${styles.reflectionFieldCard}`}>この日のタイトル <span>任意</span>
+        <label className={styles.formLabel}>この日のタイトル <span>任意</span>
           <TextInput value={title} maxLength={60} onChange={(event) => setTitle(event.target.value)} placeholder="カフェで過ごした、のんびりな午後" />
         </label>
-        <label className={`${styles.formLabel} ${styles.reflectionFieldCard}`}>この日のこと <span>任意</span>
+        <label className={styles.formLabel}>この日のこと <span>任意</span>
           <TextArea value={note} maxLength={500} rows={3} onChange={(event) => setNote(event.target.value)} placeholder="楽しかった場面や、相手の様子を残しておこう" />
         </label>
       </div>
       {error && <p className={styles.error} role="alert">{error}</p>}
-      <Button fullWidth className={styles.primaryButton} type="submit" disabled={!mood || saving}><Check size={20} />{saving ? "保存しています…" : record ? "スタンプと記録を更新する" : "振り返りを完了してスタンプを押す"}</Button>
-      <p className={styles.localNote}>この端末のブラウザに保存されます。</p>
+      <Button fullWidth className={styles.primaryButton} type="submit" disabled={!mood || saving}><Check size={20} />{saving ? "保存しています…" : record ? "振り返りを更新" : "振り返りを保存"}</Button>
     </form>
   );
 }
@@ -177,24 +175,25 @@ export function HomeScreen() {
   function startEventDrag(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.pointerType !== "mouse" || event.button !== 0) return;
     eventDragRef.current = { active: true, moved: false, startX: event.clientX, scrollLeft: event.currentTarget.scrollLeft };
-    event.currentTarget.setPointerCapture(event.pointerId);
   }
   function moveEventDrag(event: ReactPointerEvent<HTMLDivElement>) {
     const drag = eventDragRef.current;
     if (!drag.active) return;
     const distance = event.clientX - drag.startX;
-    if (Math.abs(distance) > 4) {
+    if (!drag.moved && Math.abs(distance) > 6) {
       drag.moved = true;
       setDraggingEvents(true);
+      event.currentTarget.setPointerCapture(event.pointerId);
     }
-    if (drag.moved) event.currentTarget.scrollLeft = drag.scrollLeft - distance;
+    if (!drag.moved) return;
+    event.preventDefault();
+    event.currentTarget.scrollLeft = drag.scrollLeft - distance;
   }
   function endEventDrag(event: ReactPointerEvent<HTMLDivElement>) {
     if (!eventDragRef.current.active) return;
     eventDragRef.current.active = false;
     setDraggingEvents(false);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-    if (eventDragRef.current.moved) window.setTimeout(() => { eventDragRef.current.moved = false; }, 0);
   }
   useEffect(() => {
     if (!showCreatePrompt) return;
@@ -303,7 +302,7 @@ export function HomeScreen() {
 
         {plansError && <p className={styles.localNote} role="alert">{plansError}</p>}
         {plans.length > 0 && <p className={styles.calendarLegend}><span><MoodSticker mood="happy" /></span>淡いシールは予定。デートのあとに、気持ちを貼ろう。</p>}
-        {isFixture && <section ref={eventSectionRef} className={styles.nearbyEvents} aria-labelledby="nearby-events-title">
+        <section ref={eventSectionRef} className={styles.nearbyEvents} aria-labelledby="nearby-events-title">
           <header><div><h2 id="nearby-events-title">近くのイベントから探す</h2></div><small><MapPin size={11} aria-hidden="true" />東京周辺</small></header>
           <button type="button" className={`${styles.carouselButton} ${styles.carouselPrevious}`} aria-label="前のイベントを見る" disabled={!eventScroll.left} onClick={() => scrollEvents(-1)}><ChevronLeft aria-hidden="true" /></button>
           <div ref={eventCarouselRef} className={styles.eventCarousel} data-dragging={draggingEvents} aria-label="近隣イベント" tabIndex={0} onScroll={updateEventScroll} onPointerDown={startEventDrag} onPointerMove={moveEventDrag} onPointerUp={endEventDrag} onPointerCancel={endEventDrag} onClickCapture={(event) => {
@@ -311,7 +310,7 @@ export function HomeScreen() {
             event.preventDefault();
             event.stopPropagation();
             eventDragRef.current.moved = false;
-          }} onWheel={(event) => {
+          }} onDragStart={(event) => event.preventDefault()} onWheel={(event) => {
             const carousel = event.currentTarget;
             if (Math.abs(event.deltaY) <= Math.abs(event.deltaX) || carousel.scrollWidth <= carousel.clientWidth) return;
             event.preventDefault();
@@ -328,7 +327,7 @@ export function HomeScreen() {
           </div>
           <button type="button" className={`${styles.carouselButton} ${styles.carouselNext}`} aria-label="次のイベントを見る" disabled={!eventScroll.right} onClick={() => scrollEvents(1)}><ChevronRight aria-hidden="true" /></button>
           <p className={styles.eventDisclosure}>イベント情報はUI確認用のサンプルです。</p>
-        </section>}
+        </section>
       </main>
       <div className={styles.createDateFab} data-over-events={eventsBehindCreateButton}><DateCreateButton onClick={() => openPlan()} /></div>
 
@@ -337,11 +336,10 @@ export function HomeScreen() {
       {selectedDate && !showCreatePrompt && (
         <HomeSheet key={selectedDate} title={reflecting ? "今回のデート、どうだった？" : recordsByDate.has(selectedDate) ? "あの日の記録" : "ふたりの一日"} onClose={() => setSelectedDate(null)}>
           {selectedRecord && !reflecting ? <div className={styles.recordSummary}>
-            <header className={styles.recordHero}><span className={styles.eyebrow}>{dateLabel(selectedDate)}</span><MoodSticker mood={selectedRecord.mood} className={styles.recordSummarySticker} /><span className={styles.recordMoodLabel}>{moods.find((mood) => mood.id === selectedRecord.mood)?.label}</span><h3>{selectedRecord.title}</h3></header>
-            {selectedRecord.note && <section className={styles.recordReflectionCard}><div className={styles.recordSectionHeading}><span><NotebookPen size={16} /></span><div><small>ふたりの振り返り</small><strong>この日のこと</strong></div></div><p className={styles.recordNote}>{selectedRecord.note}</p></section>}
-            {selectedPlans.length > 0 && <section className={styles.recordPlanSection}><div className={styles.recordSectionHeading}><span><CalendarHeart size={16} /></span><div><small>関連するプラン</small><strong>この日のプラン</strong></div></div>{selectedPlans.map((plan) => <Link key={plan.id} className={styles.planOpenLink} href={`/sessions/${plan.id}`}><span>{plan.title}</span><ChevronRight size={17} /></Link>)}</section>}
-            {!selectedPlans.length && <p className={styles.localNote}>この記録に紐づくプランはありません。</p>}
-            <Button fullWidth variant="secondary" type="button" className={styles.recordEditButton} onClick={() => setReflecting(true)}>振り返りを編集する<ChevronRight size={17} /></Button>
+            <header className={styles.recordHero}><MoodSticker mood={selectedRecord.mood} className={styles.recordSummarySticker} /><span className={styles.eyebrow}>{dateLabel(selectedDate)}</span><h3>{selectedRecord.title}</h3></header>
+            {selectedRecord.note && <section className={styles.recordReflectionCard}><p className={styles.recordNote}>{selectedRecord.note}</p></section>}
+            {selectedPlans.length > 0 && <section className={styles.recordPlanSection}><div className={styles.recordSectionHeading}><span><PlanStickerIcon kind="calendar" /></span><div><small>関連するプラン</small><strong>この日のプラン</strong></div></div>{selectedPlans.map((plan) => <Link key={plan.id} className={styles.planOpenLink} href={`/sessions/${plan.id}`}><span>{plan.title}</span><ChevronRight size={17} /></Link>)}</section>}
+            <Button fullWidth type="button" className={styles.recordEditButton} onClick={() => setReflecting(true)}>振り返りを編集<ChevronRight size={17} /></Button>
           </div> : selectedPlans.length > 0 && !reflecting ? <div className={styles.plannedDay}>
             <span className={styles.eyebrow}>{dateLabel(selectedDate)}</span>
             {selectedPlans.map((plan) => {

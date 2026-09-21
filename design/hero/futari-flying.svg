@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="520" viewBox="0 0 720 520" fill="none">
+<defs>
+ <linearGradient id="rainbow" x1="140" y1="390" x2="515" y2="115" gradientUnits="userSpaceOnUse"><stop stop-color="#A6B8FF"/><stop offset=".25" stop-color="#B8A3EE"/><stop offset=".48" stop-color="#F6A9CE"/><stop offset=".68" stop-color="#FFD997"/><stop offset=".85" stop-color="#AAE4C6"/><stop offset="1" stop-color="#A8D7F7"/></linearGradient>
+ <linearGradient id="body" x1="280" y1="130" x2="430" y2="380" gradientUnits="userSpaceOnUse"><stop stop-color="#FF858B"/><stop offset="1" stop-color="#FF777E"/></linearGradient>
+ <linearGradient id="trail" x1="150" y1="380" x2="350" y2="235" gradientUnits="userSpaceOnUse"><stop stop-color="#C7B8ED" stop-opacity="0"/><stop offset=".5" stop-color="#F3B8D0" stop-opacity=".3"/><stop offset="1" stop-color="#FFD7A0" stop-opacity=".6"/></linearGradient>
+ <filter id="glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="13"/></filter>
+ <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3"/></filter>
+ <path id="silhouette" d="M271 174C269 137 287 119 321 111C355 102 405 96 430 103C458 111 469 135 470 168C472 209 469 287 462 338C460 358 451 367 437 361C414 351 383 332 371 331C358 335 329 354 306 364C290 371 279 361 277 343C272 290 270 222 271 174Z"/>
+</defs>
+<!-- Transparent canvas; diagonal trails describe forward flight without stretching the body. -->
+<path d="M141 431L326 260M183 456L367 282M109 375L292 233" stroke="url(#trail)" stroke-width="23" stroke-linecap="round"/>
+<g transform="rotate(18 371 235)">
+ <use href="#silhouette" stroke="url(#rainbow)" stroke-width="28" filter="url(#glow)" opacity=".8"/>
+ <!-- Leading fist reaches forward; the other arm bends beside the body. -->
+ <path d="M279 238C232 228 220 278 251 280C267 282 278 266 286 258M459 211C477 188 488 143 505 109" stroke="url(#rainbow)" stroke-width="24" stroke-linecap="round" filter="url(#glow)"/>
+ <path d="M459 211C477 188 488 143 505 109" stroke="#25272B" stroke-width="11" stroke-linecap="round"/>
+ <ellipse cx="505" cy="109" rx="14" ry="13" fill="#25272B"/>
+ <use href="#silhouette" fill="url(#body)" stroke="url(#rainbow)" stroke-width="5"/>
+ <path d="M279 238C232 228 220 278 251 280C267 282 278 266 286 258" stroke="#25272B" stroke-width="11" stroke-linecap="round"/>
+ <ellipse cx="286" cy="258" rx="14" ry="12" fill="#25272B"/>
+ <path d="M303 138C330 125 375 119 405 122" stroke="#FFC7C8" stroke-width="5" stroke-linecap="round" opacity=".6"/>
+ <ellipse cx="342" cy="199" rx="10.5" ry="12" fill="#25272B"/>
+ <ellipse cx="396" cy="198" rx="10.5" ry="12" fill="#25272B"/>
+ <path d="M353 222C364 224 384 223 394 220C395 252 355 253 353 222Z" fill="#25272B"/>
+</g>
+<!-- Sparse speed streaks; no extra props. -->
+<path d="M166 292L205 257M198 370L228 342M476 383L509 351" stroke="url(#rainbow)" stroke-width="7" stroke-linecap="round" opacity=".7"/>
+<path d="M524 114L524 128M517 121L531 121" stroke="#BADBCE" stroke-width="4" stroke-linecap="round"/>
+<circle cx="249" cy="131" r="4" fill="#D3B9EB"/>
+</svg>

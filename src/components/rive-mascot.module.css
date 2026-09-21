@@ -14,3 +14,6 @@
 
 .weather { width: 40px; height: 40px; overflow: visible; }
 .weather .visual { inset: 0; width: 100%; height: 100%; }
+
+.flight { width: 260px; height: 188px; overflow: visible; }
+.flight .visual { inset: 0; width: 100%; height: 100%; }
