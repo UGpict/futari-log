@@ -74,6 +74,7 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
   onStepChange?: (step: number) => void;
 }) {
   const router = useRouter();
+  const formRoot = useRef<HTMLDivElement>(null);
   const { me, error: authError } = useMe();
   const [step, setStep] = useState(initialStep);
   const [nextCue, setNextCue] = useState(0);
@@ -91,6 +92,43 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
     };
     window.addEventListener("popstate", syncStepFromHistory);
     return () => window.removeEventListener("popstate", syncStepFromHistory);
+  }, [fullPage]);
+  useEffect(() => {
+    if (!fullPage) return;
+    const root = formRoot.current;
+    if (!root) return;
+    const viewport = window.visualViewport;
+    let frame = 0;
+    let field: HTMLElement | null = null;
+
+    const reveal = () => {
+      if (!field?.isConnected || document.activeElement !== field) return;
+      if (viewport && Math.abs(viewport.scale - 1) > 0.05) return;
+      const top = (viewport?.offsetTop ?? 0) + 16;
+      const bottom = (viewport?.offsetTop ?? 0) + (viewport?.height ?? window.innerHeight) - 16;
+      const rect = field.getBoundingClientRect();
+      const delta = rect.top < top ? rect.top - top : Math.max(0, rect.bottom - bottom);
+      if (Math.abs(delta) > 1) window.scrollBy({ top: delta, behavior: "instant" });
+    };
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => { frame = requestAnimationFrame(reveal); });
+    };
+    const trackFocus = (event: FocusEvent) => {
+      const target = event.target;
+      field = target instanceof HTMLElement && target.matches("input:not([type=checkbox]):not([type=radio]), textarea") ? target : null;
+      if (field) schedule();
+    };
+
+    root.addEventListener("focusin", trackFocus);
+    viewport?.addEventListener("resize", schedule);
+    viewport?.addEventListener("scroll", schedule);
+    return () => {
+      cancelAnimationFrame(frame);
+      root.removeEventListener("focusin", trackFocus);
+      viewport?.removeEventListener("resize", schedule);
+      viewport?.removeEventListener("scroll", schedule);
+    };
   }, [fullPage]);
   const [selected, setSelected] = useState<string[]>([]);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -364,7 +402,7 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
   if (busy) return <div className={styles.planningOverlay}><PlanLoading demo={fixturesEnabled()} /></div>;
 
   return (
-    <div className={`${styles.planForm} ${styles.compactPlan} ${fullPage ? styles.planPageForm : ""}`}>
+    <div ref={formRoot} className={`${styles.planForm} ${styles.compactPlan} ${fullPage ? styles.planPageForm : ""}`}>
       <nav className={styles.planProgress} aria-label="プラン作成の進捗">
         {["過ごし方", "日時・場所", "予算・希望"].map((label, index) => <button type="button" key={label} disabled={index > reached || busy || advancing || selectingCategory} data-complete={index < reached} aria-current={step === index ? "step" : undefined} onClick={() => move(index)}><span>{index < reached ? <Check size={12} /> : index + 1}</span>{label}</button>)}
       </nav>
@@ -388,10 +426,10 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
             <div className={styles.categoryDetailGroup}>
               <button type="button" className={styles.categorySummary} aria-label={`気分を選び直す（現在：${currentCategory.label}）`} onClick={() => setShowCategories(true)}>
                 <span className={styles.categorySummaryBack}><ChevronLeft size={18} /></span>
+                <span className={styles.categoryThumbnail} style={{ backgroundPosition: currentCategory.position }} aria-hidden="true" />
                 <strong>{currentCategory.label}</strong>
                 <small>複数選択可</small>
               </button>
-              <div className={styles.categoryHero} style={{ backgroundPosition: currentCategory.position }} aria-hidden="true" />
               <div ref={optionCarouselRef} className={`${styles.planChips} ${styles.optionCarousel}`} data-dragging={draggingOptions} data-more-right={moreOptionsRight} aria-label="気になること（任意）" tabIndex={0} onScroll={updateOptionScroll}
                 onPointerDown={startOptionDrag} onPointerMove={moveOptionDrag} onPointerUp={endOptionDrag} onPointerCancel={endOptionDrag}
                 onClickCapture={(event) => {
