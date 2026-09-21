@@ -1,5 +1,10 @@
 import { getEnv } from "@/config/env";
 import { LLM_PRICE_TABLE, MODEL_PARAMS } from "@/config/settings";
+import type { AppEvent } from "@/domain/schemas";
+import { newId } from "@/lib/ids";
+import { realNowIso } from "@/lib/time";
+import { maskPii } from "@/server/privacy/mask";
+import { appendRunEvent, nextEventSeq } from "@/server/repositories/store";
 import { z, type ZodType } from "zod";
 import { orcaBase, orcaHeaders, usdToJpy, usageFromOrca } from "./usage";
 
@@ -23,6 +28,16 @@ export const TASK_POOL: Record<LlmTask, Pool> = {
   conflict: "hard",
 };
 
+/**
+ * Masked LLM failure body truncate length for logs + run events.
+ * LIVE sample failure used ~82 completion tokens (~300–400 chars of JSON).
+ * 800 chars keeps typical short failures intact for Zod diagnosis while
+ * bounding Firestore event / Cloud Logging payload size (not a full max_tokens dump).
+ */
+export const LLM_FAILURE_CONTENT_CHARS = 800;
+
+export type LlmParseFailureKind = "json_parse_failed" | "schema_validation_failed";
+
 export type LlmCallResult<T> = {
   data: T | null;
   ok: boolean;
@@ -41,6 +56,108 @@ export type LlmCallResult<T> = {
 function modelFor(pool: Pool): string {
   const env = getEnv();
   return pool === "hard" ? env.orcaHardModel : env.orcaMundaneModel;
+}
+
+export function previewMaskedLlmContent(content: string, maxChars = LLM_FAILURE_CONTENT_CHARS): string {
+  const masked = maskPii(content).masked;
+  if (masked.length <= maxChars) return masked;
+  return `${masked.slice(0, maxChars)}…`;
+}
+
+/** Classify JSON.parse vs Zod failure without collapsing both to one error string. */
+export function classifyLlmJsonAgainstSchema<T>(
+  content: string,
+  schema: ZodType<T>,
+): {
+  kind: LlmParseFailureKind | null;
+  data: T | null;
+  zodFlatten: ReturnType<z.ZodError["flatten"]> | null;
+} {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return { kind: "json_parse_failed", data: null, zodFlatten: null };
+  }
+  const checked = schema.safeParse(parsed);
+  if (checked.success) {
+    return { kind: null, data: checked.data, zodFlatten: null };
+  }
+  return {
+    kind: "schema_validation_failed",
+    data: null,
+    zodFlatten: checked.error.flatten(),
+  };
+}
+
+function errorMessageForKind(kind: LlmParseFailureKind): string {
+  return kind === "json_parse_failed" ? "json parse failed" : "schema validation failed";
+}
+
+async function recordLlmParseFailure(input: {
+  runId: string;
+  task: LlmTask;
+  attempt: number;
+  repaired: boolean;
+  kind: LlmParseFailureKind;
+  content: string;
+  zodFlatten: ReturnType<z.ZodError["flatten"]> | null;
+  requestedModel: string;
+  actualModel: string;
+}): Promise<void> {
+  const contentPreview = previewMaskedLlmContent(input.content);
+  const payload = {
+    agent: "llm" as const,
+    task: input.task,
+    attempt: input.attempt,
+    repaired: input.repaired,
+    failureKind: input.kind,
+    contentPreview,
+    contentTruncated: maskPii(input.content).masked.length > LLM_FAILURE_CONTENT_CHARS,
+    zodFlatten: input.zodFlatten,
+    requestedModel: input.requestedModel,
+    actualModel: input.actualModel,
+  };
+
+  // Structured log: Cloud Logging retention (typically 30d default) — full diagnostic shape.
+  console.info(
+    JSON.stringify({
+      severity: "WARNING",
+      message: "llm_parse_failure",
+      runId: input.runId,
+      ...payload,
+    }),
+  );
+
+  // Run event: durable with the session for postmortem; same truncated preview (no raw PII).
+  try {
+    const seq = await nextEventSeq(input.runId);
+    const event: AppEvent = {
+      eventId: newId("evt"),
+      runId: input.runId,
+      seq,
+      at: realNowIso(),
+      type: "NOTICE",
+      summary: `LLM ${input.kind} (attempt ${input.attempt})`,
+      evidenceIds: [],
+      model: input.actualModel,
+      pool: null,
+      requestedModel: input.requestedModel,
+      actualModel: input.actualModel,
+      usage: null,
+      payload,
+    };
+    await appendRunEvent(input.runId, event);
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        severity: "ERROR",
+        message: "llm_parse_failure_event_write_failed",
+        runId: input.runId,
+        error: error instanceof Error ? error.message : "unknown",
+      }),
+    );
+  }
 }
 
 export async function callLLM<T>(input: {
@@ -88,7 +205,10 @@ export async function callLLM<T>(input: {
     },
   };
 
-  const attempt = async (): Promise<LlmCallResult<T>> => {
+  const attempt = async (
+    attemptNo: number,
+    repaired: boolean,
+  ): Promise<LlmCallResult<T>> => {
     const res = await fetch(`${orcaBase()}/chat/completions`, {
       method: "POST",
       headers: orcaHeaders(),
@@ -126,19 +246,27 @@ export async function callLLM<T>(input: {
       };
     };
     const content = json.choices?.[0]?.message?.content ?? "";
-    let parsed: unknown = null;
-    try {
-      parsed = JSON.parse(content);
-    } catch {
-      parsed = null;
-    }
-    const checked = input.schema.safeParse(parsed);
+    const classified = classifyLlmJsonAgainstSchema(content, input.schema);
     const usage = usageFromOrca(json);
+    const resolvedModel = json.model ?? actualModel;
+    if (classified.kind) {
+      await recordLlmParseFailure({
+        runId: input.runId,
+        task: input.task,
+        attempt: attemptNo,
+        repaired,
+        kind: classified.kind,
+        content,
+        zodFlatten: classified.zodFlatten,
+        requestedModel,
+        actualModel: resolvedModel,
+      });
+    }
     return {
-      data: checked.success ? checked.data : null,
-      ok: checked.success,
+      data: classified.data,
+      ok: classified.kind == null,
       requestedModel,
-      actualModel: json.model ?? actualModel,
+      actualModel: resolvedModel,
       pool,
       promptTokens: usage.promptTokens,
       completionTokens: usage.completionTokens,
@@ -146,13 +274,16 @@ export async function callLLM<T>(input: {
       costJpy: usage.costJpy,
       latencyMs,
       repaired: false,
-      error: checked.success ? null : "schema validation failed",
+      error: classified.kind ? errorMessageForKind(classified.kind) : null,
     };
   };
 
-  const result = await attempt();
-  if (!result.ok && result.error === "schema validation failed") {
-    const repaired = await attempt();
+  const result = await attempt(1, false);
+  if (
+    !result.ok &&
+    (result.error === "schema validation failed" || result.error === "json parse failed")
+  ) {
+    const repaired = await attempt(2, true);
     repaired.repaired = true;
     return repaired;
   }
