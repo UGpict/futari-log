@@ -41,6 +41,27 @@ export async function fixtureResponse<T>(path: string, init?: RequestInit): Prom
   if (url === "/api/auth/anonymous" && method === "POST") {
     return { uid: fixtureMe.uid, runtime: "MOCK" } as T;
   }
+  if ((url === "/api/auth/login" || url === "/api/auth/signup") && method === "POST") {
+    return {
+      uid: fixtureMe.uid,
+      email: "sample@example.com",
+      emailVerified: url === "/api/auth/login",
+      runtime: "MOCK",
+      authBackend: "mock",
+    } as T;
+  }
+  if (url === "/api/auth/forgot-password" && method === "POST") {
+    return { ok: true, runtime: "MOCK" } as T;
+  }
+  if (url === "/api/auth/logout" && method === "POST") {
+    return { ok: true, runtime: "MOCK" } as T;
+  }
+  if (url === "/api/auth/verify" && method === "GET") {
+    return { email: "sample@example.com", emailVerified: true } as T;
+  }
+  if (url === "/api/auth/verify" && method === "POST") {
+    return { ok: true } as T;
+  }
   if (url === "/api/places/search" && method === "GET") {
     const q = (path.split("?")[1] ? new URLSearchParams(path.split("?")[1]).get("q") : "") ?? "";
     const places = [
@@ -62,9 +83,6 @@ export async function fixtureResponse<T>(path: string, init?: RequestInit): Prom
         authorAttributions: [],
       })),
     } as T;
-  }
-  if (url === "/api/auth/anonymous" && method === "POST") {
-    return { uid: fixtureMe.uid, runtime: "MOCK" } as T;
   }
   if (url === "/api/couples" && method === "POST") return { id: "cpl_fixture" } as T;
   if (/^\/api\/couples\/[^/]+\/sessions$/.test(url) && method === "GET") {

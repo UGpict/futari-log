@@ -1,6 +1,7 @@
 export * from "./error";
 export * from "./planning";
 export * from "./me";
+export * from "./auth";
 export * from "./session";
 export * from "./memory";
 export * from "./reflection";
