@@ -53,7 +53,7 @@
 | 食事 | お肉・焼肉 | `steak_house` / `barbecue_restaurant` | 同左 |
 | 食事 | お寿司 | `sushi_restaurant` | 同左 |
 | 食事 | イタリアン | `italian_restaurant` / `pizza_restaurant` | 同左 |
-| 食事 | 食べ歩き | `meal_takeaway` / `market` など | 同左 |
+| 食事 | 食べ歩き | `meal_takeaway` / `food_court`（`market` は検索のみ・達成に使わない） | 同左 + 検索用 `market` |
 | カフェ | カフェ | `cafe` 系 | 同左 |
 
 `cafe` と `restaurant` を両方持つ店は、カフェのアイコンでも食事候補から消さない。`cafe` だけでは食事の希望を達成しない。

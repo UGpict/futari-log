@@ -187,7 +187,7 @@ describe("planner candidate pick", () => {
     assert.ok(picked.selected.includes("ChIJ-cafe"));
   });
 
-  it("picks one spot per cuisine chip in the wish text", () => {
+  it("picks one spot per cuisine chip without an extra dining stop for the parent category", () => {
     const spot = (id: string, name: string, categories: string[]) => ({
       id,
       name,
@@ -200,6 +200,125 @@ describe("planner candidate pick", () => {
       standingBurden: { value: "LOW" as const, evidenceIds: [] as string[] },
       officialUrl: null,
     });
+    const yakiniku = spot("mock:yakiniku", "焼肉", ["steak_house", "restaurant"]);
+    const sushi = spot("mock:sushi", "寿司", ["sushi_restaurant", "restaurant"]);
+    const generic = spot("mock:generic-dining", "食堂", ["restaurant"]);
+    const picked = pickFromCandidates({
+      walk: [],
+      exhibit: [],
+      sweets: [],
+      other: [yakiniku, sushi, generic],
+      lockedIds: [],
+      rain: false,
+      avoidIds: [],
+      preferences: [
+        { id: "pref_category", content: "おいしいものを楽しむデート", priority: "PREFER" },
+        { id: "pref_chip_0", content: "お肉", priority: "MUST" },
+        { id: "pref_chip_1", content: "お寿司", priority: "MUST" },
+      ],
+    });
+    assert.ok(picked.selected.includes("mock:yakiniku"));
+    assert.ok(picked.selected.includes("mock:sushi"));
+    assert.equal(picked.selected.includes("mock:generic-dining"), false);
+    assert.deepEqual(picked.unmetMust, []);
+    assert.deepEqual(picked.overflowMust, []);
+  });
+
+  it("does not add another spot when a locked appointment already fulfills the wish", () => {
+    const spot = (id: string, name: string, categories: string[]) => ({
+      id,
+      name,
+      lat: 35.68,
+      lng: 139.76,
+      categories,
+      environment: { value: "INDOOR" as const, evidenceIds: [] as string[] },
+      costForTwoJpy: { value: { min: 5000, max: 8000 }, evidenceIds: [] as string[] },
+      restEase: { value: "EASY" as const, evidenceIds: [] as string[] },
+      standingBurden: { value: "LOW" as const, evidenceIds: [] as string[] },
+      officialUrl: null,
+    });
+    const lockedSushi = spot("mock:locked-sushi", "予約寿司", ["sushi_restaurant", "restaurant"]);
+    const otherSushi = spot("mock:other-sushi", "別の寿司", ["sushi_restaurant", "restaurant"]);
+    const yakiniku = spot("mock:yakiniku", "焼肉", ["steak_house", "restaurant"]);
+    const picked = pickFromCandidates({
+      walk: [],
+      exhibit: [],
+      sweets: [],
+      other: [otherSushi, yakiniku],
+      lockedIds: [lockedSushi.id],
+      lockedSpots: [lockedSushi],
+      rain: false,
+      avoidIds: [],
+      preferences: [
+        { id: "pref_chip_0", content: "お寿司", priority: "MUST" },
+        { id: "pref_chip_1", content: "お肉", priority: "MUST" },
+      ],
+    });
+    assert.deepEqual(picked.selected, ["mock:locked-sushi", "mock:yakiniku"]);
+    assert.equal(picked.selected.includes("mock:other-sushi"), false);
+  });
+
+  it("keeps MUST spots when many PREFER wishes compete for slots", () => {
+    const spot = (id: string, name: string, categories: string[]) => ({
+      id,
+      name,
+      lat: 35.68,
+      lng: 139.76,
+      categories,
+      environment: { value: "INDOOR" as const, evidenceIds: [] as string[] },
+      costForTwoJpy: { value: { min: 2000, max: 4000 }, evidenceIds: [] as string[] },
+      restEase: { value: "EASY" as const, evidenceIds: [] as string[] },
+      standingBurden: { value: "LOW" as const, evidenceIds: [] as string[] },
+      officialUrl: null,
+    });
+    const picked = pickFromCandidates({
+      walk: [spot("mock:park", "公園", ["park"])],
+      exhibit: [spot("mock:museum", "美術館", ["museum"])],
+      sweets: [spot("mock:cafe", "カフェ", ["cafe"]), spot("mock:sweets", "スイーツ", ["bakery"])],
+      other: [
+        spot("mock:yakiniku", "焼肉", ["steak_house", "restaurant"]),
+        spot("mock:sushi", "寿司", ["sushi_restaurant", "restaurant"]),
+        spot("mock:mall", "モール", ["shopping_mall"]),
+        spot("mock:cinema", "映画", ["movie_theater"]),
+        spot("mock:book", "本屋", ["book_store"]),
+      ],
+      lockedIds: [],
+      rain: false,
+      avoidIds: [],
+      maxStops: 3,
+      preferences: [
+        { id: "must_meat", content: "お肉", priority: "MUST" },
+        { id: "must_sushi", content: "お寿司", priority: "MUST" },
+        { id: "prefer_cafe", content: "カフェ", priority: "PREFER" },
+        { id: "prefer_museum", content: "美術館", priority: "PREFER" },
+        { id: "prefer_movie", content: "映画", priority: "PREFER" },
+        { id: "prefer_mall", content: "ショッピング", priority: "PREFER" },
+      ],
+    });
+    assert.ok(picked.selected.includes("mock:yakiniku"));
+    assert.ok(picked.selected.includes("mock:sushi"));
+    assert.equal(picked.selected.length, 3);
+    assert.deepEqual(picked.unmetMust, []);
+    assert.deepEqual(picked.overflowMust, []);
+  });
+
+  it("asks instead of silently dropping MUST wishes that do not fit", () => {
+    const spot = (id: string, name: string, categories: string[]) => ({
+      id,
+      name,
+      lat: 35.68,
+      lng: 139.76,
+      categories,
+      environment: { value: "INDOOR" as const, evidenceIds: [] as string[] },
+      costForTwoJpy: { value: { min: 2000, max: 4000 }, evidenceIds: [] as string[] },
+      restEase: { value: "EASY" as const, evidenceIds: [] as string[] },
+      standingBurden: { value: "LOW" as const, evidenceIds: [] as string[] },
+      officialUrl: null,
+    });
+    const locked = [
+      spot("lock-1", "固定1", ["museum"]),
+      spot("lock-2", "固定2", ["cafe"]),
+    ];
     const picked = pickFromCandidates({
       walk: [],
       exhibit: [],
@@ -207,15 +326,22 @@ describe("planner candidate pick", () => {
       other: [
         spot("mock:yakiniku", "焼肉", ["steak_house", "restaurant"]),
         spot("mock:sushi", "寿司", ["sushi_restaurant", "restaurant"]),
-        spot("mock:generic-dining", "食堂", ["restaurant"]),
+        spot("mock:italian", "イタリアン", ["italian_restaurant", "restaurant"]),
       ],
-      lockedIds: [],
+      lockedIds: locked.map((item) => item.id),
+      lockedSpots: locked,
       rain: false,
       avoidIds: [],
-      wishText: "おいしいものを楽しむデート。お肉。お寿司",
+      maxStops: 3,
+      preferences: [
+        { id: "must_meat", content: "お肉", priority: "MUST" },
+        { id: "must_sushi", content: "お寿司", priority: "MUST" },
+        { id: "must_italian", content: "イタリアン", priority: "MUST" },
+      ],
     });
-    assert.ok(picked.selected.includes("mock:yakiniku"));
-    assert.ok(picked.selected.includes("mock:sushi"));
+    assert.equal(picked.selected.includes("mock:yakiniku"), true);
+    assert.ok(picked.overflowMust.some((pref) => pref.content === "お寿司" || pref.content === "イタリアン"));
+    assert.equal(picked.overflowMust.length >= 1, true);
   });
 
   it("excludes the original cafe when the wish is to replace it", () => {
