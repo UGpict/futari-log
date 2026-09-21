@@ -539,7 +539,7 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
                 </div>
               </div>
               <details className={styles.routeEnd}><summary><span className={styles.routeMarker}><PlanStickerIcon kind="goal" /></span><span><small>解散</small><strong>{form.endName || "待ち合わせと同じ"}</strong></span><ChevronDown size={14} /></summary><div className={styles.routeEndEditor}><TextInput aria-label="解散場所" value={form.endName} onChange={(e) => { setEndPlace(null); setForm({ ...form, endName: e.target.value }); }} placeholder={meetPlace?.name ?? "解散場所"} autoComplete="off" />
-                {form.endName.trim().length >= 2 || endPlace ? <PlaceSuggest query={form.endName} selected={endPlace} search={endSearch} label="解散場所の候補" onPick={(place) => { setEndPlace(place); setForm((current) => ({ ...current, endName: place.name })); }} /> : <p className={styles.placeHint}>別の場所で解散するときだけ入力できます。</p>}
+                {form.endName.trim().length >= 2 || endPlace ? <PlaceSuggest query={form.endName} selected={endPlace} search={endSearch} label="解散場所の候補" onPick={(place) => { setEndPlace(place); setForm((current) => ({ ...current, endName: place.name })); }} /> : null}
               </div></details>
             </div>
           </section>
