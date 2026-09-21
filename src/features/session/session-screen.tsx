@@ -5,12 +5,13 @@ import { TextArea } from "@/components/text-input";
 import { Button, ButtonLink } from "@/components/button";
 
 import { useState } from "react";
-import { Check, MessageCircle, ArrowUpRight, ExternalLink, Clock3 } from "lucide-react";
+import { Check, MessageCircle, ArrowUpRight, ExternalLink, Clock3, SlidersHorizontal } from "lucide-react";
 import { useSession } from "@/client/hooks/use-session";
 import { usePlacePhotos } from "@/client/hooks/use-place-photos";
 import { api, fixturesEnabled } from "@/client/api";
 import { formatTokyoHm } from "@/lib/time";
 import { PlanLoading, PlanningAgentTicker } from "./plan-loading";
+import { appendFeedbackQuick, FEEDBACK_QUICK_OPTIONS } from "./feedback-quick";
 import { HomeSheet } from "../home/home-sheet";
 import { PlanStickerIcon } from "@/components/plan-sticker-icon";
 import { MoodSticker } from "@/components/mood-sticker";
@@ -99,7 +100,7 @@ function SessionPlanningSkeleton({ data }: { data: SessionSnapshot | null }) {
 
 export function SessionScreen({ sessionId }: { sessionId: string }) {
   const { data, error, reload, startReplan } = useSession(sessionId);
-  const [sheet, setSheet] = useState<"feedback" | null>(null);
+  const [sheet, setSheet] = useState<"conditions" | "feedback" | null>(null);
   const [target, setTarget] = useState<{ id: string; name: string; locked: boolean } | null>(null);
   const [feedback, setFeedback] = useState("");
   const [actionError, setActionError] = useState("");
@@ -156,7 +157,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   }
   return <main className={styles.page} data-sheet-open={sheet ? "" : undefined}>
     <Toast message={message} onDismiss={() => setMessage("")} />
-    <header className={styles.header}><HomeLogo className={styles.homeLogo} />{!fixturesEnabled() && <span className={styles.planStatus}>{confirmed ? "予定に追加済み" : proposalReady ? "変更案を確認中" : active && !attention ? "変更案を作成中" : "プランを相談中"}</span>}</header>
+    <header className={styles.header}><HomeLogo className={styles.homeLogo} />{!fixturesEnabled() && <span className={styles.planStatus}>{confirmed ? "予定に追加済み" : proposalReady ? "変更案を確認中" : active && !attention ? "変更案を作成中" : "プランを相談中"}</span>}<Button className={styles.conditionButton} variant="ghost" size="compact" onClick={() => setSheet("conditions")}><SlidersHorizontal size={14} />条件</Button></header>
     <section className={styles.hero}>
       <div className={styles.planDateHeading}>
         <span className={styles.resultDateSticker}><PlanStickerIcon kind="calendar" /></span><div><h1><time dateTime={input.dateTokyo}>
@@ -260,18 +261,21 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
       }}>
         <div className={styles.feedbackIntro}><MoodSticker mood="relaxed" /><div className={styles.feedbackSpeech}><small>{target?.name ?? "一日の過ごし方"}</small><strong>どんなふうに変えたい？</strong></div></div>
         {target?.locked && <p className={styles.fieldHint}>時間が決まっている予定です。固定条件を守れる範囲で調整します。</p>}
-        <fieldset className={styles.feedbackQuick}><legend>近い希望があれば選んでね</legend><div className={styles.quickOptions}>{["別の場所がいい", "予算を抑えたい", "ゆっくり過ごしたい", "移動を少なくしたい"].map((text) => {
-          const selected = feedback.split("\n").includes(text);
-          return <button type="button" key={text} aria-pressed={selected} disabled={pending} onClick={() => setFeedback((value) => {
-            const lines = value.split("\n").filter(Boolean);
-            return selected ? lines.filter((line) => line !== text).join("\n") : [...lines, text].join("\n");
-          })}><span aria-hidden="true">{selected && <Check size={12} />}</span>{text}</button>;
-        })}</div></fieldset>
+        <fieldset className={styles.feedbackQuick}><legend>近い希望があれば選んでね</legend><div className={styles.quickOptions}>{FEEDBACK_QUICK_OPTIONS.map((text) => (
+          <button type="button" key={text} disabled={pending} onClick={() => setFeedback((value) => appendFeedbackQuick(value, text))}>{text}</button>
+        ))}</div></fieldset>
         <label className={styles.feedbackLabel}><span><strong>追加の希望</strong><small>自由に入力 · 任意</small></span><TextArea rows={3} maxLength={1000} value={feedback} disabled={pending} onChange={(event) => setFeedback(event.target.value)} placeholder="別の美術館がいい、もう少しカフェでゆっくりしたい" /></label>
         {fixturesEnabled() && <p className={styles.fieldHint}>現在は操作確認用のサンプルです。</p>}
         {actionError && <p className={styles.notice} role="alert">{actionError}</p>}
         <Button fullWidth type="submit" className={styles.feedbackSubmit} disabled={!feedback.trim() || pending || Boolean(active)}>{pending ? "送っています…" : "この希望で考え直す"}<ArrowUpRight size={17} /></Button>
       </form>
+    </HomeSheet>}
+    {sheet === "conditions" && <HomeSheet title="プランをつくった条件" onClose={() => setSheet(null)}>
+      <div className={styles.conditionSheet}><p>最初の3ステップで入力した内容です。</p><dl><dt>時間</dt><dd>{input.startTime}〜{input.endTime}</dd><dt>集合 → 解散</dt><dd>{input.meet.name} → {input.end.name}</dd><dt>ふたりの予算</dt><dd>{budgetLabel}</dd><dt>移動手段</dt><dd>{travel.label}</dd></dl>
+        <h3>伝えた希望</h3>{input.preferences.map((item) => <p className={styles.preference} key={item.id}>{item.content}</p>)}
+        {!!displayPlan?.assumptions.length && <><h3>まだ確認できていないこと</h3>{displayPlan.assumptions.map((item) => <p key={item}>{item}</p>)}</>}
+        {!!displayPlan?.planB.length && <><h3>予定が変わったら</h3>{displayPlan.planB.map((item) => <p key={item.id}><strong>{item.trigger}</strong><br />{item.isVerifiedAlternative && item.candidateSpotId ? data.spots[item.candidateSpotId]?.name : item.policy || "代わりのプランを検討します"}</p>)}</>}
+      </div>
     </HomeSheet>}
   </main>;
 }

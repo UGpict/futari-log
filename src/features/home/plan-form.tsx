@@ -11,8 +11,9 @@ import { PlanLoading } from "@/features/session/plan-loading";
 import { api, fixturesEnabled } from "@/client/api";
 import { useMe } from "@/client/hooks/use-me";
 import { usePlaceSearch } from "@/client/hooks/use-place-search";
-import { tokyoToday } from "@/config/public";
+import { SERVICE_AREA_NOTICE, tokyoToday } from "@/config/public";
 import type { PlaceCandidate, TravelMode } from "@/contracts";
+import type { PlanFormSeed } from "./home-suggestion";
 import { MemoMascot } from "@/components/memo-mascot";
 import { AiSparkIcon } from "@/components/ai-spark-icon";
 import { PlanStickerIcon } from "@/components/plan-sticker-icon";
@@ -97,9 +98,12 @@ function PlaceSuggest({
 
 const stepNames = ["activity", "schedule", "details"] as const;
 
-export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage = false, onStepChange }: {
+export function PlanForm({ initialDate, initialWish, seed, seedParam, initialStep = 0, fullPage = false, onStepChange }: {
   initialDate: string;
   initialWish?: string;
+  seed?: PlanFormSeed;
+  /** URL の seed= をステップ遷移で維持する */
+  seedParam?: string;
   initialStep?: number;
   fullPage?: boolean;
   onStepChange?: (step: number) => void;
@@ -113,6 +117,7 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (advanceTimer.current) clearTimeout(advanceTimer.current); }, []);
   const [reached, setReached] = useState(initialStep);
+  const seedWish = seed?.wish?.trim() || initialWish?.trim() || "";
   useEffect(() => {
     if (!fullPage) return;
     const syncStepFromHistory = () => {
@@ -291,7 +296,8 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
       setReached((previous) => Math.max(previous, next));
       if (fullPage) {
         const query = new URLSearchParams({ date: initialDate, step: stepNames[next] });
-        if (initialWish) query.set("wish", initialWish);
+        if (seedParam) query.set("seed", seedParam);
+        else if (seedWish) query.set("wish", seedWish);
         router.push(`/plans/new?${query.toString()}`, { scroll: false });
       }
       requestAnimationFrame(() => heading.current?.focus());
@@ -307,14 +313,15 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
     dateTokyo: initialDate,
-    startTime: "13:00",
-    endTime: "18:00",
-    meetName: "",
+    startTime: seed?.startTime ?? "13:00",
+    endTime: seed?.endTime ?? "18:00",
+    meetName: seed?.meet?.name ?? "",
     endName: "",
     meals: "6000",
     facilities: "3000",
     transit: "1000",
-    self: initialWish || "",
+    self: seedWish,
+    partner: "",
     locked: false,
     fixedName: "",
     fixedStart: "15:00",
@@ -330,7 +337,7 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
     const initial = parseDate(initialDate);
     return new Date(initial.getFullYear(), initial.getMonth(), 1);
   });
-  const [meetPlace, setMeetPlace] = useState<PlaceCandidate | null>(null);
+  const [meetPlace, setMeetPlace] = useState<PlaceCandidate | null>(seed?.meet ?? null);
   const [endPlace, setEndPlace] = useState<PlaceCandidate | null>(null);
   const bias = me ? { lat: me.demoLat, lng: me.demoLng } : null;
   const meetSearch = usePlaceSearch(form.meetName, bias);
@@ -436,6 +443,13 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
               priority: "PREFER",
               source: "SELF_REPORT",
             },
+            ...(form.partner.trim() ? [{
+              id: "pref_partner",
+              subject: "PARTNER" as const,
+              content: form.partner.trim(),
+              priority: "PREFER" as const,
+              source: "PARTNER_STATEMENT_REPORTED" as const,
+            }] : []),
           ],
           fixedAppointments: form.locked
             ? [
@@ -580,6 +594,7 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
               ] as const).map(([value, label, icon]) => <button type="button" key={value} aria-pressed={form.travelMode === value} onClick={() => setForm({ ...form, travelMode: value })}><span className={styles.transportIcon}><PlanStickerIcon kind={icon} /></span><strong>{label}</strong><span className={styles.transportCheck} aria-hidden="true">{form.travelMode === value && <Check size={13} />}</span></button>)}
             </div>
           </fieldset>
+          <p className={styles.areaNotice}>{SERVICE_AREA_NOTICE}</p>
           <section className={styles.scheduleSection} aria-label="集合と解散">
             <div className={styles.meetingCard}>
               <div className={styles.routeStart}>
@@ -620,6 +635,16 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
             <button type="button" onClick={() => move(1)}><span><small>日時</small><strong>{dateLabel}・{form.startTime}〜{form.endTime}</strong></span><em>変更</em></button>
             <button type="button" onClick={() => move(1)}><span><small>場所</small><strong>{meetPlace?.name ?? "集合場所を選択"}{form.endName ? ` → ${form.endName}` : ""}</strong></span><em>変更</em></button>
           </section>
+          <label className={`${styles.formLabel} ${styles.partnerWishField}`}>
+            <span>相手の希望 <small>任意</small></span>
+            <TextArea
+              rows={2}
+              maxLength={2000}
+              value={form.partner}
+              onChange={(e) => setForm({ ...form, partner: e.target.value })}
+              placeholder="パンケーキを食べたいって言っていた"
+            />
+          </label>
         </div>}
       </section>
       <footer className={styles.planFooter}>

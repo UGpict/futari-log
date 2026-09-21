@@ -20,6 +20,9 @@ import { MoodSticker, moods, type Mood } from "@/components/mood-sticker";
 import { PlanStickerIcon } from "@/components/plan-sticker-icon";
 import { HomeSheet } from "./home-sheet";
 import { MemoryScreen } from "@/features/memory/memory-screen";
+import { HOME_SUGGESTION } from "./home-suggestion";
+import { nearbySampleEvents } from "./sample-events";
+import { decideReflectionSave, reflectionSaveNotice } from "./reflection-save";
 import { buildDemoCalendarRecords, type DemoCalendarConfig } from "./demo-calendar-stickers";
 import styles from "./home.module.css";
 
@@ -29,17 +32,6 @@ const ideas = [
   { mood: "happy" as const, title: "甘いものと、ゆっくり話す日", description: "カフェでひと息。ふたりのペースで。", wish: "カフェで甘いものを食べて、ゆっくり話したい" },
   { mood: "happy" as const, title: "いつもと違う道を、ふたりで", description: "公園さんぽと、小さな寄り道。", wish: "公園を散歩して、途中でカフェに寄りたい" },
   { mood: "relaxed" as const, title: "雨の日は、アートに会いに", description: "屋内で楽しむ、のんびりデート。", wish: "美術館や屋内の展示を、休憩を挟みながら楽しみたい" },
-];
-const homeSuggestion = {
-  title: "アートと夜カフェ",
-  area: "清澄白河",
-  wish: "清澄白河で美術館や展示を楽しんだあと、夜カフェでゆっくり話すデートにしたい",
-};
-const nearbyEvents = [
-  { id: "odd-exhibition", date: "2026-10-04", dateLabel: "10/4まで", area: "上野エリア", title: "ちょっと不思議なもの展", kicker: "会話が弾む、ユニークな企画展", theme: "exhibition", wish: "上野のちょっと不思議なもの展を見に行くデート", sponsored: false },
-  { id: "night-garden", date: "2026-09-23", dateLabel: "9/23–10/4", area: "清澄白河エリア", title: "夜の庭園ライトアップ", kicker: "秋の夜を、ゆっくり散歩", theme: "garden", wish: "清澄白河の夜の庭園ライトアップを組み込んだ、ゆっくり楽しめるデート", sponsored: false },
-  { id: "mystery-walk", date: "2026-09-27", dateLabel: "9/27まで", area: "下北沢・三軒茶屋", title: "ふたりで巡る、まち歩き謎解き", kicker: "寄り道しながら小さな謎を解こう", theme: "mystery", wish: "下北沢と三軒茶屋のまち歩き謎解きを中心にしたデート", sponsored: true },
-  { id: "ai-hack", date: "2026-09-23", dateLabel: "9/19–9/23", area: "東京都内・最終日", title: "AI HACK 2026", kicker: "賞金最大100万円、5日間のAIハッカソン", theme: "ai-hack", wish: "AI HACK 2026の最終日見学を組み込んだ、テクノロジーを楽しむデート", sponsored: false },
 ];
 
 function dateLabel(date: string) {
@@ -120,7 +112,7 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
     () => (resolvedDemo.enabled ? buildDemoCalendarRecords(resolvedDemo.anchorDate) : []),
     [resolvedDemo.enabled, resolvedDemo.anchorDate],
   );
-  const { records, save, remove, today, isFixture, demoStickersActive } = useDateJournal(
+  const { records, save, saveToServer, remove, today, isFixture, demoStickersActive } = useDateJournal(
     me?.uid,
     demoRecords,
   );
@@ -148,19 +140,38 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
     setMonthOverride(`${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`);
   }
 
-  function openPlan(date = today, wish = "") {
+  function openPlan(date = today, opts?: { seed?: string; wish?: string }) {
     setSelectedDate(null);
     const query = new URLSearchParams({ date, step: "activity" });
-    if (wish) query.set("wish", wish);
+    if (opts?.seed) query.set("seed", opts.seed);
+    if (opts?.wish) query.set("wish", opts.wish);
     router.push(`/plans/new?${query.toString()}`);
   }
 
   async function saveMemory(record: DateMemory) {
-    save(record);
+    const dayPlans = plans.filter((plan) => plan.date === record.date);
+    const reflectable = dayPlans.filter((plan) =>
+      ["DONE", "REFLECTED", "CONFIRMED", "IN_PROGRESS"].includes(plan.status),
+    );
+    const decision = decideReflectionSave({
+      isFixture,
+      reflectableSessionIds: reflectable.map((plan) => plan.id),
+    });
+    if (decision.dest === "server") {
+      try {
+        await saveToServer(decision.sessionId, record);
+        setNotice(reflectionSaveNotice(decision));
+      } catch {
+        save(record);
+        setNotice(reflectionSaveNotice(decision, { offline: true }));
+      }
+    } else {
+      save(record);
+      setNotice(reflectionSaveNotice(decision));
+    }
     setReflecting(false);
     setStampedDate(record.date);
     setSelectedDate(null);
-    setNotice("振り返り完了！スタンプを押しました");
   }
 
   const selectedPlans = plans.filter((plan) => plan.date === selectedDate);
@@ -266,15 +277,15 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
           <button
             type="button"
             className={styles.suggestionCard}
-            onClick={() => openPlan(today, homeSuggestion.wish)}
-            aria-label={`${homeSuggestion.area}で、${homeSuggestion.title}。この案でプランをつくる`}
+            onClick={() => openPlan(today, { seed: "home-suggestion" })}
+            aria-label={`${HOME_SUGGESTION.area}で、${HOME_SUGGESTION.title}。この案でプランをつくる`}
             aria-haspopup="dialog"
           >
             <span className={styles.suggestionPhoto} aria-hidden="true" />
             <span className={styles.suggestionCopy}>
-              <span className={styles.suggestionArea}><MapPin size={12} aria-hidden="true" />{homeSuggestion.area}</span>
-              <strong>{homeSuggestion.title}</strong>
-              <span className={styles.suggestionRoute}>美術館・展示<ArrowRight size={12} aria-hidden="true" />夜カフェ</span>
+              <span className={styles.suggestionArea}><MapPin size={12} aria-hidden="true" />{HOME_SUGGESTION.area}</span>
+              <strong>{HOME_SUGGESTION.title}</strong>
+              <span className={styles.suggestionRoute}>{HOME_SUGGESTION.routeLabels[0]}<ArrowRight size={12} aria-hidden="true" />{HOME_SUGGESTION.routeLabels[1]}</span>
               <span className={styles.suggestionAction}>この案でプランをつくる<ArrowRight size={15} aria-hidden="true" /></span>
             </span>
           </button>
@@ -337,17 +348,17 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
             event.preventDefault();
             carousel.scrollLeft += event.deltaY;
           }}>
-            {nearbyEvents.map((event) => <button type="button" key={event.id} className={styles.eventBanner} data-theme={event.theme} onClick={() => openPlan(event.date, event.wish)} aria-label={`${event.title}、${event.dateLabel}、${event.area}。このイベントでデートをつくる`}>
+            {nearbySampleEvents.map((event) => <button type="button" key={event.id} className={styles.eventBanner} data-theme={event.theme} data-demo="true" onClick={() => openPlan(today, { seed: event.id })} aria-label={`サンプル。${event.title}、${event.dateLabel}、${event.area}。この雰囲気でプランをつくる`}>
               <span className={styles.eventArtwork} aria-hidden="true"><span className={styles.eventShade} /></span>
               <span className={styles.eventDetails}>
-                <span className={styles.eventMeta}><span>{event.dateLabel}</span><span><MapPin size={10} />{event.area}</span>{event.sponsored && <span>PR</span>}</span>
+                <span className={styles.eventMeta}><span className={styles.eventDemoBadge}>サンプル</span><span>{event.dateLabel}</span><span><MapPin size={10} />{event.area}</span>{event.sponsored && <span>PR</span>}</span>
                 <span className={styles.eventCopy}><strong>{event.title}</strong><span>{event.kicker}</span></span>
-                <span className={styles.eventAction}>このイベントでプランをつくる <ArrowRight size={14} /></span>
+                <span className={styles.eventAction}>この雰囲気でプランをつくる <ArrowRight size={14} /></span>
               </span>
             </button>)}
           </div>
           <button type="button" className={`${styles.carouselButton} ${styles.carouselNext}`} aria-label="次のイベントを見る" disabled={!eventScroll.right} onClick={() => scrollEvents(1)}><ChevronRight aria-hidden="true" /></button>
-          <p className={styles.eventDisclosure}>イベント情報はUI確認用のサンプルです。</p>
+          <p className={styles.eventDisclosure}>大会用のサンプル表示です。イベント名・開催期間はプランの実データには使いません。行程は実在スポットから作ります。</p>
         </section>
       </main>
       <div className={styles.createDateFab} data-over-events={eventsBehindCreateButton}><DateCreateButton onClick={() => openPlan()} /></div>
@@ -395,7 +406,7 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
         </div>}
         {panel === "recommendations" && <div className={styles.recordList}>
           <p className={styles.sheetDescription}>気になる過ごし方から、ふたりのプランをつくろう。</p>
-          {ideas.map((idea) => <button type="button" className={styles.ideaCard} key={idea.title} onClick={() => openPlan(today, idea.wish)}>
+          {ideas.map((idea) => <button type="button" className={styles.ideaCard} key={idea.title} onClick={() => openPlan(today, { wish: idea.wish })}>
             <MoodSticker mood={idea.mood} /><span><strong>{idea.title}</strong><small>{idea.description}</small><span className={styles.ideaLink}>この気分でプランをつくる <ArrowRight size={14} /></span></span>
           </button>)}
         </div>}

@@ -22,11 +22,12 @@ export type HomeSampleEvent = {
   sponsored: boolean;
 };
 
+/** カード表示は 2287b2f 寄せ。planWish はタイトルを埋め込まずエリア＋雰囲気のみ。 */
 export const nearbySampleEvents: HomeSampleEvent[] = [
   {
     id: "sample:odd-exhibition",
     demo: true,
-    dateLabel: "10/4まで（表示用）",
+    dateLabel: "10/4まで",
     area: "上野エリア",
     title: "ちょっと不思議なもの展",
     kicker: "会話が弾む、ユニークな企画展",
@@ -45,7 +46,7 @@ export const nearbySampleEvents: HomeSampleEvent[] = [
   {
     id: "sample:night-garden",
     demo: true,
-    dateLabel: "9/23–10/4（表示用）",
+    dateLabel: "9/23–10/4",
     area: "清澄白河エリア",
     title: "夜の庭園ライトアップ",
     kicker: "秋の夜を、ゆっくり散歩",
@@ -64,7 +65,7 @@ export const nearbySampleEvents: HomeSampleEvent[] = [
   {
     id: "sample:mystery-walk",
     demo: true,
-    dateLabel: "9/27まで（表示用）",
+    dateLabel: "9/27まで",
     area: "下北沢・三軒茶屋",
     title: "ふたりで巡る、まち歩き謎解き",
     kicker: "寄り道しながら小さな謎を解こう",
@@ -83,13 +84,13 @@ export const nearbySampleEvents: HomeSampleEvent[] = [
   {
     id: "sample:ai-hack",
     demo: true,
-    dateLabel: "9/19–9/23（表示用）",
-    area: "東京駅周辺",
+    dateLabel: "9/19–9/23",
+    area: "東京都内・最終日",
     title: "AI HACK 2026",
     kicker: "賞金最大100万円、5日間のAIハッカソン",
     theme: "ai-hack",
-    areaWishToken: "東京駅",
-    planWish: "東京駅周辺でテクノロジーを楽しむ屋内デートにしたい",
+    areaWishToken: "東京",
+    planWish: "東京でテクノロジーを楽しむ屋内デートにしたい",
     meet: {
       id: "ChIJC3Cf2PuLGGAROO00ukl8JwA",
       name: "東京駅",
