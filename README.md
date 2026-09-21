@@ -29,7 +29,7 @@
 ## 画面の流れ（現状）
 
 1. **`/auth`** — ゲスト（匿名）／ログイン／新規作成
-2. **ホーム** — カレンダー、提案カード、近くのイベント（表示用サンプル）
+2. **ホーム** — カレンダー、提案カード、近くのイベント（表示用サンプル）。日付を選んで気分シールを貼り、端末の写真を切り抜いて思い出シールとして並べる（クリックでその日の振り返りをすぐ見られる）
 3. **`/plans/new`** — 3ステップ（過ごし方 → 日時・場所 → 予算・確認）でセッション作成し、初回プラン run を起動
 4. **セッション** — 行程・確認質問・再計画・振り返り保存
 5. **記憶** — 候補の明示承認後にだけ次プランへ効く
@@ -38,25 +38,65 @@ UI だけ触る場合は [`docs/ui-handoff.md`](docs/ui-handoff.md) と `npm run
 
 ## アーキテクチャ
 
+審査・説明用の全体像。詳細な実行経路は [`docs/workflows.md`](docs/workflows.md) / [`docs/cloud-run.md`](docs/cloud-run.md)。
+
+![ふたりログ アーキテクチャ](docs/architecture-futari-log.png)
+
 ```mermaid
-flowchart LR
-  UI[Web UI] --> API[Next.js API]
-  API --> FS[(Firestore)]
-  API -->|"insertPendingRun"| Run[Run PENDING]
-  Run --> Disp{orchestrator}
-  Disp -->|local| Worker[Worker lease]
-  Disp -->|Cloud Run| WF[Cloud Workflows gather→propose]
-  Worker --> Exec[executeRun]
-  WF --> Exec
-  Exec --> Scout[scout Places / Routes]
-  Exec --> Plan[deterministic planner + buildPlan]
-  Exec --> Refl[reflection LLM 非同期]
-  Scout --> FS
-  Plan --> FS
-  Refl --> FS
+flowchart TB
+  CS["Cloud Scheduler<br/>毎朝の収集トリガー"]
+  EXT["外部データ<br/>Places • Routes • 天気 • 公式ページ"]
+
+  subgraph CR["Cloud Run | ふたりログ"]
+    ASYNC["非同期実行基盤<br/>実行管理 • 重複防止 • 承認待ち"]
+
+    subgraph BG["バックグラウンドの AI 処理"]
+      EV["イベント収集<br/>検索 — 構造化 — 出典照合"]
+      PR["料金の追加調査<br/>公式情報の検索 — 本文照合"]
+      RA["振り返りエージェント<br/>記録を分析 → 次の行動を選択"]
+    end
+
+    UI["Next.js UI • API<br/>Firebase Auth で本人確認"]
+    VAL["行程検証<br/>違反時は候補を差し替え • 再検証"]
+    PLAN["決定論的プランニング<br/>希望 • 記憶 • 営業時間 • 移動を照合"]
+    CONF["ユーザー確認 • 承認<br/>質問への回答 / 記憶の保存"]
+  end
+
+  ORCA["OrcaRouter<br/>Gemini 検索 • LLM 分析"]
+  USER["ユーザー<br/>希望 • 予定 • 振り返り"]
+
+  subgraph FS["Firestore | 用途別に保存"]
+    EXEC[("実行記録<br/>行程版 • 判断 • モデル • 費用")]
+    CAT[("共有カタログ<br/>イベント • 会場 • 料金の根拠")]
+    MEM[("ふたりの承認済み記憶<br/>対象 • 適用範囲 • 根拠")]
+  end
+
+  CS -->|"OIDC 認証"| ASYNC
+  EXT --> EV
+  EXT --> PR
+  ASYNC --> EV
+  ASYNC --> PR
+  ASYNC --> RA
+  EV --> ORCA
+  PR --> ORCA
+  RA --> ORCA
+  ORCA -->|"承認した内容だけ"| CONF
+  RA -->|"確認質問・記憶候補"| CONF
+  CONF -->|"回答後に再分析"| RA
+  USER --> UI
+  UI --> CONF
+  UI -->|"行程・確認事項"| PLAN
+  PLAN <-->|"修正して再検証 • 最大〇回"| VAL
+  MEM -->|"既存記憶との照合"| PLAN
+  EV --> CAT
+  PR --> CAT
+  ASYNC --> EXEC
+  CONF --> MEM
 ```
 
-Cloud Run では `PLAN_ORCHESTRATOR=workflows`（[`docs/workflows.md`](docs/workflows.md)、[`docs/cloud-run.md`](docs/cloud-run.md)）。ローカルは worker。
+Cloud Run では `PLAN_ORCHESTRATOR=workflows`。ローカルは worker。
+
+**写真シール**は上図のサーバ経路の外で動く。ブラウザ内で U2NetP（ONNX）により切り抜き、最大4枚を `localStorage` にだけ残す（振り返り本文のサーバ保存や Firestore の承認済み記憶には載せない）。実装は [`src/features/home/photo-sticker.tsx`](src/features/home/photo-sticker.tsx) / [`src/client/hooks/use-date-journal.ts`](src/client/hooks/use-date-journal.ts)。
 
 ## 堅牢性のための仕組み
 
@@ -73,6 +113,7 @@ Cloud Run では `PLAN_ORCHESTRATOR=workflows`（[`docs/workflows.md`](docs/work
 - **directive で表せない好み**（特定の食べ物など）は、型付き `planDirectives` が無い限りプラン選定に載らない
 - **ホームの提案カード**は UI 定数（LLM 生成ではない）。[`src/features/home/home-suggestion.ts`](src/features/home/home-suggestion.ts)
 - **ホームの「近くのイベント」**は大会用サンプル表示。カタログ ID には載せない。[`src/features/home/sample-events.ts`](src/features/home/sample-events.ts)
+- **写真シール**は端末内のみ（最大4枚・サーバ未送信）。機種変更や別ブラウザでは消える
 - **会場・日付**: LIVE / Cloud Run の検索バイアス既定は東京駅周辺（`DEMO_LAT` / `DEMO_LNG`）。Cloud Run のイメージは `DEMO_DATE` を載せず、未設定時は実行当日（Asia/Tokyo）に読み替える（[`src/config/env.ts`](src/config/env.ts) `resolveDemoDate`、[`cloudbuild.yaml`](cloudbuild.yaml)）。MOCK カタログは名古屋駅周辺と丸の内・東京駅周辺の両方を持つ（[`src/server/providers/catalog.ts`](src/server/providers/catalog.ts)）。UI fixture のスナップショットは名古屋駅集合が多い（[`src/fixtures/snapshots.ts`](src/fixtures/snapshots.ts)）
 - **既存のブラウザ保存データ**の扱い合意までは削除しない方針（[`docs/backend-handoff.md`](docs/backend-handoff.md)）。旧 Cookie のみの匿名セッションを機械移行しない方針は [PR #9](https://github.com/UGpict/futari-log/pull/9) 側（未マージ）
 - 本番 `sys/root` 容量など未解決事項は [`docs/blockers.md`](docs/blockers.md)
