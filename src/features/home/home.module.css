@@ -635,7 +635,16 @@
 .placeSuggest button { display: grid; gap: 2px; text-align: left; border: 0; border-radius: 12px; padding: 8px 10px; background: #faf6f8; color: #695362; font-size: 12px; }
 .placeSuggest button small { color: #9d8796; font-size: 10px; }
 .placeHint { margin: 6px 0 0; font-size: 10px; color: #9d8796; }
-@media (prefers-reduced-motion: reduce) { .stageEntering, .stageLeaving, .dateDetails .categoryQuestion, .dateDetails > .planHint, .dateDetails .planChips, .planCalendar, .planCalendarDays button[data-choosing="true"], .planCalendarDays button[data-choosing="true"]::before, .routeEndEditor { animation: none; } }
+.placeSearchLoading { display: flex; min-height: 42px; align-items: center; gap: 7px; padding: 2px 7px 2px 1px; color: #927c89; font-size: 10px; }
+.placeSearchAgent { display: grid; width: 38px; height: 38px; flex: 0 0 38px; place-items: center; animation: placeSearchAgentBob .72s ease-in-out infinite alternate; }
+.placeSearchAgent img { display: block; width: 38px; height: 38px; object-fit: contain; }
+.placeSearchDots { display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; }
+.placeSearchDots i { width: 3px; height: 3px; border-radius: 50%; background: #ad876f; animation: placeSearchDot 1s ease-in-out infinite; }
+.placeSearchDots i:nth-child(2) { animation-delay: .14s; }
+.placeSearchDots i:nth-child(3) { animation-delay: .28s; }
+@keyframes placeSearchAgentBob { from { transform: translateY(1px) rotate(-2deg); } to { transform: translateY(-2px) rotate(2deg); } }
+@keyframes placeSearchDot { 0%, 60%, 100% { opacity: .28; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-2px); } }
+@media (prefers-reduced-motion: reduce) { .stageEntering, .stageLeaving, .dateDetails .categoryQuestion, .dateDetails > .planHint, .dateDetails .planChips, .planCalendar, .planCalendarDays button[data-choosing="true"], .planCalendarDays button[data-choosing="true"]::before, .routeEndEditor, .placeSearchAgent, .placeSearchDots i { animation: none; } }
 
 /* Keep native date/time editing, without duplicate browser glyphs. */
 .planForm input[type="date"], .planForm input[type="time"] { appearance: none; -webkit-appearance: none; }

@@ -5,6 +5,7 @@ import { TextInput, TextArea, SelectInput } from "@/components/text-input";
 import { Button } from "@/components/button";
 
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { PlanLoading } from "@/features/session/plan-loading";
 import { api, fixturesEnabled } from "@/client/api";
@@ -54,11 +55,21 @@ function PlaceSuggest({
   onPick: (place: PlaceCandidate) => void;
   label: string;
 }) {
-  if (selected) return <p className={styles.placeHint}>候補「{selected.name}」を使います</p>;
+  if (selected) return null;
   if (query.trim().length < 2) return <p className={styles.placeHint}>候補から選ぶと、その場所の座標で探します。</p>;
   return (
     <div className={styles.placeSuggest} role="listbox" aria-label={label} aria-busy={search.pending || undefined}>
-      {search.pending && !search.places.length ? <p className={styles.placeHint}>場所を探しています…</p> : null}
+      {search.pending ? (
+        <div className={styles.placeSearchLoading} role="status">
+          <span className={styles.placeSearchAgent} aria-hidden="true">
+            <Image src="/animations/planning-route-static.svg" alt="" width={38} height={38} unoptimized />
+          </span>
+          <span>
+            場所を探しています
+            <span className={styles.placeSearchDots} aria-hidden="true"><i /><i /><i /></span>
+          </span>
+        </div>
+      ) : null}
       {search.places.map((place) => (
         <button type="button" role="option" aria-selected={false} key={place.id} onClick={() => onPick(place)}>
           {place.name}
