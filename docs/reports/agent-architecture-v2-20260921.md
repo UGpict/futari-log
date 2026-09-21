@@ -13,12 +13,14 @@
 
 | 項目 | 状態 |
 | --- | --- |
-| LIVE 振り返り保存→分析 | **実施・失敗**（下記 LIVE検証。`schema validation failed`） |
-| OrcaRouter 経由の reflect | LIVE で `gpt-4o-mini-2024-07-18` を呼んだが schema 不合格 |
+| LIVE 振り返り保存→分析 | **第2回: 分析 SUCCEEDED**（第1回は schema 失敗。下記 LIVE検証） |
+| OrcaRouter 経由の reflect | 第2回: `gpt-4o-mini-2024-07-18` / `CREATE_CANDIDATES` / ok |
 | ホーム振り返り UI | 同日1セッション時に API 保存。複数・0件は localStorage のみ。旧 local は削除しない |
 | 本番 Scheduler | 変更・有効化なし |
 
-## LIVE検証（2026-09-21・**途中失敗で停止**）
+## LIVE検証
+
+### 第1回（2026-09-21・途中失敗で停止）
 
 | 項目 | 値 |
 | --- | --- |
@@ -32,9 +34,9 @@
 | 到達点 | セッション作成 → 初回プラン表示 → reflections POST → REFLECTION enqueue → LLM 呼出 → **失敗** |
 | 未到達 | WAITING_INPUT（分析質問） / MEMORY 承認 / USER_CONFIRMED / NEXT_DATE 束縛 |
 
-リトライなし。コード修正なし。生ログ: `docs/reports/live-e2e-architecture-v2-raw.json`。
+リトライなし。コード修正なし。生ログ: `docs/reports/live-e2e-architecture-v2-raw.json`（第1回時点）。
 
-### 初回プラン表示 vs REFLECTION（対比）
+#### 初回プラン表示 vs REFLECTION（対比）
 
 | 区間 | 開始 (UTC) | 終了 (UTC) | 所要 |
 | --- | --- | --- | --- |
@@ -44,67 +46,96 @@
 | **REFLECTION enqueue→完了（失敗）**（run `createdAt`→`finishedAt`） | 02:24:02.486Z | 02:24:06.949Z | **4,463 ms** |
 | 同上（イベント MODEL_SELECTED `latencyMs`） | — | — | LLM 壁時計 **2,651 ms**（`ok:false`） |
 
-→ 初回プラン待ち ≈ **66 s**。REFLECTION は ≈ **4.5 s** で schema 失敗により打ち切り（承認フロー未到達）。
+→ 初回プラン待ち ≈ **66 s**（主因: 同期 Gemini grounding ≈51.7 s）。REFLECTION は ≈ **4.5 s** で schema 失敗。
 
-### ingest
+#### 失敗箇所（修正せず停止）
 
-| 観点 | 結果 |
+- **現象**: REFLECTION `status=FAILED` / `error=schema validation failed`。approvals 0 件。
+- 以降の承認・NEXT_DATE 束縛は未実施。
+
+---
+
+### 第2回（2026-09-21・NEXT_DATE 束縛失敗で停止）
+
+| 項目 | 値 |
 | --- | --- |
-| 実装 | 初回プラン経路は `suggestCatalogEventsForPlan({ enabled: env.enableEventCatalog && ... })`（`orchestrate.ts`）。`ENABLE_EVENT_CATALOG=false` のため即空返り。`ingestEvents` はプラン生成から呼ばれない（別 API / Scheduler）。 |
-| 実挙動 | 本セッション中の `catalogIngestRuns` 新規なし（直近 ingest は 2026-09-20）。 |
-| プラン待ちに占める ingest | **0 ms**（同期待ちも非同期完了待ちもなし）。ingest 完了を待たずにプランを出せる（本設定では ingest 自体がクリティカルパス外）。 |
+| revision | `futari-log-00022-vn9`（traffic 100%） |
+| commit | `6d5ef79` |
+| image tag | `app:6d5ef79`（digest `sha256:a6870ec7…`） |
+| URL | https://futari-log-w5a2hgpkiq-an.a.run.app |
+| `ENABLE_EVENT_CATALOG` | `false` |
+| couple / session | `cpl_12021f0e14f50f62` / `ses_6fb5e8716a56cad4` |
+| next session | `ses_677a1d38f2c062b1`（DRAFT・未束縛） |
+| INITIAL_PLAN run | `run_a0a8015bcb9a5774` → **SUCCEEDED** |
+| REFLECTION run | `run_8ab2f617a35f395b` → **SUCCEEDED**（`CREATE_CANDIDATES`） |
+| 到達点 | セッション作成 → 初回プラン → reflections POST → REFLECTION 成功 → MEMORY 承認（1件）→ next session 作成 |
+| 未到達 / 失敗 | **WAITING_INPUT なし**（質問なしで候補作成）／**NEXT_DATE 束縛なし**（承認メモリが ONGOING のみ） |
+| リトライ | **なし**（指示どおり停止） |
+| 生ログ | `docs/reports/live-e2e-architecture-v2-raw.json`（第2回で上書き） |
 
-### 初回プラン待ちに LLM 呼び出しは含まれるか
+#### 第1回との差分（要点）
 
-| 種類 | 含まれるか | 根拠 |
-| --- | --- | --- |
-| 候補選定 LLM | **含まれない** | `MODEL_SELECTED` = `deterministic/planner`、tokens=0 / latencyMs=0（`planner.ts` の決定論経路） |
-| 行程本体 `buildPlan` | LLM なし | Places Routes + `hydratePlacePhotos`（Places） |
-| **スポット画像 Gemini grounding** | **含まれる（ブロッキング）** | `execute.ts` **283–301** の `attachSpotImages` → `geminiGrounding.ts`。イベント: `gemini-grounding HTTP #24` **02:23:06.063Z** → 完了ログ **02:23:57.771Z** ≈ **51,708 ms**。この後に初めて `PLAN_APPLIED`（02:23:59.135Z） |
-
-### buildPlan 単体（イベント代理）
-
-`orchestrate.ts` は `travel` TOOL_STARTED の直後に `await buildPlan(...)`。
-
-| 代理区間 | 開始 | 終了 | 所要 |
+| 指標 | 第1回 | 第2回 | 差分 |
 | --- | --- | --- | --- |
-| travel TOOL_STARTED → TOOL_COMPLETED | 02:23:01.461Z | 02:23:03.866Z | **2,405 ms** |
+| 初回プラン `createdAt`→`finishedAt` | **66,148 ms** | **17,854 ms** | **−48,294 ms**（約 73% 短縮） |
+| 初回プラン経路の LLM | grounding 同期あり（≈51.7 s） | **LLM なし**（`deterministic/planner` のみ） | grounding 除去が効いた |
+| REFLECTION | schema **FAILED**（4,463 ms） | **SUCCEEDED**（4,137 ms） | 出力契約・観測・repair 後の改善 |
+| repair | （失敗、詳細ログ不足） | **未発動**（1回目で ok） | — |
+| MEMORY 承認 | 未到達 | ONGOING 1件 `USER_CONFIRMED` | — |
+| NEXT_DATE 束縛 | 未到達 | **失敗**（束縛対象の NEXT_DATE メモリ無し） | 停止理由 |
 
-（上記の後に別処理として `attachSpotImages` が約 52 s。これは buildPlan 外。）
+#### 初回プラン表示（Firestore）
 
-### LLM 呼び出し一覧（本通し）
+| 区間 | 開始 (UTC) | 終了 (UTC) | 所要 |
+| --- | --- | --- | --- |
+| run `createdAt`→`finishedAt` | 2026-09-21T04:54:20.049Z | 2026-09-21T04:54:37.903Z | **17,854 ms** |
+| イベント `RUN_STARTED`→`RUN_FINISHED` | 04:54:21.538Z | 04:54:38.352Z | **16,814 ms** |
+| クライアント POST→terminal | 04:54:20.226Z | 04:54:39.415Z | **19,189 ms** |
+
+#### 初回プラン経路の LLM
+
+| イベント | モデル | tokens | cost | ok |
+| --- | --- | --- | --- | --- |
+| `MODEL_SELECTED`（唯一） | `deterministic/planner` | 0 / 0 | 0 | true |
+
+`gemini-grounding` / `chat/completions` / `MODEL_SELECTED`（実モデル）は初回プラン run events に **0 件**。
+
+#### attachSpotImages
+
+| 項目 | 値 |
+| --- | --- |
+| 代理区間 | travel `TOOL_COMPLETED` 04:54:34.492Z の後、画像 HTTP 群 → 完了イベント 04:54:36.889Z |
+| 所要（places-photo 再開〜完了イベント） | 04:54:35.352Z → 04:54:36.889Z ≈ **1,537 ms** |
+| 完了イベント文言 | 「Places。未取得はプレースホルダ。Gemini grounding は同期では呼ばない」 |
+| プラン掲載スポット（3） | **写真あり 3**（いずれも `imageProvider=places`）／**プレースホルダ 0** |
+
+#### REFLECTION
+
+| 区間 | 開始 | 終了 | 所要 |
+| --- | --- | --- | --- |
+| run `createdAt`→`finishedAt` | 04:54:41.078Z | 04:54:45.215Z | **4,137 ms** |
+| `MODEL_SELECTED` latencyMs | — | — | **2,233 ms**（ok:true） |
+
+- action: `CREATE_CANDIDATES`（WAITING_INPUT なし）
+- repair: **未発動**（単回成功。`llm_parse_failure` NOTICE / 構造化ログなし）
+- run.cost: `mundaneCalls=1`, `llmJpy=0.043362`
+
+#### LLM 呼び出し一覧（第2回）
 
 | フェーズ | モデル | prompt | completion | costUsd | costJpy | latencyMs | ok |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | INITIAL_PLAN 選定 | `deterministic/planner` | 0 | 0 | 0 | 0 | 0 | true |
-| INITIAL_PLAN 画像 | Gemini grounding（イベント上 `gemini-grounding`；usage トークン未記録） | — | — | — | — | ≈51,708（イベント時刻差） | 画像ヒットなし |
-| REFLECTION | `gpt-4o-mini-2024-07-18` | 460 | 82 | 0.000118 | 0.017523 | 2651 | **false**（schema validation failed） |
+| REFLECTION | `gpt-4o-mini-2024-07-18` | 983 | 242 | 0.000292 | 0.043362 | 2233 | true |
 
-run.cost 集計は INITIAL / REFLECTION とも `mundaneCalls=0`（deterministic 非課金扱い、reflect は `ok:false` で加算されず）。
+#### 失敗箇所（リトライせず停止）
 
-### Workflows `futari-propose`
-
-| run | execution id | start | end | 手動 trigger |
-| --- | --- | --- | --- | --- |
-| INITIAL_PLAN | `f19a1766-d07d-41e7-9d30-54c2f24e180f` | 02:22:52.940Z | 02:23:59.557Z | **不要**（`dispatchProposal` 自動） |
-| REFLECTION | `2c4ca0f9-1e82-467f-9b39-8205f4b05fac` | 02:24:02.979Z | 02:24:07.556Z | **不要**（`kickRun`→workflows、`kind=REFLECTION`） |
-
-どちらも `state=SUCCEEDED`（Workflow 自体は完了。中の propose が REFLECTION を FAILED にした）。
-
-### duplicated 条件付き再 kick
-
-**該当なし**（reflections POST は 1 回、`duplicated=false`、再 POST なし）。
-
-### 失敗箇所（修正せず停止）
-
-- **現象**: REFLECTION `status=FAILED` / `error=schema validation failed`。reflection `analysisStatus=FAILED`。approvals 0 件。
-- **コード**: `src/server/agent/reflectAnalyze.ts`（`callLLM` + `reflectionAnalysisActionSchema`）および `src/server/llm/index.ts`（schema 失敗時 `error: "schema validation failed"`、repair 後も失敗）。
-- **イベント**: `MODEL_SELECTED` usage.ok=false → `RUN_FINISHED`「振り返り分析失敗（本文は保持）」。
-- 以降の承認・NEXT_DATE 束縛は未実施。
+- **現象**: 承認後メモリは `scope=ONGOING` / `甘いものが好き` / `planDirectives=[]` のみ。NEXT_DATE 候補が無いため next session への束縛 0 件。
+- **承認**: `MEMORY_SAVE` が 2 件 PENDING → スクリプトは先頭 1 件のみ APPROVE。もう 1 件は PENDING のまま。
+- **WAITING_INPUT**: REFLECTION が質問せず `CREATE_CANDIDATES` で完了したためスキップ。
 
 ## 未実施 / TODO
 
 - 同日複数セッションの明示選択 UI
 - 承認待ち専用画面（候補は memory API に `approvalId` 付与済み）
-- LIVE 通しの成功完走（上記 schema 失敗の修正後に再計測）
+- LIVE 通しの NEXT_DATE 束縛までの成功完走（第2回で未達）
 - 本番マージ・定時ジョブ有効化（別判断）
