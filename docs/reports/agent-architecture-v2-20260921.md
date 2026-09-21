@@ -230,8 +230,59 @@
 
 区間所要は記憶あり／なしで同一（seed 同一）。差分はすべて `PREFER_SEATED_REST` から説明できる。
 
+---
+
+### ホーム提案カード LIVE 確認（2026-09-21・清澄白河 seed）
+
+| 項目 | 値 |
+| --- | --- |
+| revision | `futari-log-00026-bxs`（100% traffic） |
+| image / commit | `a86a616` |
+| health | `ok` / `runtime=LIVE` / Firestore |
+| `ENABLE_EVENT_CATALOG` | `false` |
+| ロールバック | なし（デプロイ自体は正常。確認失敗はプラン条件） |
+| couple / session / run | `cpl_7ed19f0b5f6143c1` / `ses_17c5ce0f85d5a8cf` / `run_8ed46641aa004515` |
+| 認証 | 新規匿名（prefix `Fi4jn8SB`）。権限エラーなし |
+
+#### カード材料（定数 DTO・LLM なし）
+
+| 項目 | 値 |
+| --- | --- |
+| title / area | アートと夜カフェ / 清澄白河 |
+| wish | 清澄白河で美術館や展示を楽しんだあと、夜カフェでゆっくり話すデートにしたい |
+| meetPlace | 清澄白河駅 / lat=35.682163 / lng=139.798997 / id=`seed:kiyosumi-shirakawa-station` |
+| 時間帯 | **15:00–21:00** |
+| routeLabels | 美術館・展示 → 夜カフェ |
+| 構造化カテゴリ / 候補 placeId | **なし**（表示ラベルと wish 文のみ） |
+
+#### プラン作成リクエスト（PlanForm 相当 API）
+
+送信・Firestore 上の `session.input` とも:
+
+- `areaName=清澄白河駅` / `areaLat=35.682163` / `areaLng=139.798997`
+- `startTime=15:00` / `endTime=21:00`
+- meet/end は上記座標（`DEMO_LAT/LNG` 東京駅 **ではない**）
+- `me.demoLat/demoLng` は従来どおり東京駅（場所検索バイアス用）。今回の検索中心には未使用
+
+#### INITIAL_PLAN 結果（リトライなし・停止）
+
+| 項目 | 値 |
+| --- | --- |
+| 所要 | ≈16.9 s（`waitMs=16901`） |
+| status | **WAITING_INPUT** |
+| question | `q_plan_unmet`「実在候補では確定プランを作れません（施設の営業時間が不明です）」 |
+| 選ばれたスポット | **なし**（plan items=[]） |
+| MODEL_SELECTED / 実 LLM | **なし**（`modelEvents=[]`、`initialPlanHasRealLlm=false`） |
+| ホーム／カード経路の LLM | **なし**（定数 DTO） |
+
+失敗要因（推定・修正せず）: meet の `spotId` が本物の Place ID ではなく `seed:…` のため、LIVE Places の営業時間取得ができず `OPENING_UNKNOWN` 系で unmet になった可能性が高い。検索中心・時間帯の受け渡し自体は成功。
+
+raw: `docs/reports/live-home-suggestion-verify.json`（gitignore）
+
 ## 未実施 / TODO
 
 - 同日複数セッションの明示選択 UI
 - 承認待ち専用画面（候補は memory API に `approvalId` 付与済み）
 - 本番マージ・定時ジョブ有効化（別判断）
+- ホーム提案カードの meet に本物の Place ID を載せる／文言の「AI」表現整理
+- 第3回 ownerUid 不一致ドキュメントの修正（監査のみ済）
