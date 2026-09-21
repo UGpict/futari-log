@@ -10,7 +10,7 @@ import { PlanLoading } from "@/features/session/plan-loading";
 import { api, fixturesEnabled } from "@/client/api";
 import { useMe } from "@/client/hooks/use-me";
 import { usePlaceSearch } from "@/client/hooks/use-place-search";
-import { SERVICE_AREA_NOTICE, tokyoToday } from "@/config/public";
+import { tokyoToday } from "@/config/public";
 import type { PlaceCandidate } from "@/contracts";
 import { MemoMascot } from "@/components/memo-mascot";
 import { AiSparkIcon } from "@/components/ai-spark-icon";
@@ -370,7 +370,6 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
       </nav>
       {!fullPage && <div className={styles.planCompanion}><MemoMascot nextCue={nextCue} /></div>}
       <section key={step} className={`${styles.planStage} ${advancing ? styles.stageLeaving : styles.stageEntering}`} inert={advancing || selectingCategory}>
-        {step > 0 && <button type="button" className={styles.stepBack} onClick={() => move(step - 1)}><ChevronLeft size={18} />{step === 1 ? "過ごし方に戻る" : "日時と場所に戻る"}</button>}
         {fullPage ? <div className={styles.planGuide}>
           <div className={styles.planGuideMascot}><MemoMascot nextCue={nextCue} /></div>
           <h3 ref={heading} tabIndex={-1} className={styles.planGuideSpeech}>{["どんな一日にしよう？", "いつ・どこで過ごそう？", "予算を決めよう"][step]}</h3>
@@ -389,10 +388,10 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
             <div className={styles.categoryDetailGroup}>
               <button type="button" className={styles.categorySummary} aria-label={`気分を選び直す（現在：${currentCategory.label}）`} onClick={() => setShowCategories(true)}>
                 <span className={styles.categorySummaryBack}><ChevronLeft size={18} /></span>
-                <span className={styles.categoryThumbnail} style={{ backgroundPosition: currentCategory.position }} aria-hidden="true" />
                 <strong>{currentCategory.label}</strong>
                 <small>複数選択可</small>
               </button>
+              <div className={styles.categoryHero} style={{ backgroundPosition: currentCategory.position }} aria-hidden="true" />
               <div ref={optionCarouselRef} className={`${styles.planChips} ${styles.optionCarousel}`} data-dragging={draggingOptions} data-more-right={moreOptionsRight} aria-label="気になること（任意）" tabIndex={0} onScroll={updateOptionScroll}
                 onPointerDown={startOptionDrag} onPointerMove={moveOptionDrag} onPointerUp={endOptionDrag} onPointerCancel={endOptionDrag}
                 onClickCapture={(event) => {
@@ -412,7 +411,7 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
                 })}
               </div>
             </div>
-            <label className={`${styles.formLabel} ${styles.wishField}`}><span>追加の希望 <small>任意</small></span><small className={styles.wishHelp}>選んだ内容に加えて、伝えたいことがあれば教えてね</small><TextArea rows={1} maxLength={1500} placeholder="海が見えるところで、ゆっくりしたい" value={form.self} onChange={(e) => setForm({ ...form, self: e.target.value })} /></label>
+            <label className={`${styles.formLabel} ${styles.wishField}`}><span>追加の希望 <small>選んだ内容に加えて伝えたいこと · 任意</small></span><TextArea rows={1} maxLength={1500} placeholder="海が見えるところで、ゆっくりしたい" value={form.self} onChange={(e) => setForm({ ...form, self: e.target.value })} /></label>
           </div>}
           {(showCategories || !currentCategory) && <div className={styles.aiWishArea}>
             <div className={styles.choiceDivider}><span>または</span></div>
@@ -421,11 +420,10 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
               <span><strong>全部おまかせ</strong><small>AIがふたりに合う過ごし方を提案</small></span>
               {selected.includes("おまかせ") && <Check size={16} />}
             </button>
-            <label className={`${styles.formLabel} ${styles.wishField}`}><span>追加の希望 <small>任意</small></span><small className={styles.wishHelp}>選んだ内容やおまかせに加えて、伝えたいこと</small><TextArea rows={1} maxLength={1500} placeholder="海が見えるところで、ゆっくりしたい" value={form.self} onChange={(e) => setForm({ ...form, self: e.target.value })} /></label>
+            <label className={`${styles.formLabel} ${styles.wishField}`}><span>追加の希望 <small>選んだ内容に加えて伝えたいこと · 任意</small></span><TextArea rows={1} maxLength={1500} placeholder="海が見えるところで、ゆっくりしたい" value={form.self} onChange={(e) => setForm({ ...form, self: e.target.value })} /></label>
           </div>}
         </>}
         {step === 1 && <div className={styles.schedulePanel}>
-          <p className={styles.areaNotice}>{SERVICE_AREA_NOTICE}。都外の場所は確認します。</p>
           <div className={styles.scheduleDatePicker}>
             <button type="button" className={styles.scheduleDate} aria-expanded={calendarOpen} aria-controls="plan-calendar" onClick={() => { if (calendarTimer.current) return; setCalendarMonth(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1)); setCalendarOpen(!calendarOpen); }}>
               <CalendarHeart size={20} /><span><small>日にち</small><strong>{dateLabel}</strong></span><ChevronDown size={17} />
@@ -466,7 +464,15 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
       </section>
       <footer className={styles.planFooter}>
         {(error || authError) && <p role="alert" className={styles.error}>{error || authError}</p>}
-        {step < 2 ? <Button fullWidth type="button" className={styles.primaryButton} disabled={advancing || selectingCategory || (step === 0 ? !category && !selected.length && !form.self.trim() : !timingValid || !placeValid)} onClick={() => move(step + 1)}>{step === 0 ? "この内容で日時へ" : "予算と希望へ"}<ArrowRight size={18} /></Button> : <><p className={styles.planTotalSummary}><strong>ふたりで {total.toLocaleString()}円まで</strong><small>{form.startTime}〜{form.endTime} · {meetPlace?.name ?? "集合未選択"}</small></p><Button fullWidth type="button" className={styles.primaryButton} disabled={busy || !me || !valid} onClick={() => void submit()}><Sparkles size={18} />{!me ? "準備中…" : busy ? "プランを考えています…" : "この内容でプランをつくる"}</Button></>}
+        {step === 2 && <p className={styles.planTotalSummary}><strong>ふたりで {total.toLocaleString()}円まで</strong><small>{form.startTime}〜{form.endTime} · {meetPlace?.name ?? "集合未選択"}</small></p>}
+        {step === 0
+          ? <Button fullWidth type="button" className={styles.primaryButton} disabled={advancing || selectingCategory || !category && !selected.length && !form.self.trim()} onClick={() => move(1)}>この内容で日時へ<ArrowRight size={18} /></Button>
+          : <div className={styles.planFooterActions}>
+              <Button fullWidth variant="secondary" type="button" className={styles.footerBackButton} disabled={advancing || selectingCategory || busy} onClick={() => move(step - 1)}><ChevronLeft size={18} />戻る</Button>
+              {step === 1
+                ? <Button fullWidth type="button" className={styles.primaryButton} disabled={advancing || !timingValid || !placeValid} onClick={() => move(2)}>予算と希望へ<ArrowRight size={18} /></Button>
+                : <Button fullWidth type="button" className={styles.primaryButton} disabled={busy || !me || !valid} onClick={() => void submit()}><Sparkles size={18} />{!me ? "準備中…" : busy ? "プランを考えています…" : "この内容でプランをつくる"}</Button>}
+            </div>}
       </footer>
       {me && me.blockers.length > 0 && step === 2 && <details className={styles.environmentDetails}><summary>実行環境について</summary>{me.blockers.map((blocker) => <p key={blocker.code}>{blocker.item}</p>)}</details>}
     </div>
