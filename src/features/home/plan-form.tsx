@@ -1,5 +1,8 @@
 "use client";
 
+import { TextInput, TextArea, SelectInput } from "@/components/text-input";
+
+import { flushSync } from "react-dom";
 import { Button } from "@/components/button";
 
 import { useEffect, useRef, useState } from "react";
@@ -44,19 +47,13 @@ function PlaceSuggest({
   onPick: (place: PlaceCandidate) => void;
   label: string;
 }) {
-  const listRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (selected || query.trim().length < 2) return;
-    if (!search.places.length && search.pending) return;
-    listRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [query, selected, search.pending, search.places.length]);
   if (selected) return <p className={styles.placeHint}>候補「{selected.name}」を使います</p>;
   if (query.trim().length < 2) return <p className={styles.placeHint}>候補から選ぶと、その場所の座標で探します。</p>;
   return (
-    <div ref={listRef} className={styles.placeSuggest} role="listbox" aria-label={label} aria-busy={search.pending || undefined}>
+    <div className={styles.placeSuggest} role="listbox" aria-label={label} aria-busy={search.pending || undefined}>
       {search.pending && !search.places.length ? <p className={styles.placeHint}>場所を探しています…</p> : null}
       {search.places.map((place) => (
-        <button type="button" role="option" key={place.id} onClick={() => onPick(place)}>
+        <button type="button" role="option" aria-selected={false} key={place.id} onClick={() => onPick(place)}>
           {place.name}
           {place.address && place.address !== place.name ? <small>{place.address}</small> : null}
         </button>
@@ -78,6 +75,7 @@ export function PlanForm({ initialDate, initialWish, onStepChange }: { initialDa
   const [reached, setReached] = useState(0);
   const [selected, setSelected] = useState<string[]>([]);
   const [freeWish, setFreeWish] = useState(Boolean(initialWish));
+  const freeWishInput = useRef<HTMLTextAreaElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const [showCategories, setShowCategories] = useState(true);
   const [selectingCategory, setSelectingCategory] = useState(false);
@@ -116,7 +114,7 @@ export function PlanForm({ initialDate, initialWish, onStepChange }: { initialDa
       setStep(next);
       onStepChange?.(next);
       setReached((previous) => Math.max(previous, next));
-      requestAnimationFrame(() => { heading.current?.focus({ preventScroll: true }); heading.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); });
+      requestAnimationFrame(() => heading.current?.focus());
     };
     if (next !== step && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       setNextCue((cue) => cue + 1);
@@ -331,8 +329,8 @@ export function PlanForm({ initialDate, initialWish, onStepChange }: { initialDa
             <p className={styles.planHint}>選ばずにおまかせでもOK・複数選択可</p>
             <div className={styles.planChips} aria-label="気になること（任意）">{currentCategory.options.map((option) => <button type="button" key={option} aria-pressed={selected.includes(option)} onClick={() => setSelected(selected.includes(option) ? selected.filter((item) => item !== option) : [...selected, option])}>{selected.includes(option) && <Check size={13} />}{option}</button>)}</div>
           </div>}
-          <div className={styles.planChips}><button type="button" aria-pressed={selected.includes("おまかせ")} onClick={() => { setCategory(null); setShowCategories(true); setSelected(selected.includes("おまかせ") ? [] : ["おまかせ"]); }}><Sparkles size={14} />全部おまかせ</button><button type="button" aria-expanded={freeWish} onClick={() => setFreeWish(!freeWish)}><Plus size={14} />希望を書く</button></div>
-          {freeWish && <label className={styles.formLabel}>こんなこともしたい<textarea rows={2} maxLength={1500} placeholder="海が見えるところで、ゆっくりしたい" value={form.self} onChange={(e) => setForm({ ...form, self: e.target.value })} /></label>}
+          <div className={styles.planChips}><button type="button" aria-pressed={selected.includes("おまかせ")} onClick={() => { setCategory(null); setShowCategories(true); setSelected(selected.includes("おまかせ") ? [] : ["おまかせ"]); }}><Sparkles size={14} />全部おまかせ</button><button type="button" aria-expanded={freeWish} onClick={() => { flushSync(() => setFreeWish(true)); freeWishInput.current?.focus(); }}><Plus size={14} />希望を書く</button></div>
+          {freeWish && <label className={styles.formLabel}>こんなこともしたい<TextArea ref={freeWishInput} rows={2} maxLength={1500} placeholder="海が見えるところで、ゆっくりしたい" value={form.self} onChange={(e) => setForm({ ...form, self: e.target.value })} /></label>}
         </>}
         {step === 1 && <div className={styles.schedulePanel}>
           <p className={styles.areaNotice}>{SERVICE_AREA_NOTICE}。都外の場所は確認します。</p>
@@ -356,21 +354,21 @@ export function PlanForm({ initialDate, initialWish, onStepChange }: { initialDa
           </div>
           <fieldset className={styles.scheduleTime}><legend className="sr-only">時間帯</legend>
             <div className={styles.timePresets}>{[{ label: "朝から", start: "09:00", end: "15:00" }, { label: "昼から", start: "11:00", end: "17:00" }, { label: "午後から", start: "13:00", end: "18:00" }, { label: "夜から", start: "17:00", end: "21:00" }].map((item) => <button type="button" key={item.label} aria-pressed={form.startTime === item.start && form.endTime === item.end} onClick={() => setForm({ ...form, startTime: item.start, endTime: item.end })}>{item.label}</button>)}</div>
-            <div className={styles.inlineTimes}><Clock3 size={17} aria-hidden="true" /><label><span>開始</span><select aria-label="開始時刻" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</select><ChevronDown size={16} aria-hidden="true" /></label><span>〜</span><label><span>終了</span><select aria-label="終了時刻" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</select><ChevronDown size={16} aria-hidden="true" /></label></div>
+            <div className={styles.inlineTimes}><Clock3 size={17} aria-hidden="true" /><label><span>開始</span><SelectInput aria-label="開始時刻" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</SelectInput><ChevronDown size={16} aria-hidden="true" /></label><span>〜</span><label><span>終了</span><SelectInput aria-label="終了時刻" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</SelectInput><ChevronDown size={16} aria-hidden="true" /></label></div>
           </fieldset>
           {!timingValid && <p className={styles.error} role="alert">終了は開始よりあとの時刻にしてね。</p>}
-          <div className={styles.meetingCard}><label><MapPinned size={18} /><span>待ち合わせ</span><input aria-label="集合場所" value={form.meetName} onChange={(e) => { setMeetPlace(null); setForm({ ...form, meetName: e.target.value }); }} onFocus={(event) => event.currentTarget.closest(`.${styles.meetingCard}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" })} placeholder="駅や目印になる場所" autoComplete="off" /></label>
+          <div className={styles.meetingCard}><label><MapPinned size={18} /><span>待ち合わせ</span><TextInput aria-label="集合場所" value={form.meetName} onChange={(e) => { setMeetPlace(null); setForm({ ...form, meetName: e.target.value }); }} placeholder="駅や目印になる場所" autoComplete="off" /></label>
             <PlaceSuggest query={form.meetName} selected={meetPlace} search={meetSearch} label="集合場所の候補" onPick={(place) => { setMeetPlace(place); setForm((current) => ({ ...current, meetName: place.name })); }} />
-            <details><summary>{form.endName ? `解散：${form.endName}` : "解散も同じ場所"}<ChevronDown size={13} /></summary><input aria-label="解散場所" value={form.endName} onChange={(e) => { setEndPlace(null); setForm({ ...form, endName: e.target.value }); }} placeholder={meetPlace?.name ?? "解散場所"} autoComplete="off" />
+            <details><summary>{form.endName ? `解散：${form.endName}` : "解散も同じ場所"}<ChevronDown size={13} /></summary><TextInput aria-label="解散場所" value={form.endName} onChange={(e) => { setEndPlace(null); setForm({ ...form, endName: e.target.value }); }} placeholder={meetPlace?.name ?? "解散場所"} autoComplete="off" />
               {form.endName.trim().length >= 2 || endPlace ? <PlaceSuggest query={form.endName} selected={endPlace} search={endSearch} label="解散場所の候補" onPick={(place) => { setEndPlace(place); setForm((current) => ({ ...current, endName: place.name })); }} /> : <p className={styles.placeHint}>候補から選ぶと、その場所の座標で探します。</p>}
             </details>
           </div>
         </div>}
         {step === 2 && <div className={styles.finishPanel}>
-          <fieldset className={styles.planFieldset}><legend className="sr-only">ふたり分の予算</legend><div className={styles.budgetChoices}>{[5000, 10000, 15000].map((amount) => <button type="button" key={amount} aria-pressed={total === amount} onClick={() => setForm({ ...form, meals: String(amount * .6), facilities: String(amount * .3), transit: String(amount * .1) })}>{total === amount && <Check size={14} />}{amount.toLocaleString()}円{amount === 10000 && <small>おすすめ</small>}</button>)}</div><details className={styles.planDetails}><summary>予算を自分で入力する <ChevronDown size={16} /></summary><label className={`${styles.formLabel} ${styles.totalBudgetInput}`}>ふたり分の合計金額<input aria-label="ふたり分の合計予算" type="number" inputMode="numeric" min="0" step="500" value={budgetTotalValue} onChange={(e) => setTotalBudget(e.target.value)} /></label><p className={styles.planHint}>内訳はAIにおまかせできます</p><details className={styles.budgetBreakdown}><summary>食事・施設・交通の内訳も決める <ChevronDown size={14} /></summary>{([ ["meals", "食事"], ["facilities", "施設"], ["transit", "交通"] ] as const).map(([key, label]) => <label key={key} className={styles.formLabel}>{label}（円）<input type="number" min="0" step="100" value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} /></label>)}</details></details></fieldset>
+          <fieldset className={styles.planFieldset}><legend className="sr-only">ふたり分の予算</legend><div className={styles.budgetChoices}>{[5000, 10000, 15000].map((amount) => <button type="button" key={amount} aria-pressed={total === amount} onClick={() => setForm({ ...form, meals: String(amount * .6), facilities: String(amount * .3), transit: String(amount * .1) })}>{total === amount && <Check size={14} />}{amount.toLocaleString()}円{amount === 10000 && <small>おすすめ</small>}</button>)}</div><details className={styles.planDetails}><summary>予算を自分で入力する <ChevronDown size={16} /></summary><label className={`${styles.formLabel} ${styles.totalBudgetInput}`}>ふたり分の合計金額<TextInput aria-label="ふたり分の合計予算" type="number" inputMode="numeric" min="0" step="500" value={budgetTotalValue} onChange={(e) => setTotalBudget(e.target.value)} /></label><p className={styles.planHint}>内訳はAIにおまかせできます</p><details className={styles.budgetBreakdown}><summary>食事・施設・交通の内訳も決める <ChevronDown size={14} /></summary>{([ ["meals", "食事"], ["facilities", "施設"], ["transit", "交通"] ] as const).map(([key, label]) => <label key={key} className={styles.formLabel}>{label}（円）<TextInput type="number" inputMode="numeric" min="0" step="100" value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} /></label>)}</details></details></fieldset>
           <div className={styles.optionalHeading}><h4>ほかに伝えておくこと</h4><p>必要なものだけ追加できます</p></div>
-          <details className={styles.planDetails}><summary><Plus size={14} />相手の希望を添える <span>任意</span></summary><label className={styles.formLabel}>相手が楽しみにしていること<textarea rows={2} maxLength={2000} value={form.partner} onChange={(e) => setForm({ ...form, partner: e.target.value })} placeholder="パンケーキを食べたいって言っていた" /></label></details>
-          <details className={styles.planDetails}><summary><Plus size={14} />時間が決まっている予定 <span>任意</span></summary><label className={styles.planToggle}><input type="checkbox" checked={form.locked} onChange={(e) => setForm({ ...form, locked: e.target.checked })} />プランに固定の予定を入れる</label>{form.locked && <><label className={styles.formLabel}>場所・予定の名前<input value={form.fixedName} onChange={(e) => setForm({ ...form, fixedName: e.target.value })} placeholder="美術館の展示を見る" /></label><div className={styles.planTimeRow}><label className={styles.formLabel}>開始<input type="time" value={form.fixedStart} onChange={(e) => setForm({ ...form, fixedStart: e.target.value })} /></label><span>〜</span><label className={styles.formLabel}>終了<input type="time" value={form.fixedEnd} onChange={(e) => setForm({ ...form, fixedEnd: e.target.value })} /></label></div><p className={styles.planHint}>デートの時間内で指定してください。予約は行いません。</p></>}</details>
+          <details className={styles.planDetails}><summary><Plus size={14} />相手の希望を添える <span>任意</span></summary><label className={styles.formLabel}>相手が楽しみにしていること<TextArea rows={2} maxLength={2000} value={form.partner} onChange={(e) => setForm({ ...form, partner: e.target.value })} placeholder="パンケーキを食べたいって言っていた" /></label></details>
+          <details className={styles.planDetails}><summary><Plus size={14} />時間が決まっている予定 <span>任意</span></summary><label className={styles.planToggle}><input type="checkbox" checked={form.locked} onChange={(e) => setForm({ ...form, locked: e.target.checked })} />プランに固定の予定を入れる</label>{form.locked && <><label className={styles.formLabel}>場所・予定の名前<TextInput value={form.fixedName} onChange={(e) => setForm({ ...form, fixedName: e.target.value })} placeholder="美術館の展示を見る" /></label><div className={styles.planTimeRow}><label className={styles.formLabel}>開始<TextInput type="time" value={form.fixedStart} onChange={(e) => setForm({ ...form, fixedStart: e.target.value })} /></label><span>〜</span><label className={styles.formLabel}>終了<TextInput type="time" value={form.fixedEnd} onChange={(e) => setForm({ ...form, fixedEnd: e.target.value })} /></label></div><p className={styles.planHint}>デートの時間内で指定してください。予約は行いません。</p></>}</details>
           {!valid && <p role="alert" className={styles.error}>予算は0円以上、固定予定は名前とデート時間内の開始・終了を入力してね。</p>}
         </div>}
       </section>

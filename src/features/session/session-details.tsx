@@ -1,5 +1,7 @@
 "use client";
 
+import { TextArea } from "@/components/text-input";
+
 import { Button } from "@/components/button";
 
 import Link from "next/link";
@@ -281,7 +283,8 @@ export function SessionDetails({ sessionId }: { sessionId: string }) {
 
       <section className="mt-8 rounded-3xl border border-line bg-card p-5">
         <h2 className="text-lg font-medium">振り返り</h2>
-        <textarea
+        <TextArea
+          aria-label="振り返りのメモ"
           className="mt-3 w-full rounded-xl border border-line bg-paper p-3 text-sm"
           rows={3}
           value={note}

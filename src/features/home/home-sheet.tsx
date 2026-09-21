@@ -1,38 +1,41 @@
 "use client";
 
+import { useId, useState, type ReactNode } from "react";
 import { IconButton } from "@/components/button";
-
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { ModalSurface } from "@/components/modal-surface";
 import { X } from "lucide-react";
 import styles from "./home.module.css";
 
-export function HomeSheet({ title, onClose, children, fixedHeight = false }: {
-  title: string; onClose: () => void; children: ReactNode; fixedHeight?: boolean;
+export function HomeSheet({ title, onClose, children, fixedHeight = false, confirmClose = false }: {
+  title: string; onClose: () => void; children: ReactNode; fixedHeight?: boolean; confirmClose?: boolean;
 }) {
-  const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
-  useEffect(() => {
-    const dialog = ref.current;
-    const previousOverflow = document.body.style.overflow;
-    dialog?.showModal();
-    document.body.style.overflow = "hidden";
-    return () => {
-      dialog?.close();
-      document.body.style.overflow = previousOverflow;
-    };
-  }, []);
+  const confirmTitleId = useId();
+  const confirmDescriptionId = useId();
+  const [confirmingClose, setConfirmingClose] = useState(false);
+  const requestClose = () => {
+    if (confirmClose) setConfirmingClose(true);
+    else onClose();
+  };
 
   return (
-    <dialog ref={ref} className={`${styles.sheet} ${fixedHeight ? styles.fixedSheet : ""}`} aria-labelledby={titleId}
-      onCancel={onClose} onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div className={styles.sheetInner} onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
-        <div className={styles.sheetHandle} aria-hidden="true" />
-        <header className={styles.sheetHeader}>
-          <h2 id={titleId}>{title}</h2>
-          <IconButton type="button"  label="閉じる" onClick={onClose}><X size={21} /></IconButton>
-        </header>
-        {children}
-      </div>
-    </dialog>
+    <ModalSurface className={`${styles.sheet} ${fixedHeight ? styles.fixedSheet : ""}`} contentClassName={styles.sheetInner}
+      labelledBy={titleId} onClose={requestClose}>
+      <div className={styles.sheetHandle} aria-hidden="true" />
+      <header className={styles.sheetHeader}>
+        <h2 id={titleId}>{title}</h2>
+        <IconButton type="button" label="閉じる" onClick={requestClose}><X size={21} /></IconButton>
+      </header>
+      {children}
+      {confirmingClose && <ModalSurface centered alert className={styles.closeConfirm}
+        labelledBy={confirmTitleId} describedBy={confirmDescriptionId} onClose={() => setConfirmingClose(false)}>
+        <h3 id={confirmTitleId}>プラン作成をやめますか？</h3>
+        <p id={confirmDescriptionId}>ここまで入力した内容は消えてしまいます。</p>
+        <div className={styles.closeConfirmActions}>
+          <button type="button" onClick={() => setConfirmingClose(false)} autoFocus>入力を続ける</button>
+          <button type="button" onClick={onClose}>内容を破棄して閉じる</button>
+        </div>
+      </ModalSurface>}
+    </ModalSurface>
   );
 }

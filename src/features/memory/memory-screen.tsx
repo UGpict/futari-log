@@ -1,7 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { TextArea } from "@/components/text-input";
+
+import { useState } from "react";
 import { api } from "@/client/api";
+import { createClientId } from "@/client/id";
 import { useMemory } from "@/client/hooks/use-memory";
 import { Button } from "@/components/button";
 import { Toast } from "@/components/toast";
@@ -18,7 +21,6 @@ export function MemoryScreen({ coupleId, embedded = false }: { coupleId: string 
   const [drafts, setDrafts] = useState<Draft[]>(() => {
     try { return JSON.parse(localStorage.getItem(`futari-memory-notes:${coupleId ?? "guest"}`) ?? "[]"); } catch { return []; }
   });
-  const listRef = useRef<HTMLDivElement>(null);
   const [edit, setEdit] = useState<Record<string, string>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -31,8 +33,7 @@ export function MemoryScreen({ coupleId, embedded = false }: { coupleId: string 
   const activeMemories = memories.filter((memory) => memory.active);
   const notes = [...drafts.map((draft) => ({ ...draft, local: true })), ...activeMemories.map((memory) => ({ id: memory.id, content: memory.content, local: false }))];
   function addMemo(content: string) {
-    saveDrafts([{ id: crypto.randomUUID(), content }, ...drafts]); setMsg("メモを追加しました");
-    listRef.current?.scrollTo({ top: 0 });
+    saveDrafts([{ id: createClientId(), content }, ...drafts]); setMsg("メモを追加しました");
   }
   async function revise(id: string, content: string) {
     await api(`/api/memory/${id}/revisions`, { method: "POST", body: JSON.stringify({ content }) });
@@ -59,13 +60,13 @@ export function MemoryScreen({ coupleId, embedded = false }: { coupleId: string 
     {removeError && <p role="alert" className={styles.error}>{removeError}</p>}
     <section className={styles.section} aria-labelledby="all-memories">
       <h2 id="all-memories" className={styles.sectionHeading}>保存したメモ</h2>
-      <div ref={listRef} className={styles.listScroll} role="region" aria-label="保存したメモ一覧" tabIndex={0}>
+      <div className={styles.listScroll}>
         {notes.length ? <div className={styles.memoryList}>{notes.map((memory) => {
           const isEditing = editingId === memory.id;
           const value = edit[memory.id] ?? memory.content;
           return <article key={memory.id} className={styles.memoryCard}>
             {isEditing ? <>
-              <textarea aria-label="メモの内容" value={value} maxLength={300} onChange={(event) => setEdit({ ...edit, [memory.id]: event.target.value })} />
+              <TextArea aria-label="メモの内容" value={value} maxLength={300} onChange={(event) => setEdit({ ...edit, [memory.id]: event.target.value })} />
               <div className={styles.actions}>
                 <Button variant="secondary" size="compact" onClick={() => setEditingId(null)}>キャンセル</Button>
                 <Button size="compact" disabled={!value.trim() || value.trim() === memory.content} onClick={() => {

@@ -1,5 +1,7 @@
 "use client";
 
+import { TextInput, TextArea } from "@/components/text-input";
+
 import { Button, IconButton } from "@/components/button";
 
 import { useEffect, useRef, useState, type FormEvent, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
@@ -83,10 +85,10 @@ function FeedbackEditor({ date, record, onSave }: {
         ))}
       </fieldset>
       <label className={styles.formLabel}>この日のタイトル <span>任意</span>
-        <input value={title} maxLength={60} onChange={(event) => setTitle(event.target.value)} placeholder="カフェで過ごした、のんびりな午後" />
+        <TextInput value={title} maxLength={60} onChange={(event) => setTitle(event.target.value)} placeholder="カフェで過ごした、のんびりな午後" />
       </label>
       <label className={styles.formLabel}>どんな場面で、そう感じた？ <span>任意</span>
-        <textarea value={note} maxLength={500} rows={3} onChange={(event) => setNote(event.target.value)} placeholder="カフェで「また来たい」と言っていた。散歩の途中は少し疲れていそうだった。" />
+        <TextArea value={note} maxLength={500} rows={3} onChange={(event) => setNote(event.target.value)} placeholder="カフェで「また来たい」と言っていた。散歩の途中は少し疲れていそうだった。" />
       </label>
       {error && <p className={styles.error} role="alert">{error}</p>}
       <Button fullWidth className={styles.primaryButton} type="submit" disabled={!mood || saving}><Check size={20} />{saving ? "保存しています…" : record ? "スタンプと記録を更新する" : "振り返りを完了してスタンプを押す"}</Button>
@@ -358,7 +360,7 @@ export function HomeScreen() {
         </HomeSheet>
       )}
 
-      {panel && <HomeSheet key={panel} fixedHeight={panel === "memory"} title={panelTitles[panel]} onClose={() => setPanel(null)}>
+      {panel && <HomeSheet key={panel} fixedHeight={panel === "memory"} confirmClose={panel === "plan"} title={panelTitles[panel]} onClose={() => setPanel(null)}>
         {panel === "plan" && <PlanForm initialDate={planDate || today} initialWish={planWish} onStepChange={setPlanStep} />}
         {panel === "records" && <div className={styles.recordList}>
           <p className={styles.sheetDescription}>シールひとつに、ふたりの思い出。{isFixture && " 今はサンプルの記録を表示しています。"}</p>

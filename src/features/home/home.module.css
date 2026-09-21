@@ -20,13 +20,17 @@
 }
 
 .page button, .sheet button { cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
-.page button, .sheet button, .sheet a, .sheet input, .sheet select, .sheet textarea { transition: background .18s, box-shadow .18s, transform .18s; }
+.page button, .sheet button, .sheet a, .sheet input, .sheet select, .sheet textarea { -webkit-tap-highlight-color: transparent; transition: background .18s, box-shadow .18s, transform .18s; }
 .page button:focus-visible, .sheet button:focus-visible, .sheet a:focus-visible, .sheet input:focus-visible, .sheet select:focus-visible, .sheet textarea:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 4px;
 }
 .page button:active, .sheet button:active { transform: scale(.97); }
 .page button:disabled, .sheet button:disabled { cursor: not-allowed; opacity: .5; }
+
+@media (hover: none) and (pointer: coarse) {
+  .page :focus-visible, .sheet :focus-visible { outline: none !important; }
+}
 
 .header { padding: 0 4px 12px; }
 .headerRow { display: flex; min-height: 56px; align-items: center; justify-content: space-between; gap: 13px; }
@@ -142,13 +146,17 @@
 .eventAction { display: flex; align-items: center; gap: 4px; margin-top: auto; padding-top: 10px; color: #b65e82; font-size: 10px; font-weight: 700; }
 .eventDisclosure { margin-top: 6px; color: #aaa0a7; font-size: 8px; text-align: center; }
 
-.sheet { position: fixed; inset: auto 0 0; width: 100%; max-width: 430px; max-height: 91dvh; margin: 0 auto; padding: 0; border: none; border-radius: 28px 28px 0 0; background: #fffcf9; color: var(--text-primary); overscroll-behavior: contain; box-shadow: 0 -10px 80px #30243215; }
-.sheet[open] { animation: sheetUp .25s ease-out; }
-.sheet::backdrop { background: #382d3d50; backdrop-filter: blur(3px); }
-.sheetInner { min-height: 200px; padding: 10px 22px calc(27px + env(safe-area-inset-bottom)); }
+.sheet { width: 100%; max-width: 430px; max-height: min(91dvh, 100%); margin: 0 auto; padding: 0; border: none; border-radius: 28px 28px 0 0; background: #fffcf9; color: var(--text-primary); overscroll-behavior: contain; box-shadow: 0 -10px 80px #30243215; }
+.sheetInner { min-height: 0; padding: 10px 22px calc(27px + env(safe-area-inset-bottom)); }
 .sheetHandle { width: 34px; height: 4px; margin: 0 auto 12px; border-radius: 20px; background: #ded7dd; }
 .sheetHeader { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 18px; }
 .sheetHeader h2 { font-size: 17px; font-weight: 700; letter-spacing: .03em; }
+.closeConfirm { width: min(100%, 330px); padding: 22px; border: 1px solid #eadde4; border-radius: 22px; background: #fffcf9; text-align: center; box-shadow: 0 18px 60px #39262f38; }
+.closeConfirm h3 { color: #644f5d; font-size: 18px; font-weight: 700; }
+.closeConfirm p { margin-top: 8px; color: #907d89; font-size: 12px; line-height: 1.7; }
+.closeConfirmActions { display: grid; gap: 8px; margin-top: 18px; }
+.closeConfirmActions button { min-height: 46px; padding: 10px 14px; border: 1px solid #dfcbd5; border-radius: 999px; color: #986078; background: #fff; font-size: 13px; font-weight: 700; }
+.closeConfirmActions button:last-child { border-color: transparent; color: #fff; background: #cf7096; }
 
 .sheetDescription { margin-bottom: 15px; font-size: 12px; color: #8b8190; line-height: 1.9; }
 .feedbackForm { display: flex; flex-direction: column; gap: 19px; }
@@ -314,7 +322,7 @@
 .dateDetails .planChips button { min-height: 39px; font-size: 11px; padding: 8px 11px; }
 
 /* Compact planning sheet: progress, mascot, then one choice surface. */
-.sheet:has(.compactPlan) { display: flex; flex-direction: column; overflow: hidden; }
+.sheet:has(.compactPlan) { height: min(760px, 91dvh); display: flex; flex-direction: column; overflow: hidden; }
 .sheet:has(.compactPlan) .sheetInner { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
 .sheet:has(.compactPlan) .sheetHeader { flex-shrink: 0; margin-bottom: 8px; }
 .sheet:has(.compactPlan) .sheetHandle { flex-shrink: 0; }
@@ -325,7 +333,7 @@
 .planProgress button > span { width: 26px; height: 26px; border: 3px solid #fffcf9; background: #e8dce3; }
 .planProgress button[data-complete="true"] > span, .planProgress button[aria-current="step"] > span { background: #c77295; color: white; }
 .planProgress button:disabled { opacity: 1; color: #aa98a4; }
-.planCompanion { height: 74px; margin: 0; overflow: hidden; }
+.planCompanion { height: clamp(76px, 12dvh, 96px); margin: 0; overflow: visible; }
 .planCompanion > span { transform: scale(.58); transform-origin: top center; }
 .compactPlan { flex: 1; min-height: 0; gap: 8px; }
 .compactPlan .planStage h3 { text-align: center; font-size: 19px; }
@@ -334,8 +342,20 @@
 .compactPlan .dateMoodCaption { padding: 8px; text-align: center; }
 .compactPlan .dateMoodCaption strong { font-size: 12px; }
 .compactPlan .planChips { margin: 8px 0 0; }
-.compactPlan .planStage { flex: 1; min-height: 0; overflow: auto; }
+.compactPlan .planStage { flex: 1; min-height: 0; min-width: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scroll-padding-block: 16px; padding-bottom: 16px; }
 .compactPlan .planFooter { position: static; bottom: auto; z-index: 1; flex-shrink: 0; padding: 8px 0 0; }
+/* Adapt to the actual area above the keyboard, including landscape. Keep actions reachable. */
+@container modal-viewport (max-height: 520px) {
+  .sheet:has(.compactPlan) .sheetInner { padding-bottom: 8px; }
+  .sheet:has(.compactPlan) .sheetHeader { margin-bottom: 2px; }
+  .sheet:has(.compactPlan) .planCompanion { display: none; }
+  .sheet:has(.compactPlan) .compactPlan { gap: 3px; }
+}
+@container modal-viewport (max-height: 350px) {
+  .sheet:has(.compactPlan) .sheetInner { overflow-y: auto; }
+  .sheet:has(.compactPlan) .compactPlan { flex: 0 0 auto; }
+  .sheet:has(.compactPlan) .planStage { overflow: visible; flex: none; }
+}
 .compactPlan .dateDetails { padding: 0; margin-top: 6px; border: 0; background: transparent; }
 .stepBack { display: inline-flex; min-height: 44px; align-items: center; gap: 6px; margin: -4px 0 4px -8px; padding: 8px 12px; border-radius: 12px; color: #925675; font-size: 12px; font-weight: 600; }
 .stepBack:hover { background: #f6e9f0; }
@@ -363,7 +383,7 @@
 .categoryQuestion { margin-top: 13px; font-size: 14px; font-weight: 600; }
 .compactPlan .dateDetails .planChips { gap: 7px; margin-top: 10px; }
 .compactPlan .dateDetails .planChips button { min-height: 42px; }
-@media (max-height: 680px) { .compactPlan .planCompanion { height: 57px; } .compactPlan .planCompanion > span { transform: scale(.45); } .compactPlan .dateMoodPhoto { height: 60px; } .compactPlan .planStage h3 { font-size: 18px; } }
+@media (max-height: 680px) { .compactPlan .planCompanion { height: 76px; } .compactPlan .planCompanion > span { transform: scale(.45); } .compactPlan .dateMoodPhoto { height: 60px; } .compactPlan .planStage h3 { font-size: 18px; } }
 .compactPlan .selectedCategoryPhoto { height: 48px; }
 .compactPlan .categoryQuestion { margin-top: 8px; }
 .compactPlan .dateDetails .planChips { margin-top: 6px; }
@@ -438,7 +458,7 @@
 .finishPanel { display: grid; gap: 10px; }
 .budgetLead { margin: 2px 0 9px; color: #917e8b; font-size: 11px; line-height: 1.6; text-align: center; }
 .finishPanel > fieldset { padding: 12px; border: 1px solid #eadfe5; border-radius: 16px; background: white; }
-.finishPanel > fieldset legend { float: left; width: 100%; margin-bottom: 2px; }
+/* The legend is sr-only: preserve its 1px width so it cannot enlarge the scroller. */
 .budgetChoices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
 .budgetChoices button { position: relative; display: flex; min-width: 0; min-height: 57px; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 7px 3px; border: 1px solid #e6dce2; border-radius: 14px; background: #fffdfb; color: #806b78; font-size: 12px; }
 .budgetChoices button > svg { position: absolute; top: 5px; right: 5px; }
@@ -446,7 +466,7 @@
 .budgetChoices button[aria-pressed="true"] { border-color: #c46f94; background: #c46f94; color: white; font-weight: 700; box-shadow: 0 4px 12px #a8587b26; }
 .budgetChoices button[aria-pressed="true"] small { color: #fff3f8; }
 .totalBudgetInput { margin-top: 10px; color: #796471; }
-.totalBudgetInput input { font-size: 19px; font-weight: 650; text-align: right; }
+.totalBudgetInput input { --input-font-size: 19px; font-size: 19px; font-weight: 650; text-align: right; }
 .budgetBreakdown { margin-top: 8px; padding-top: 5px; border-top: 1px solid #efe6eb; }
 .budgetBreakdown > summary { display: flex; min-height: 40px; align-items: center; justify-content: space-between; color: #957b8b; font-size: 11px; cursor: pointer; list-style: none; }
 .budgetBreakdown > summary::-webkit-details-marker { display: none; }
@@ -463,9 +483,9 @@
 .planTotalSummary strong { font-size: 12px; font-weight: 650; }
 .planTotalSummary small { color: #9d8996; font-size: 10px; }
 
-.sheet:has(.planningOverlay) { max-width: 430px; height: 100dvh; max-height: 100dvh; border-radius: 0; background: var(--surface-page); }
+.sheet:has(.planningOverlay) { max-width: 430px; height: 100dvh; max-height: 100%; border-radius: 0; background: var(--surface-page); }
 .sheet:has(.planningOverlay) .sheetHeader, .sheet:has(.planningOverlay) .sheetHandle { display: none; }
-.planningOverlay { min-height: 94dvh; display: grid; align-items: center; }
+.planningOverlay { min-height: calc(var(--visual-viewport-height, 100dvh) - 40px); display: grid; align-items: center; }
 
 .categoryFading { animation: categoryFadeOut 120ms ease-out both; pointer-events: none; }
 .compactPlan .dateDetails { animation: categoryFadeIn 180ms ease-out both; }

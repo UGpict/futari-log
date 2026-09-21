@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SessionSnapshot, StartRunRequest } from "@/contracts";
 import { api, ensureAuth, fixturesEnabled } from "../api";
+import { createClientId } from "../id";
 
 export function useSession(sessionId: string) {
   const [data, setData] = useState<SessionSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const idempotencyRef = useRef(`replan:${sessionId}:${crypto.randomUUID()}`);
+  const idempotencyRef = useRef<string | null>(null);
 
   const reload = useCallback(async () => {
     if (fixturesEnabled() && sessionId === "fx-loading") return;
@@ -49,6 +50,7 @@ export function useSession(sessionId: string) {
       ...(input.targetPlanItemId ? { targetPlanItemId: input.targetPlanItemId } : {}),
     };
     try {
+      idempotencyRef.current ??= `replan:${sessionId}:${createClientId()}`;
       await api(`/api/sessions/${sessionId}/runs`, {
         method: "POST",
         headers: { "Idempotency-Key": idempotencyRef.current },
@@ -56,7 +58,7 @@ export function useSession(sessionId: string) {
       });
       await reload();
     } finally {
-      idempotencyRef.current = `replan:${sessionId}:${crypto.randomUUID()}`;
+      idempotencyRef.current = null;
     }
   }
 

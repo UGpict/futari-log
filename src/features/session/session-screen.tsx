@@ -1,5 +1,7 @@
 "use client";
 
+import { TextArea } from "@/components/text-input";
+
 import { Button, ButtonLink } from "@/components/button";
 
 import { useState } from "react";
@@ -170,7 +172,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
         {target?.locked && <p className={styles.fieldHint}>時間が決まっている予定です。固定条件を守れる範囲で調整します。</p>}
         <div className={styles.quickOptions}>{["別の場所がいい", "もう少し予算を抑えたい", "ゆっくり過ごしたい", "移動を少なくしたい"].map((text) => <Button variant="secondary" size="compact" type="button" key={text} disabled={pending} onClick={() => setFeedback((value) => value ? `${value}
 ${text}` : text)}>{text}</Button>)}</div>
-        <label className={styles.feedbackLabel}>どんなふうに変えたい？<textarea autoFocus rows={3} maxLength={1000} value={feedback} disabled={pending} onChange={(event) => setFeedback(event.target.value)} placeholder="例えば、ここは行ったことがあるから、別の美術館がいいな。" /></label>
+        <label className={styles.feedbackLabel}>どんなふうに変えたい？<TextArea rows={3} maxLength={1000} value={feedback} disabled={pending} onChange={(event) => setFeedback(event.target.value)} placeholder="例えば、ここは行ったことがあるから、別の美術館がいいな。" /></label>
         {fixturesEnabled() && <p className={styles.fieldHint}>現在は操作確認用のサンプルです。</p>}
         {actionError && <p className={styles.notice} role="alert">{actionError}</p>}
         <Button fullWidth type="submit" disabled={!feedback.trim() || pending || Boolean(active)}>{pending ? "送っています…" : "この希望で考え直す"}<ArrowUpRight size={17} /></Button>
