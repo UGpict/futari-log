@@ -62,7 +62,7 @@ function PlaceSuggest({
       {search.pending ? (
         <div className={styles.placeSearchLoading} role="status">
           <span className={styles.placeSearchAgent} aria-hidden="true">
-            <Image src="/animations/planning-route-static.svg" alt="" width={38} height={38} unoptimized />
+            <Image src="/animations/planning-route-static.svg" alt="" width={28} height={28} unoptimized />
           </span>
           <span>
             場所を探しています
