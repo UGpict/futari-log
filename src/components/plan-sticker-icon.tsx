@@ -50,26 +50,23 @@ export function PlanStickerIcon({ kind }: { kind: "time" | "budget" | "spots" | 
       </>}
       {kind === "walk" && <>
         <circle cx="40" cy="17" r="9" fill="#dc927b" stroke="#fffdfb" strokeWidth="6" />
-        <path d="M39 31L35 47M37 36L24 45M38 36L52 44M35 47L24 65M35 47L50 64" stroke="#fffdfb" strokeWidth="17" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M39 31L35 47M37 36L24 45M38 36L52 44M35 47L24 65M35 47L50 64" stroke="#dc927b" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M40 24L35 47M37 35L24 45M38 35L52 44M35 47L24 65M35 47L50 64" stroke="#fffdfb" strokeWidth="17" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M40 24L35 47M37 35L24 45M38 35L52 44M35 47L24 65M35 47L50 64" stroke="#dc927b" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
       </>}
       {kind === "drive" && <>
-        <path d="M20 57V67M60 57V67" stroke="#fffdfb" strokeWidth="13" strokeLinecap="round" />
-        <path d="M20 57V67M60 57V67" stroke="#526f68" strokeWidth="7" strokeLinecap="round" />
-        <path d="M16 38L22 23Q24 17 31 17H49Q56 17 58 23L64 38Q68 41 68 48V58Q68 64 62 64H18Q12 64 12 58V48Q12 41 16 38Z" fill="#78a69b" stroke="#fffdfb" strokeWidth="6" />
+        <path d="M16 38L22 23Q24 17 31 17H49Q56 17 58 23L64 38Q68 41 68 48V63Q68 69 62 69H59Q54 69 54 64V62H26V64Q26 69 21 69H18Q12 69 12 63V48Q12 41 16 38Z" fill="#78a69b" stroke="#fffdfb" strokeWidth="6" />
         <path d="M24 36L29 24H51L56 36Z" fill="#eaf3ef" />
         <circle cx="23" cy="49" r="3.8" fill="#fff8ee" />
         <circle cx="57" cy="49" r="3.8" fill="#fff8ee" />
         <path d="M34 50H46" stroke="#d5e6df" strokeWidth="4" strokeLinecap="round" />
       </>}
       {kind === "transit" && <>
-        <path d="M29 59L18 74M51 59L62 74M23 69H57" stroke="#fffdfb" strokeWidth="11" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M29 59L18 74M51 59L62 74M23 69H57" stroke="#616d8e" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-        <rect x="13" y="8" width="54" height="57" rx="11" fill="#7f91bd" stroke="#fffdfb" strokeWidth="6" />
+        <path d="M24 8H56Q67 8 67 19V56Q67 65 58 65H53L63 75H54L47 65H33L26 75H17L27 65H22Q13 65 13 56V19Q13 8 24 8Z" fill="#7f91bd" stroke="#fffdfb" strokeWidth="6" strokeLinejoin="round" />
         <path d="M33 16H47" stroke="#eaf2f6" strokeWidth="4" strokeLinecap="round" />
         <rect x="21" y="24" width="38" height="20" rx="3" fill="#eaf2f6" />
         <circle cx="25" cy="54" r="4" fill="#fff8ee" />
         <circle cx="55" cy="54" r="4" fill="#fff8ee" />
+        <path d="M25 70H55" stroke="#616d8e" strokeWidth="4" strokeLinecap="round" />
       </>}
     </g>
   </svg>;
