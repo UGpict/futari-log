@@ -11,6 +11,8 @@ export type DateMemory = {
   title: string;
   note: string;
   mood: Mood;
+  /** Display-only tournament sample. Never persist to Firestore. */
+  demo?: boolean;
   /** サーバー紐付け。無い場合は localStorage のみ。 */
   sessionId?: string;
   reflectionId?: string;
@@ -31,6 +33,26 @@ function subscribe(listener: () => void) {
 
 export function tokyoToday() {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(new Date());
+}
+
+function withoutDemoFlag(record: DateMemory): DateMemory {
+  const { demo: _demo, ...rest } = record;
+  return rest;
+}
+
+function realOnly(records: DateMemory[]): DateMemory[] {
+  return records.filter((item) => !item.demo).map(withoutDemoFlag);
+}
+
+function mergeWithDemo(real: DateMemory[], demo: DateMemory[]): DateMemory[] {
+  const byDate = new Map<string, DateMemory>();
+  for (const row of demo) {
+    if (row.demo) byDate.set(row.date, row);
+  }
+  for (const row of real) {
+    byDate.set(row.date, row);
+  }
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
 function readRecords(raw: string): DateMemory[] | null {
@@ -57,7 +79,8 @@ function isMemory(value: unknown): value is DateMemory {
     /^\d{4}-\d{2}-\d{2}$/.test(item.date) &&
     typeof item.title === "string" &&
     typeof item.note === "string" &&
-    moods.some((mood) => mood.id === item.mood)
+    moods.some((mood) => mood.id === item.mood) &&
+    (item.demo === undefined || item.demo === true || item.demo === false)
   );
 }
 
@@ -79,9 +102,11 @@ function toDateMemory(dto: ReflectionDto): DateMemory | null {
 /**
  * ローカル記録は削除・他ユーザー取り込み・同日セッション勝手紐付けをしない。
  * サーバー保存は sessionId があるときだけ別経路で行う。
+ * demoRecords は表示合成のみ（localStorage / Firestore に書かない）。
  */
-export function useDateJournal(uid?: string) {
+export function useDateJournal(uid?: string, demoRecords: DateMemory[] = []) {
   const isFixture = fixturesEnabled();
+  const demoEnabled = demoRecords.length > 0 && !isFixture;
   const key = `futari-log:journal:${isFixture ? "fixture" : uid ?? "guest"}:v1`;
   const getSnapshot = useCallback(() => {
     try {
@@ -94,24 +119,32 @@ export function useDateJournal(uid?: string) {
   const today = useSyncExternalStore(subscribe, tokyoToday, () => "");
   const records = useMemo<DateMemory[]>(() => {
     const saved = raw ? readRecords(raw) : null;
-    if (saved) return saved;
-    return isFixture ? calendarExamples : [];
-  }, [raw, isFixture]);
+    if (isFixture) {
+      return saved ? realOnly(saved) : calendarExamples;
+    }
+    const real = saved ? realOnly(saved) : [];
+    if (!demoEnabled) return real;
+    return mergeWithDemo(real, demoRecords.filter((row) => row.demo));
+  }, [raw, isFixture, demoEnabled, demoRecords]);
 
   function saveLocal(record: DateMemory) {
-    let current = records;
+    const clean = withoutDemoFlag(record);
+    let current = realOnly(records);
     const stored = getSnapshot();
-    if (stored) current = readRecords(stored) ?? records;
+    if (stored) current = realOnly(readRecords(stored) ?? current);
     // 日付キー上書きはローカルのみ。sessionId 付きは同日でも別エントリとして残す余地を残し、
     // 既存の日付単位 UI 互換のため同一 date は1件に畳む（サーバー紐付けフィールドは保持）。
-    const next = [...current.filter((item) => item.date !== record.date), record];
+    const next = [...current.filter((item) => item.date !== clean.date), clean];
     window.localStorage.setItem(key, JSON.stringify(next));
     window.dispatchEvent(new Event(updateEvent));
   }
 
   function remove(date: string) {
     const stored = getSnapshot();
-    const current = stored ? readRecords(stored) ?? records : records;
+    const current = stored ? realOnly(readRecords(stored) ?? []) : realOnly(records);
+    const target = current.find((item) => item.date === date);
+    // デモのみの日はストレージに無いので何もしない（API も呼ばない）。
+    if (!target) return;
     const next = current.filter((item) => item.date !== date);
     window.localStorage.setItem(key, JSON.stringify(next));
     window.dispatchEvent(new Event(updateEvent));
@@ -122,21 +155,22 @@ export function useDateJournal(uid?: string) {
     record: DateMemory,
     opts?: { planVersion?: number | null; visits?: ReflectionDto["visits"] },
   ): Promise<DateMemory> {
+    const clean = withoutDemoFlag(record);
     const body = {
-      title: record.title,
-      note: record.note,
-      mood: record.mood,
+      title: clean.title,
+      note: clean.note,
+      mood: clean.mood,
       planVersion: opts?.planVersion ?? null,
       visits: opts?.visits ?? [],
-      reflectionId: record.reflectionId,
-      expectedContentVersion: record.contentVersion,
+      reflectionId: clean.reflectionId,
+      expectedContentVersion: clean.contentVersion,
     };
     const result = await api<{ ok: true; reflection: ReflectionDto; analysisEnqueued: boolean }>(
       `/api/sessions/${sessionId}/reflections`,
       { method: "POST", body: JSON.stringify(body) },
     );
     const mapped = toDateMemory(result.reflection) ?? {
-      ...record,
+      ...clean,
       sessionId,
       reflectionId: result.reflection.id,
       contentVersion: result.reflection.contentVersion,
@@ -165,5 +199,6 @@ export function useDateJournal(uid?: string) {
     remove,
     today,
     isFixture,
+    demoStickersActive: demoEnabled,
   };
 }

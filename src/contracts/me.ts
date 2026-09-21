@@ -19,6 +19,9 @@ export const meResponseSchema = z.object({
   dataBackend: z.string().optional(),
   emulator: z.boolean().optional(),
   demoControls: z.boolean().optional(),
+  /** Tournament calendar sample stickers (display-only; not Firestore). */
+  demoCalendarStickers: z.boolean().optional(),
+  demoCalendarAnchorDate: z.string().optional(),
   demoAreaName: z.string(),
   demoDate: z.string(),
   demoLat: z.number(),
