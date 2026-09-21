@@ -1,20 +1,35 @@
 .page {
-  min-height: 100dvh;
+  min-height: var(--app-viewport-height);
   background: #eee9ec;
   color: var(--text-primary);
 }
 
 .app {
   position: relative;
+  display: flex;
   width: 100%;
   max-width: 430px;
-  min-height: 100dvh;
+  min-height: var(--app-viewport-height);
+  flex-direction: column;
   margin: 0 auto;
   padding: calc(10px + env(safe-area-inset-top)) 20px env(safe-area-inset-bottom);
   background-color: var(--surface-page);
   background-image: var(--app-dot-pattern);
   background-size: var(--app-dot-size);
   box-shadow: 0 0 70px #6b596309;
+}
+
+.page:has([aria-label="プランを準備しています"]),
+.app:has([aria-label="プランを準備しています"]) {
+  height: var(--app-viewport-height);
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (min-width: 700px) {
+  .page, .app { min-height: 100%; }
+  .page:has([aria-label="プランを準備しています"]),
+  .app:has([aria-label="プランを準備しています"]) { height: 100%; }
 }
 
 .header {

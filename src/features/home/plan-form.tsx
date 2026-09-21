@@ -543,7 +543,7 @@ export function PlanForm({ initialDate, initialWish, seed, seedParam, initialSte
     }
   }
 
-  if (busy) return <div className={styles.planningOverlay}><PlanLoading demo={fixturesEnabled()} /></div>;
+  if (busy) return <div className={`${styles.planningOverlay} ${fullPage ? styles.planPageLoading : ""}`}><PlanLoading demo={fixturesEnabled()} centered={fullPage} /></div>;
 
   return (
     <div ref={formRoot} className={`${styles.planForm} ${styles.compactPlan} ${fullPage ? styles.planPageForm : ""}`}>
