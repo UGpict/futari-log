@@ -609,7 +609,7 @@
 .inlineTimes > span { align-self: center; color: #bba5b3; }
 .meetingCard { position: relative; border: 1px solid #ebdfe6; border-radius: 20px; background: linear-gradient(145deg, #fff, #fffafb); padding: 12px; box-shadow: 0 7px 24px #7653650a; }
 .routePath { position: absolute; z-index: 0; top: 34px; bottom: -34px; left: 0; width: 35px; height: calc(100% - 0px); overflow: visible; pointer-events: none; }
-.routePath path { fill: none; stroke: #b77bb5; stroke-width: 3; stroke-linecap: round; stroke-dasharray: 1 9; vector-effect: non-scaling-stroke; filter: drop-shadow(0 1px 0 #fff); }
+.routePath path { fill: none; stroke: #8fa89b; stroke-width: 3; stroke-linecap: round; stroke-dasharray: 1 9; vector-effect: non-scaling-stroke; filter: drop-shadow(0 1px 0 #fff); }
 .routeStart { position: relative; display: grid; grid-template-columns: 35px minmax(0, 1fr); gap: 9px; }
 .routeMarker { position: relative; z-index: 1; display: grid; width: 35px; height: 37px; place-items: center; }
 .routeMarker > svg { display: block; width: 35px; height: 37px; }

@@ -35,19 +35,19 @@ export function PlanStickerIcon({ kind }: { kind: "time" | "budget" | "spots" | 
       {kind === "calendar" && <>
         <path d="M20 25H63V67Q63 73 56 73H25Q20 73 20 67Z" fill="#dccfe2" stroke="#fffdfb" strokeWidth="7" />
         <path d="M15 22Q15 16 22 16H57Q64 16 64 22V60Q64 67 57 67H22Q15 67 15 60Z" fill="#fff8f2" stroke="#fffdfb" strokeWidth="7" />
-        <path d="M15 22Q15 16 22 16H57Q64 16 64 22V33H15Z" fill="#ea86a8" />
-        <path d="M27 11V23M52 11V23" stroke="#a985bd" strokeWidth="7" strokeLinecap="round" />
-        <path d="M29 49L37 56L52 41" stroke="#cf6f99" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M15 22Q15 16 22 16H57Q64 16 64 22V33H15Z" fill="#dc7b72" />
+        <path d="M27 11V23M52 11V23" stroke="#a9605f" strokeWidth="7" strokeLinecap="round" />
+        <path d="M29 49L37 56L52 41" stroke="#d36e69" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
       </>}
       {kind === "start" && <>
-        <path d="M40 10C25 10 14 21 14 36C14 49 29 64 36 71Q40 75 44 71C51 64 66 49 66 36C66 21 55 10 40 10Z" fill="#e883a5" stroke="#fffdfb" strokeWidth="6" />
+        <path d="M40 10C25 10 14 21 14 36C14 49 29 64 36 71Q40 75 44 71C51 64 66 49 66 36C66 21 55 10 40 10Z" fill="#86a89a" stroke="#fffdfb" strokeWidth="6" />
         <circle cx="40" cy="35" r="10" fill="#fff6ef" />
-        <path d="M23 27Q26 20 32 19" stroke="#f5bbca" strokeWidth="4" strokeLinecap="round" />
+        <path d="M23 27Q26 20 32 19" stroke="#bdd1c4" strokeWidth="4" strokeLinecap="round" />
       </>}
       {kind === "goal" && <>
-        <path d="M20 10Q24 10 24 14V17H63V44H24V69Q24 73 20 73Q16 73 16 69V14Q16 10 20 10Z" fill="#8d7795" stroke="#fffdfb" strokeWidth="9" />
-        <path d="M22 18H61V42H22Z" fill="#ed789d" />
-        <path d="M57 20V40" stroke="#f49ab2" strokeWidth="5" strokeLinecap="round" />
+        <path d="M19 8Q25 8 25 14V16H68V47H25V72H13V14Q13 8 19 8Z" fill="#59645f" stroke="#fffdfb" strokeWidth="7" />
+        <path d="M22 18H65V44H22Z" fill="#dc716d" />
+        <path d="M60 20V42" stroke="#ed8d83" strokeWidth="6" strokeLinecap="round" />
       </>}
     </g>
   </svg>;
