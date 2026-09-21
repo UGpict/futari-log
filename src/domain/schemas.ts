@@ -142,6 +142,11 @@ export const travelLegSchema = z.object({
   departureAt: z.string(),
   durationMinutes: factSchema(z.number()),
   distanceMeters: factSchema(z.number()),
+  /**
+   * TRANSIT 区間のうち徒歩部分（駅まで・乗換・駅から）。
+   * value null = 内訳未取得（0分扱いにしない）。WALK 区間では通常省略し duration 全体が徒歩。
+   */
+  walkMinutesWithin: factSchema(z.number()).optional(),
   bufferMinutes: z.number().optional(),
   cachedAt: z.string().nullable().optional(),
   requestedDepartureAt: z.string().nullable().optional(),
@@ -440,6 +445,15 @@ export const walkLongAckSchema = z.object({
   routeSpotIds: z.array(z.string()).optional(),
   longestLegMinutes: z.number().optional(),
   totalMinutes: z.number().optional(),
+  /** 承認した長距離徒歩区間（別区間が追加されたら再評価） */
+  acknowledgedLongLegs: z
+    .array(
+      z.object({
+        key: z.string(),
+        minutes: z.number(),
+      }),
+    )
+    .optional(),
 });
 export type WalkLongAck = z.infer<typeof walkLongAckSchema>;
 

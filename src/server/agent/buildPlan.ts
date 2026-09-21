@@ -311,6 +311,10 @@ export async function buildPlan(input: {
       departureAt,
       durationMinutes: fact(t.durationMinutes, [t.evidence.id]),
       distanceMeters: fact(t.distanceMeters, [t.evidence.id]),
+      walkMinutesWithin:
+        adoptedMode === "WALK"
+          ? undefined
+          : fact(t.walkMinutesWithin ?? null, [t.evidence.id]),
       bufferMinutes: t.bufferMinutes,
       cachedAt: t.cached ? t.evidence.fetchedAt : null,
       requestedDepartureAt: t.requestedDepartureAt,

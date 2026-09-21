@@ -15,7 +15,8 @@ export const TOKYO_PRIORITY_AREAS = [
 ] as const;
 
 export const SEARCH_EXPAND = {
-  WALK: { initialMeters: 1200, stepMeters: 800, maxMeters: 3000, maxRounds: 3 },
+  // 検索半径は合計徒歩のソフト目安とは独立。区間移動・予定時刻・滞在で成立を判断する。
+  WALK: { initialMeters: 1200, stepMeters: 1000, maxMeters: 4000, maxRounds: 3 },
   TRANSIT: { initialMeters: 2000, stepMeters: 2000, maxMeters: 6000, maxRounds: 3 },
   DRIVE: { initialMeters: 2500, stepMeters: 2000, maxMeters: 8000, maxRounds: 3 },
 } as const;

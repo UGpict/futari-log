@@ -371,6 +371,7 @@ export async function estimateTravel(
         base = {
           durationMinutes: null,
           distanceMeters: null,
+          walkMinutesWithin: null,
           bufferMinutes: travelBufferMinutes(args.mode),
           kind: "UNKNOWN",
           failure: "MISSING_KEY",
@@ -407,6 +408,8 @@ export async function estimateTravel(
         return {
           durationMinutes,
           distanceMeters: Math.round(meters),
+          // モック TRANSIT は徒歩内訳を持たない（0分や確認済みにしない）
+          walkMinutesWithin: args.mode === "WALK" ? durationMinutes : args.mode === "TRANSIT" ? null : 0,
           bufferMinutes,
           kind: "API" as const,
           failure: null,
@@ -420,7 +423,10 @@ export async function estimateTravel(
             sourceField: "duration",
             fetchedAt: realNowIso(),
             validFor: null,
-            note: `モック経路 ${durationMinutes}分。余裕 ${bufferMinutes}分はアプリ加算。LIVEでは使わない`,
+            note:
+              args.mode === "TRANSIT"
+                ? `モック経路 ${durationMinutes}分（徒歩内訳なし）。余裕 ${bufferMinutes}分はアプリ加算。LIVEでは使わない`
+                : `モック経路 ${durationMinutes}分。余裕 ${bufferMinutes}分はアプリ加算。LIVEでは使わない`,
           }),
         };
       });
@@ -437,6 +443,7 @@ export async function estimateTravel(
       cached: true,
       kind: "CACHE",
       attempts: base.attempts ?? [],
+      walkMinutesWithin: base.walkMinutesWithin ?? (args.mode === "WALK" ? base.durationMinutes : null),
       evidence: evidence({
         kind: "CACHE",
         provider: base.evidence.provider,

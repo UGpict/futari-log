@@ -369,6 +369,7 @@ export async function answerQuestion(uid: string, runId: string, questionId: str
           routeSpotIds: scope.routeSpotIds,
           longestLegMinutes: scope.longestLegMinutes,
           totalMinutes: scope.totalMinutes,
+          acknowledgedLongLegs: scope.acknowledgedLongLegs,
         };
         found.bundle.session.pendingWalkAckFingerprint = null;
         found.run.status = "PENDING";

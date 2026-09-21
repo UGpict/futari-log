@@ -92,13 +92,14 @@ describe("walk limits", () => {
     durationMinutes: { value: minutes, evidenceIds: [] },
   });
 
-  it("flags a long last-to-end walk without changing the mode", () => {
-    const result = evaluateWalkLimits("WALK", [leg(8), leg(12), leg(103)]);
+  it("does not stop for soft total alone, and flags a long per-leg walk", () => {
+    assert.equal(evaluateWalkLimits("WALK", [leg(15), leg(15), leg(20)]).exceeds, false);
+    const result = evaluateWalkLimits("WALK", [leg(8), leg(12), leg(40)]);
     assert.equal(result.exceeds, true);
     assert.equal(result.overLeg, true);
-    assert.equal(result.longestLegMinutes, 103);
+    assert.equal(result.longestLegMinutes, 40);
     assert.ok(result.longestLegMinutes > WALK_LIMITS.legMinutes);
-    assert.equal(evaluateWalkLimits("TRANSIT", [leg(103)]).exceeds, false);
+    assert.equal(evaluateWalkLimits("TRANSIT", [leg(40)], { enforcePerLeg: false }).exceeds, false);
   });
 
   it("scopes long-walk consent to a session itinerary fingerprint", () => {
@@ -108,10 +109,22 @@ describe("walk limits", () => {
       meetSpotId: "meet",
       endSpotId: "end",
       spotIds: ["a", "b"],
-      longestLegMinutes: 103,
-      totalMinutes: 108,
+      longestLegMinutes: 40,
+      totalMinutes: 55,
+      acknowledgedLongLegs: [{ key: "SPOT:a->SPOT:b", minutes: 40 }],
     });
-    const ack = { fingerprint, at: "2026-09-20T00:00:00.000Z" };
+    const ack = {
+      fingerprint,
+      at: "2026-09-20T00:00:00.000Z",
+      dateTokyo: "2026-09-20",
+      travelMode: "WALK",
+      meetSpotId: "meet",
+      endSpotId: "end",
+      routeSpotIds: ["a", "b"],
+      longestLegMinutes: 40,
+      totalMinutes: 55,
+      acknowledgedLongLegs: [{ key: "SPOT:a->SPOT:b", minutes: 40 }],
+    };
     assert.equal(walkLongAckMatches(ack, fingerprint), true);
     assert.equal(
       walkLongAckMatches(
@@ -122,8 +135,9 @@ describe("walk limits", () => {
           meetSpotId: "meet",
           endSpotId: "end",
           spotIds: ["a", "b"],
-          longestLegMinutes: 90,
-          totalMinutes: 95,
+          longestLegMinutes: 41,
+          totalMinutes: 80,
+          acknowledgedLongLegs: [{ key: "SPOT:a->SPOT:b", minutes: 41 }],
         }),
       ),
       true,
@@ -137,8 +151,9 @@ describe("walk limits", () => {
           meetSpotId: "meet",
           endSpotId: "end",
           spotIds: ["a", "c"],
-          longestLegMinutes: 130,
-          totalMinutes: 150,
+          longestLegMinutes: 50,
+          totalMinutes: 70,
+          acknowledgedLongLegs: [{ key: "SPOT:a->SPOT:c", minutes: 50 }],
         }),
       ),
       false,
@@ -152,8 +167,9 @@ describe("walk limits", () => {
           meetSpotId: "meet",
           endSpotId: "other-end",
           spotIds: ["a", "b"],
-          longestLegMinutes: 103,
-          totalMinutes: 108,
+          longestLegMinutes: 40,
+          totalMinutes: 55,
+          acknowledgedLongLegs: [{ key: "SPOT:a->SPOT:b", minutes: 40 }],
         }),
       ),
       false,

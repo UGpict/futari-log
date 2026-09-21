@@ -40,56 +40,80 @@ describe("walk ack scope", () => {
     durationMinutes: { value: minutes, evidenceIds: [] as string[] },
   });
 
-  it("flags a long last-to-end walk without changing the mode", () => {
-    const result = evaluateWalkLimits("WALK", [leg(8), leg(12), leg(103)]);
-    assert.equal(result.exceeds, true);
-    assert.equal(result.overLeg, true);
-    assert.equal(result.longestLegMinutes, 103);
-    assert.ok(result.longestLegMinutes > WALK_LIMITS.legMinutes);
-    assert.equal(evaluateWalkLimits("TRANSIT", [leg(103)]).exceeds, false);
+  it("does not stop on total-only over soft 45 when each leg is under the per-leg limit", () => {
+    const result = evaluateWalkLimits("WALK", [leg(15), leg(15), leg(20)]);
+    assert.equal(result.totalMinutes, 50);
+    assert.equal(result.softTotalExceeded, true);
+    assert.equal(result.overLeg, false);
+    assert.equal(result.exceeds, false);
   });
 
-  it("distinguishes long-walk overage copy from no-candidates", () => {
+  it("flags a single long leg without requiring total over soft limit", () => {
+    const result = evaluateWalkLimits("WALK", [leg(8), leg(12), leg(40)]);
+    assert.equal(result.exceeds, true);
+    assert.equal(result.overLeg, true);
+    assert.equal(result.longestLegMinutes, 40);
+    assert.ok(result.longestLegMinutes > WALK_LIMITS.legMinutes);
+    assert.equal(evaluateWalkLimits("TRANSIT", [leg(40)], { enforcePerLeg: false }).exceeds, false);
+  });
+
+  it("enforces an explicit hard total from options", () => {
+    const result = evaluateWalkLimits("WALK", [leg(15), leg(15), leg(20)], {
+      hardTotalMinutes: 40,
+    });
+    assert.equal(result.overTotal, true);
+    assert.equal(result.exceeds, true);
+  });
+
+  it("asks about the problem leg without saying no walkable places exist", () => {
     const legs = [
       {
         id: "l1",
         mode: "WALK" as const,
-        from: "MEET" as const,
-        fromSpotId: null,
-        to: "SPOT" as const,
-        toSpotId: "cafe",
-        durationMinutes: { value: 10, evidenceIds: [] as string[] },
-      },
-      {
-        id: "l2",
-        mode: "WALK" as const,
         from: "SPOT" as const,
-        fromSpotId: "cafe",
-        to: "END" as const,
-        toSpotId: null,
-        durationMinutes: { value: 103, evidenceIds: [] as string[] },
+        fromSpotId: "museum",
+        to: "SPOT" as const,
+        toSpotId: "dinner",
+        durationMinutes: { value: 38, evidenceIds: [] as string[] },
       },
     ];
     const result = evaluateWalkLimits("WALK", legs);
-    const details = describeWalkOverages(result, legs, { cafe: { name: "Cafe" } });
-    const q = longWalkQuestion(result, details);
-    assert.match(q.prompt, /解散までの徒歩|徒歩が上限を超え/);
-    assert.match(q.prompt, /徒歩で行ける場所がない/);
-    assert.match(q.prompt, /Cafe→解散/);
-    assert.match(q.prompt, /103分/);
+    const details = describeWalkOverages(result, legs, {
+      museum: { name: "美術館" },
+      dinner: { name: "夕食のお店" },
+    });
+    const q = longWalkQuestion(result, details, {
+      museum: { name: "美術館" },
+      dinner: { name: "夕食のお店" },
+    });
+    assert.match(q.prompt, /美術館から夕食のお店まで徒歩38分/);
+    assert.match(q.prompt, /この区間で公共交通を使いますか/);
+    assert.equal(/徒歩で行ける場所がな/.test(q.prompt), false);
   });
 
-  it("scopes long-walk consent to session date, mode, and endpoints", () => {
+  it("scopes long-walk consent to acknowledged long legs and re-asks for a new long leg", () => {
     const fingerprint = walkAckFingerprint({
       dateTokyo: "2026-09-20",
       travelMode: "WALK",
       meetSpotId: "meet",
       endSpotId: "end",
       spotIds: ["a", "b"],
-      longestLegMinutes: 103,
-      totalMinutes: 108,
+      longestLegMinutes: 40,
+      totalMinutes: 55,
+      acknowledgedLongLegs: [{ key: "SPOT:a->SPOT:b", minutes: 40 }],
     });
-    const ack = { fingerprint, at: "2026-09-20T00:00:00.000Z" };
+    const ack = {
+      fingerprint,
+      at: "2026-09-20T00:00:00.000Z",
+      dateTokyo: "2026-09-20",
+      travelMode: "WALK",
+      meetSpotId: "meet",
+      endSpotId: "end",
+      routeSpotIds: ["a", "b"],
+      longestLegMinutes: 40,
+      totalMinutes: 55,
+      acknowledgedLongLegs: [{ key: "SPOT:a->SPOT:b", minutes: 40 }],
+    };
     assert.equal(walkLongAckMatches(ack, fingerprint), true);
     assert.equal(
       walkLongAckMatches(
@@ -98,28 +122,57 @@ describe("walk ack scope", () => {
           dateTokyo: "2026-09-20",
           travelMode: "WALK",
           meetSpotId: "meet",
-          endSpotId: "other-end",
-          spotIds: ["a", "b"],
-          longestLegMinutes: 103,
-          totalMinutes: 108,
+          endSpotId: "end",
+          spotIds: ["a", "c"],
+          longestLegMinutes: 42,
+          totalMinutes: 60,
+          acknowledgedLongLegs: [{ key: "SPOT:a->SPOT:c", minutes: 42 }],
         }),
       ),
       false,
     );
+    assert.equal(
+      walkLongAckMatches(
+        ack,
+        walkAckFingerprint({
+          dateTokyo: "2026-09-20",
+          travelMode: "WALK",
+          meetSpotId: "meet",
+          endSpotId: "end",
+          spotIds: ["a", "b"],
+          longestLegMinutes: 41,
+          totalMinutes: 80,
+          acknowledgedLongLegs: [{ key: "SPOT:a->SPOT:b", minutes: 41 }],
+        }),
+      ),
+      true,
+    );
     assert.equal(walkLongAcknowledged({ walkLongAcknowledged: true }), false);
   });
 
-  it("re-asks when the same endpoints gain a heavier walk, not on display-only changes", () => {
+  it("re-asks when the same long leg grows beyond slack", () => {
     const fingerprint = walkAckFingerprint({
       dateTokyo: "2026-09-20",
       travelMode: "WALK",
       meetSpotId: "meet",
       endSpotId: "end",
       spotIds: ["a", "b"],
-      longestLegMinutes: 103,
-      totalMinutes: 108,
+      longestLegMinutes: 40,
+      totalMinutes: 55,
+      acknowledgedLongLegs: [{ key: "SPOT:a->SPOT:b", minutes: 40 }],
     });
-    const ack = { fingerprint, at: "2026-09-20T00:00:00.000Z" };
+    const ack = {
+      fingerprint,
+      at: "2026-09-20T00:00:00.000Z",
+      dateTokyo: "2026-09-20",
+      travelMode: "WALK",
+      meetSpotId: "meet",
+      endSpotId: "end",
+      routeSpotIds: ["a", "b"],
+      longestLegMinutes: 40,
+      totalMinutes: 55,
+      acknowledgedLongLegs: [{ key: "SPOT:a->SPOT:b", minutes: 40 }],
+    };
     assert.equal(
       walkLongAckMatches(
         ack,
@@ -128,27 +181,13 @@ describe("walk ack scope", () => {
           travelMode: "WALK",
           meetSpotId: "meet",
           endSpotId: "end",
-          spotIds: ["a", "c"],
-          longestLegMinutes: 130,
-          totalMinutes: 150,
+          spotIds: ["a", "b"],
+          longestLegMinutes: 50,
+          totalMinutes: 70,
+          acknowledgedLongLegs: [{ key: "SPOT:a->SPOT:b", minutes: 50 }],
         }),
       ),
       false,
-    );
-    assert.equal(
-      walkLongAckMatches(
-        ack,
-        walkAckFingerprint({
-          dateTokyo: "2026-09-20",
-          travelMode: "WALK",
-          meetSpotId: "meet",
-          endSpotId: "end",
-          spotIds: ["a", "c"],
-          longestLegMinutes: 90,
-          totalMinutes: 100,
-        }),
-      ),
-      true,
     );
   });
 });

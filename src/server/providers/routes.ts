@@ -1,4 +1,4 @@
-import { ROUTES_FIELD_MASK, TRAVEL_BUFFER_MINUTES } from "@/config/settings";
+import { ROUTES_FIELD_MASK, ROUTES_FIELD_MASK_TRANSIT, TRAVEL_BUFFER_MINUTES } from "@/config/settings";
 import type { Evidence, SourceKind, TravelMode } from "@/domain/schemas";
 import { newId } from "@/lib/ids";
 import { realNowIso } from "@/lib/time";
@@ -37,6 +37,8 @@ export type RouteAttempt = {
 export type RouteEstimate = {
   durationMinutes: number | null;
   distanceMeters: number | null;
+  /** TRANSIT の徒歩内訳。未取得は null（0 にしない）。WALK では duration と同じ */
+  walkMinutesWithin: number | null;
   bufferMinutes: number;
   evidence: Evidence;
   kind: SourceKind;
@@ -255,6 +257,7 @@ function unknownEstimate(args: {
   return {
     durationMinutes: null,
     distanceMeters: null,
+    walkMinutesWithin: null,
     bufferMinutes: args.bufferMinutes,
     kind: "UNKNOWN",
     failure: args.failure,
@@ -291,6 +294,26 @@ function attemptVia(from: RoutePoint, to: RoutePoint): "placeId" | "latLng" {
   return usedPlace ? "placeId" : "latLng";
 }
 
+function sumTransitWalkMinutes(route: {
+  legs?: {
+    steps?: { travelMode?: string; staticDuration?: unknown; duration?: unknown }[];
+  }[];
+} | undefined): number | null {
+  const steps = route?.legs?.flatMap((leg) => leg.steps ?? []) ?? [];
+  if (!steps.length) return null;
+  let totalSeconds = 0;
+  let sawWalk = false;
+  for (const step of steps) {
+    if (step.travelMode !== "WALK") continue;
+    sawWalk = true;
+    const seconds = parseDurationSeconds(step.staticDuration ?? step.duration);
+    if (seconds == null) return null;
+    totalSeconds += seconds;
+  }
+  if (!sawWalk) return 0;
+  return Math.max(0, Math.round(totalSeconds / 60));
+}
+
 export async function computeLiveRoute(args: {
   apiKey: string;
   from: RoutePoint;
@@ -300,6 +323,7 @@ export async function computeLiveRoute(args: {
 }): Promise<RouteEstimate> {
   const bufferMinutes = travelBufferMinutes(args.mode);
   const attempts: RouteAttempt[] = [];
+  const fieldMask = args.mode === "TRANSIT" ? ROUTES_FIELD_MASK_TRANSIT : ROUTES_FIELD_MASK;
 
   const attempt = async (from: RoutePoint, to: RoutePoint): Promise<RouteEstimate> => {
     const via = attemptVia(from, to);
@@ -311,7 +335,7 @@ export async function computeLiveRoute(args: {
         headers: {
           "Content-Type": "application/json",
           "X-Goog-Api-Key": args.apiKey,
-          "X-Goog-FieldMask": ROUTES_FIELD_MASK,
+          "X-Goog-FieldMask": fieldMask,
         },
         body: JSON.stringify(built.body),
         signal: AbortSignal.timeout(10000),
@@ -343,7 +367,13 @@ export async function computeLiveRoute(args: {
     const text = await res.text().catch(() => "");
     let json: {
       error?: { status?: string; message?: string };
-      routes?: { duration?: unknown; distanceMeters?: number }[];
+      routes?: {
+        duration?: unknown;
+        distanceMeters?: number;
+        legs?: {
+          steps?: { travelMode?: string; staticDuration?: unknown; duration?: unknown }[];
+        }[];
+      }[];
     } = {};
     try {
       json = JSON.parse(text) as typeof json;
@@ -397,6 +427,14 @@ export async function computeLiveRoute(args: {
       });
     }
     const minutes = Math.max(1, Math.round(seconds / 60));
+    const walkMinutesWithin =
+      args.mode === "WALK" ? minutes : args.mode === "TRANSIT" ? sumTransitWalkMinutes(route) : 0;
+    const walkNote =
+      args.mode === "TRANSIT"
+        ? walkMinutesWithin != null
+          ? `うち徒歩 ${walkMinutesWithin}分（乗車は徒歩に含めない）`
+          : "徒歩内訳は未取得（0分扱いにはしない）"
+        : null;
     attempts.push({
       via,
       mode: args.mode,
@@ -411,6 +449,7 @@ export async function computeLiveRoute(args: {
     return {
       durationMinutes: minutes,
       distanceMeters,
+      walkMinutesWithin,
       bufferMinutes,
       kind: "API",
       failure: null,
@@ -424,7 +463,7 @@ export async function computeLiveRoute(args: {
         sourceField: "duration",
         fetchedAt: realNowIso(),
         validFor: null,
-        note: `Routes API ${args.mode} 予測 ${minutes}分。余裕 ${bufferMinutes}分はアプリ加算${departureNote(built.departure)}［試行: ${formatAttempts(attempts)}］`,
+        note: `Routes API ${args.mode} 予測 ${minutes}分。余裕 ${bufferMinutes}分はアプリ加算${walkNote ? `。${walkNote}` : ""}${departureNote(built.departure)}［試行: ${formatAttempts(attempts)}］`,
       }),
     };
   };

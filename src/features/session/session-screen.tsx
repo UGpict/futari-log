@@ -68,8 +68,15 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   const confirmed = ["CONFIRMED", "IN_PROGRESS", "DONE", "REFLECTED"].includes(data.session.status);
   const budget = [input.budget.mealsJpy, input.budget.facilitiesJpy, input.budget.transitJpy];
   const budgetLabel = budget.every((value) => value !== null) ? `¥${budget.reduce<number>((sum, value) => sum + (value ?? 0), 0).toLocaleString()}` : "未設定あり";
-  function travelModeLabel(mode: string) {
-    return mode === "WALK" ? "徒歩" : mode === "TRANSIT" ? "公共交通" : mode === "DRIVE" ? "車" : mode;
+  function travelModeLabel(mode: string, walkWithin?: number | null) {
+    if (mode === "WALK") return "徒歩";
+    if (mode === "TRANSIT") {
+      if (walkWithin == null) return "公共交通（徒歩内訳未取得）";
+      if (walkWithin === 0) return "公共交通";
+      return `公共交通（徒歩${walkWithin}分）`;
+    }
+    if (mode === "DRIVE") return "車";
+    return mode;
   }
   function legForTransition(fromSpotId: string | null, toSpotId: string | null) {
     return displayPlan?.legs.find((leg) => leg.fromSpotId === fromSpotId && leg.toSpotId === toSpotId) ?? null;
@@ -137,7 +144,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
         return <li key={item.id}>
           <div className={styles.timelineTime}><time dateTime={item.startAt}>{formatTokyoHm(item.startAt)}</time><span data-kind={visual.id}><visual.Icon size={19} /></span></div>
           <div className={styles.stop}>
-            {inbound && <p className={styles.transition}><span />{inbound.durationMinutes.value != null ? `${inbound.durationMinutes.value}分` : "未検証"} · {travelModeLabel(inbound.mode)}</p>}
+            {inbound && <p className={styles.transition}><span />{inbound.durationMinutes.value != null ? `${inbound.durationMinutes.value}分` : "未検証"} · {travelModeLabel(inbound.mode, inbound.walkMinutesWithin?.value)}</p>}
             {replanningItemId === item.id ? <article className={styles.replanningSpot} aria-label={`${spot?.name ?? "この場所"}の変更案を考えています`}><PlanLoading demo={fixturesEnabled()} compact /></article> : <article className={styles.spot}>
               <SpotCardImage key={item.spotId} spotId={item.spotId} name={spot?.name ?? ""} visual={visual} photo={placePhotos[item.spotId]} loading={photosLoading} />
               <div className={styles.spotBody}>
@@ -158,7 +165,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
         const endLeg = last
           ? displayPlan?.legs.find((leg) => leg.fromSpotId === last.spotId && leg.to === "END")
           : null;
-        return endLeg ? <p className={styles.transition}><span />解散まで {endLeg.durationMinutes.value != null ? `${endLeg.durationMinutes.value}分` : "未検証"} · {travelModeLabel(endLeg.mode)}</p> : null;
+        return endLeg ? <p className={styles.transition}><span />解散まで {endLeg.durationMinutes.value != null ? `${endLeg.durationMinutes.value}分` : "未検証"} · {travelModeLabel(endLeg.mode, endLeg.walkMinutesWithin?.value)}</p> : null;
       })()}
       <div className={styles.meeting}><span className={styles.endpointIcon}><Check size={17} /></span><div><small>{input.endTime}ごろ 解散</small><strong>{input.end.name}</strong></div></div>
     </section>

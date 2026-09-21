@@ -37,8 +37,15 @@ export const TRAVEL_BUFFER_MINUTES = {
 
 /** 徒歩の確認閾値。超えたら交通手段を勝手に変えず、確認質問にする */
 export const WALK_LIMITS = {
+  /** 区間ごとの徒歩がこれを超えたら強制確認。設定で変更可能 */
   legMinutes: 25,
-  totalMinutes: 45,
+  /**
+   * 表示・候補比較用の参考合計。これだけでは q_long_walk を出さない。
+   * 明示的な総徒歩上限（記憶の HARD CONSTRAINT 等）があるときだけ合計で止める。
+   */
+  softTotalMinutes: 45,
+  /** 設定上の明示ハード上限。null のときは記憶側のみ */
+  hardTotalMinutes: null as number | null,
 } as const;
 
 export { SEARCH_EXPAND } from "@/contracts/serviceArea";
@@ -87,3 +94,6 @@ export const PLACE_PHOTO_NAME_RETRY = 1;
 export const PLACE_PHOTO_FAIL_LIMIT = 2;
 
 export const ROUTES_FIELD_MASK = "routes.duration,routes.distanceMeters";
+/** TRANSIT 時のみ。駅アクセス等の徒歩内訳用。取れなければ null のまま（0分扱いにしない） */
+export const ROUTES_FIELD_MASK_TRANSIT =
+  "routes.duration,routes.distanceMeters,routes.legs.steps.travelMode,routes.legs.steps.staticDuration,routes.legs.steps.duration";

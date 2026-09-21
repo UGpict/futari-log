@@ -2,7 +2,8 @@ import { LIMITS } from "@/config/settings";
 import { getEnv } from "@/config/env";
 import { loadSelectedEventSpots } from "@/server/catalog/planAttach";
 import type { Memory, Plan, Run, Session, Spot } from "@/domain/schemas";
-import { evaluateWalkLimits, describeWalkOverages, longWalkQuestion, travelUnverifiedQuestion, hasUnverifiedTravel, walkAckFingerprintFromPlan, walkLongAckMatches } from "@/domain/plan/walkLimits";
+import { evaluateWalkLimits, describeWalkOverages, longWalkQuestion, travelUnverifiedQuestion, hasUnverifiedTravel, walkAckFingerprintFromPlan, walkLongAckMatches, resolveWalkHardTotal } from "@/domain/plan/walkLimits";
+import { WALK_LIMITS } from "@/config/settings";
 import { composeReplanOrder, isProtectedPlanItem } from "@/domain/plan/replanOrder";
 import {
   classifyReplanIntent,
@@ -498,23 +499,50 @@ export async function orchestratePlanning(input: {
     };
   }
 
-  const walkCheck = evaluateWalkLimits(input.session.input.travelMode, built.plan.legs);
+  const walkCheck = evaluateWalkLimits(input.session.input.travelMode, built.plan.legs, {
+    hardTotalMinutes: resolveWalkHardTotal(input.memories).minutes ?? WALK_LIMITS.hardTotalMinutes,
+    enforcePerLeg: input.session.input.travelMode === "WALK",
+  });
+  const hardFromMemory = resolveWalkHardTotal(input.memories);
   const fingerprint = walkAckFingerprintFromPlan(input.session, built.plan, walkCheck);
-  if (walkCheck.exceeds && !walkLongAckMatches(input.session.walkLongAck, fingerprint)) {
+  if (walkCheck.exceeds && !walkLongAckMatches(input.session.walkLongAck, fingerprint, {
+    hardTotalMinutes: walkCheck.hardTotalMinutes,
+  })) {
     await withRun(input.runId, (found) => {
       if (!found) return;
       found.bundle.session.pendingWalkAckFingerprint = fingerprint;
       persistTravelCache(input.ctx, memories);
       writeMemories(found.couple, memories);
     });
-    const details = describeWalkOverages(walkCheck, built.plan.legs, built.spots);
+    const details = describeWalkOverages(
+      walkCheck,
+      built.plan.legs,
+      built.spots,
+      { meetName: input.session.input.meet.name, endName: input.session.input.end.name },
+    );
     return {
-      waitingQuestion: longWalkQuestion(walkCheck, details),
+      waitingQuestion: longWalkQuestion(walkCheck, details, built.spots, {
+        meetName: input.session.input.meet.name,
+        endName: input.session.input.end.name,
+      }),
       walkAckFingerprint: fingerprint,
       built: null,
       llm: planned.llm,
       mode,
     };
+  }
+
+  if (walkCheck.softTotalExceeded && !walkCheck.exceeds) {
+    built.plan.assumptions = [
+      `徒歩合計は ${walkCheck.totalMinutes}分（参考目安 ${walkCheck.softTotalMinutes}分を超過）。区間ごとの確認目安は超えていないため、合計だけでは止めていません。`,
+      ...built.plan.assumptions,
+    ];
+  }
+  if (hardFromMemory.memoryIds.length && walkCheck.hardTotalMinutes != null) {
+    built.plan.assumptions = [
+      `承認済みの総徒歩上限 ${walkCheck.hardTotalMinutes}分を適用（記憶 ${hardFromMemory.memoryIds.length} 件）`,
+      ...built.plan.assumptions,
+    ];
   }
 
   if (hasUnverifiedTravel(built.plan.validation.issues)) {
