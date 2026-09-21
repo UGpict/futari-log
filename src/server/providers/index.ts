@@ -33,6 +33,7 @@ import {
   parseCurrentOpeningHours,
   parsePlaceHours,
   parseYenRange,
+  parsePlacesPriceBand,
   type PlaceHoursRule,
   type SpotOpeningHours,
 } from "./placeFacts";
@@ -47,6 +48,8 @@ export {
   parseCurrentDatedHours,
   parseCurrentOpeningHours,
   parsePlaceHours,
+  parseYenRange,
+  parsePlacesPriceBand,
 };
 
 export type { ProviderCtx } from "./types";
@@ -667,17 +670,19 @@ async function liveDetails(
     regular: parsePlaceHours(p.regularOpeningHours),
     current: parseCurrentOpeningHours(p.currentOpeningHours, tokyoToday()),
   };
-  const yen = parseYenRange(p.priceRange);
+  const placesBand = parsePlacesPriceBand(p.priceRange);
   const photo = firstPhotoRef(p.photos);
   const imageUrl = photo ? await resolvePhotoMedia(ctx, apiKey, photo.name) : null;
   const costEvidence = evidence({
-    kind: yen ? "API" : "UNKNOWN",
+    kind: placesBand ? "API" : "UNKNOWN",
     provider: "places",
     sourceRef: p.id,
-    sourceField: yen ? "priceRange" : "details",
+    sourceField: placesBand ? "priceRange" : "details",
     fetchedAt,
     validFor: null,
-    note: yen ? "Places priceRange（JPY）。人数内訳は未確認" : "Place Details (New)。円額なし",
+    note: placesBand
+      ? "Places priceRange（JPY）。単位・人数は未確認のため二人料金には入れない"
+      : "Place Details (New)。円額なし",
   });
   return {
     hours,
@@ -689,7 +694,36 @@ async function liveDetails(
         lng: p.location?.longitude ?? 0,
         categories: types,
         environment: envEst,
-        costForTwoJpy: { value: yen, evidenceIds: yen ? [costEvidence.id] : [] },
+        // Places 帯は二人料金にしない（§4）。
+        costForTwoJpy: { value: null, evidenceIds: placesBand ? [costEvidence.id] : [] },
+        placesPriceBand: placesBand?.band ?? null,
+        costAccounting: placesBand
+          ? {
+              status: "UNKNOWN" as const,
+              assumptionLabel: null,
+              amountMinJpy: null,
+              amountMaxJpy: null,
+              maxInclusive: false,
+              breakdown: [],
+              sourceUrl: p.websiteUri ?? null,
+              confirmedAt: null,
+              note: "Places の価格帯は単位不明のため二人料金にできません",
+              knownSubtotalJpy: null,
+              unknownLabels: ["人数単位"],
+            }
+          : {
+              status: "UNKNOWN" as const,
+              assumptionLabel: null,
+              amountMinJpy: null,
+              amountMaxJpy: null,
+              maxInclusive: false,
+              breakdown: [],
+              sourceUrl: p.websiteUri ?? null,
+              confirmedAt: null,
+              note: "料金情報を確認できませんでした",
+              knownSubtotalJpy: null,
+              unknownLabels: ["公式単価"],
+            },
         restEase: estimateRest(types),
         standingBurden: estimateStanding(types),
         officialUrl: p.websiteUri ?? null,

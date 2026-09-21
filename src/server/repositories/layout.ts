@@ -18,6 +18,11 @@ export const CATALOG_COLLECTIONS = {
   events: "catalogEvents",
   venues: "catalogVenues",
   ingestRuns: "catalogIngestRuns",
+  spotPriceFacts: "spotPriceFacts",
+  spotPriceEvidence: "spotPriceEvidence",
+  spotPriceEnrichRuns: "spotPriceEnrichRuns",
+  spotPriceEnrichLocks: "spotPriceEnrichLocks",
+  spotPriceEnrichDaily: "spotPriceEnrichDaily",
 } as const;
 
 export const LEGACY_ROOT_DOC = process.env.FIRESTORE_ROOT_DOC?.trim() || "sys/root";

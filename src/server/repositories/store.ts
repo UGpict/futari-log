@@ -313,7 +313,7 @@ export async function insertPendingRun(input: {
     const active = Object.values(found.bundle.runs).filter((r) =>
       ["PENDING", "RUNNING", "WAITING_INPUT", "WAITING_APPROVAL"].includes(r.status),
     );
-    if (active.length >= 1 && input.kind !== "REFLECTION") {
+    if (active.length >= 1 && input.kind !== "REFLECTION" && input.kind !== "PRICE_ENRICH") {
       return {
         ok: false as const,
         status: 409,
