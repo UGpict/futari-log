@@ -43,16 +43,25 @@ async function main() {
       placeId: "ChIJq6rq_BuJGGARh1qAooLX-as",
       venueName: "東京都現代美術館",
       websiteUri: "https://www.mot-art-museum.jp/" as string | null,
+      categories: ["museum"],
     },
     {
       placeId: "ChIJYXjHTQCJGGARnZy1AU66hSw",
       venueName: "清澄庭園",
-      websiteUri: "https://www.tokyo-park.or.jp/park/format/index028.html" as string | null,
+      websiteUri: "https://www.tokyo-park.or.jp/park/kiyosumi/index.html" as string | null,
+      categories: ["park"],
     },
     {
       placeId: "ChIJO8G4NACJGGARPW7xQDNOWVc",
       venueName: "ヒキダシ",
       websiteUri: null as string | null,
+      categories: ["cafe"],
+    },
+    {
+      placeId: "ChIJN1t_t3uLGGARbnneFxI-s_E",
+      venueName: "鳥貴族 清澄白河店",
+      websiteUri: "https://torikizoku.co.jp/menu/" as string | null,
+      categories: ["izakaya", "bar"],
     },
   ];
 
@@ -73,7 +82,7 @@ async function main() {
       name: t.venueName,
       lat: 0,
       lng: 0,
-      categories: t.venueName.includes("ヒキダシ") ? ["cafe"] : ["museum"],
+      categories: t.categories,
       environment: { value: "INDOOR", evidenceIds: [] },
       costForTwoJpy: { value: null, evidenceIds: [] },
       restEase: { value: null, evidenceIds: [] },
@@ -96,6 +105,7 @@ async function main() {
       costUsd: enrichMeta?.costUsd ?? run.costUsd,
       costJpy: enrichMeta?.costJpy ?? null,
       pagesFetched: enrichMeta?.pagesFetched ?? null,
+      searchCount: enrichMeta?.searchCount ?? null,
       latencyMs: Date.now() - started,
       facts: after.map((f) => ({
         kind: f.kind,

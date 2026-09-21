@@ -5,7 +5,9 @@ import { listFactsForPlace } from "./priceRepo";
 
 function isDiningSpot(spot: Spot): boolean {
   const cats = spot.categories.join(" ").toLowerCase();
-  return /cafe|restaurant|food|bakery|meal|喫茶|カフェ|レストラン|スイーツ/.test(cats);
+  return /cafe|restaurant|food|bakery|meal|bar|izakaya|night_club|pub|wine_bar|喫茶|カフェ|レストラン|スイーツ|居酒屋|バー|酒場/.test(
+    cats,
+  );
 }
 
 /**
