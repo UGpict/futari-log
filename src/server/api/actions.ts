@@ -40,6 +40,8 @@ import { calendarListResponseSchema } from "@/contracts/calendar";
 import { isVenuePlaceId, placePhotosResponseSchema, placeSearchResponseSchema } from "@/contracts/places";
 import { PLACE_PHOTO_MAX_IDS } from "@/config/settings";
 import { listVenuePhotos, loadVenuePhotoMedia } from "@/server/providers/placePhotos";
+import { applyStoredPricesToSpot } from "@/server/catalog/applyStoredPrices";
+import { sessionAllowsPriceReapply } from "@/server/agent/place";
 
 function gitSha(): string | null {
   return process.env.GIT_COMMIT ?? process.env.VERCEL_GIT_COMMIT_SHA ?? null;
@@ -201,6 +203,24 @@ export async function getSessionSnapshot(uid: string, sessionId: string) {
   const found = await getSession(sessionId);
   if (!found) return { ok: false as const, status: 404, error: "not found" };
   if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
+
+  // Unsettled sessions only: re-apply stored price facts so async enrich shows up on reload/poll.
+  if (sessionAllowsPriceReapply(found.bundle.session.status)) {
+    const plan = found.bundle.session.currentPlanVersion
+      ? found.bundle.planHistory[String(found.bundle.session.currentPlanVersion)]
+      : null;
+    const spotIds = plan
+      ? [...new Set(plan.items.map((item) => item.spotId))]
+      : Object.keys(found.bundle.spots);
+    for (const spotId of spotIds) {
+      const spot = found.bundle.spots[spotId];
+      if (!spot) continue;
+      found.bundle.spots[spotId] = await applyStoredPricesToSpot(spot, {
+        dateTokyo: found.bundle.session.input.dateTokyo,
+      });
+    }
+  }
+
   return { ok: true as const, data: presentSessionSnapshot(snapshotOf(found.couple, found.bundle)) };
 }
 
