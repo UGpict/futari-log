@@ -616,9 +616,9 @@
 .routeContent { min-width: 0; }
 .routeContent label { display: grid; gap: 2px; }
 .routeContent label > span, .routeEnd summary small { color: #a18c99; font-size: 9px; }
-.meetingCard input { min-height: 35px; border: 0; border-bottom: 1.5px solid #ddcfd7; border-radius: 0; padding: 3px 1px 5px; background: transparent; color: #695362; transition: border-color .18s, box-shadow .18s; }
-.meetingCard input:hover { border-bottom-color: #c7adb9; }
-.meetingCard input:focus { border-bottom-color: #bc7897; box-shadow: 0 2px 0 #bc789726; outline: 0; }
+.meetingCard input { min-height: 42px; border: 1px solid #eadfe5; border-radius: 11px; padding: 7px 11px; background: #fff; color: #695362; transition: border-color .18s, box-shadow .18s; }
+.meetingCard input:hover { border-color: #d8c4cf; }
+.meetingCard input:focus { border-color: #c989a6; box-shadow: 0 0 0 3px #d58aa71c; outline: 0; }
 .meetingCard input::placeholder { color: #ab98a4; opacity: 1; }
 .routeEnd { position: relative; margin-top: 10px; }
 .routeEnd summary { display: grid; grid-template-columns: 35px minmax(0, 1fr) 18px; align-items: center; gap: 9px; min-height: 37px; color: #9d8796; cursor: pointer; list-style: none; }
