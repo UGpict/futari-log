@@ -21,6 +21,17 @@ DEPLOY_RUNTIME=LIVE npm run deploy:cloudrun
 
 終わると Cloud Run URL を表示し、`/api/health` を叩きます。ブラウザでその URL を開けば確認できます。
 
+大会デモでカレンダーにサンプル振り返りステッカーを出すとき（LIVE のまま、MOCK/API fixture は使わない）:
+
+```bash
+# デプロイ時
+DEPLOY_RUNTIME=LIVE DEMO_CALENDAR_STICKERS=true DEMO_CALENDAR_ANCHOR_DATE=2026-09-21 npm run deploy:cloudrun
+
+# または既存 revision の env だけ更新（イメージ再ビルド不要）
+gcloud run services update futari-log --region=asia-northeast1 \
+  --update-env-vars=DEMO_CALENDAR_STICKERS=true,DEMO_CALENDAR_ANCHOR_DATE=2026-09-21
+```
+
 ```bash
 curl -sS "$CLOUD_RUN_URL/api/health"
 # {"ok":true,"runtime":"MOCK","authBackend":"firebase","dataBackend":"firestore","emulator":false}

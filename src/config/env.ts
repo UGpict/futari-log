@@ -144,6 +144,19 @@ export function getEnv() {
     firebaseAuthDomain,
     firebaseAppId,
     enableDemoControls: readBool("ENABLE_DEMO_CONTROLS", false),
+    /**
+     * Tournament calendar stickers only. LIVE/search/plan unchanged.
+     * Runtime Cloud Run env works (passed into the home page as props).
+     * NEXT_PUBLIC_* is also accepted for local production builds.
+     */
+    demoCalendarStickers:
+      readBool("DEMO_CALENDAR_STICKERS", false) ||
+      readBool("NEXT_PUBLIC_DEMO_CALENDAR_STICKERS", false),
+    demoCalendarAnchorDate: (() => {
+      const raw =
+        read("DEMO_CALENDAR_ANCHOR_DATE") ?? read("NEXT_PUBLIC_DEMO_CALENDAR_ANCHOR_DATE");
+      return raw && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : "2026-09-21";
+    })(),
     demoAllowedUids: (read("DEMO_ALLOWED_UIDS") ?? "")
       .split(",")
       .map((s) => s.trim())

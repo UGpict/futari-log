@@ -755,6 +755,23 @@
 .day:has(.plannedSticker) .dayNumber { position: relative; z-index: 2; }
 .calendarLegend { display: flex; align-items: center; justify-content: center; gap: 3px; font-size: 9px; color: var(--text-muted); margin-top: 10px; }
 .calendarLegend > span { width: 25px; height: 23px; opacity: .3; }
+.demoCalendarNote {
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: .02em;
+  color: #a8949f;
+}
+.demoRecordBadge {
+  display: inline-block;
+  margin: 0 0 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: .04em;
+  color: #8a7382;
+  background: #f3ebea;
+}
 .calendarPlanCard { padding: 16px 0; border-bottom: 1px dashed #e6d5e2; }
 .calendarPlanTitle { display: flex; align-items: center; gap: 9px; }
 .calendarPlanTitle small { font-size: 10px; color: var(--text-muted); }
