@@ -74,7 +74,7 @@ Cloud Run では `PLAN_ORCHESTRATOR=workflows`（[`docs/workflows.md`](docs/work
 - **ホームの提案カード**は UI 定数（LLM 生成ではない）。[`src/features/home/home-suggestion.ts`](src/features/home/home-suggestion.ts)
 - **ホームの「近くのイベント」**は大会用サンプル表示。カタログ ID には載せない。[`src/features/home/sample-events.ts`](src/features/home/sample-events.ts)
 - **会場・日付**: LIVE / Cloud Run の検索バイアス既定は東京駅周辺（`DEMO_LAT` / `DEMO_LNG`）。Cloud Run のイメージは `DEMO_DATE` を載せず、未設定時は実行当日（Asia/Tokyo）に読み替える（[`src/config/env.ts`](src/config/env.ts) `resolveDemoDate`、[`cloudbuild.yaml`](cloudbuild.yaml)）。MOCK カタログは名古屋駅周辺と丸の内・東京駅周辺の両方を持つ（[`src/server/providers/catalog.ts`](src/server/providers/catalog.ts)）。UI fixture のスナップショットは名古屋駅集合が多い（[`src/fixtures/snapshots.ts`](src/fixtures/snapshots.ts)）
-- **既存ブラウザ保存データ**の扱い合意までは削除しない方針（[`docs/backend-handoff.md`](docs/backend-handoff.md)）
+- **既存のブラウザ保存データ**の扱い合意までは削除しない方針（[`docs/backend-handoff.md`](docs/backend-handoff.md)）。旧 Cookie のみの匿名セッションを機械移行しない方針は [PR #9](https://github.com/UGpict/futari-log/pull/9) 側（未マージ）
 - 本番 `sys/root` 容量など未解決事項は [`docs/blockers.md`](docs/blockers.md)
 
 ## 動かし方
