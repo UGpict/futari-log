@@ -28,7 +28,7 @@ export function AuthWelcomeScreen() {
           <div className={`${styles.copy} ${motion.intro}`}>
             <h1 id="welcome-title">次のデート、もう悩まない</h1>
             <p className={styles.description}>
-              ふたりの希望を聞いて、<br />ぴったりの一日を提案します。
+              あなたの希望から、<br />ふたりにぴったりの一日をつくります。
             </p>
           </div>
 

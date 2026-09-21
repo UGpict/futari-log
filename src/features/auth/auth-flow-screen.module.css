@@ -13,7 +13,6 @@
 .inputWrap input { width: 100%; min-height: 52px; padding: 13px 48px 13px 44px; border: 1px solid var(--border-control); border-radius: var(--radius-field); background: var(--surface-card); color: var(--text-primary); font-family: inherit; line-height: 1.5; }
 .inputWrap .eyeButton { position: absolute; right: 5px; width: 38px; height: 38px; min-width: 38px; background: transparent; color: var(--text-muted); }
 .textLink { justify-self: end; margin-top: -6px; color: var(--text-accent); font-size: 12px; text-underline-offset: 3px; }
-.note { margin: -8px 0 0; color: var(--text-muted); font-size: 11px; }
 .switch { margin: 2px 0 0; color: var(--text-muted); font-size: 12px; text-align: center; }
 .switch a { color: var(--text-accent); font-weight: 650; text-underline-offset: 3px; }
 .simpleActions { display: grid; gap: 12px; }

@@ -1,7 +1,7 @@
-.page { min-height: 100%; background: var(--surface-page); }
-.screen { position: relative; width: 100%; min-height: 100%; background: var(--surface-page); }
-.content { width: 100%; max-width: 430px; margin-inline: auto; display: flex; flex-direction: column; align-items: center; padding: clamp(100px, 18svh, 180px) 28px max(40px, env(safe-area-inset-bottom)); }
-@media (max-height: 660px) { .content { padding-top: 72px; } }
+.page { min-height: var(--app-viewport-height); background: var(--surface-page); }
+.screen { position: relative; width: 100%; min-height: var(--app-viewport-height); background: var(--surface-page); }
+.content { width: 100%; max-width: 430px; margin-inline: auto; display: flex; flex-direction: column; align-items: center; padding: clamp(84px, 12svh, 112px) 28px max(40px, env(safe-area-inset-bottom)); }
+@media (max-height: 660px) { .content { padding-top: 68px; } }
 
 .body { width: 100%; margin-top: 32px; }
 @media (max-height: 660px) { .body { margin-top: 22px; } }
