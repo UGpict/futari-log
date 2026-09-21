@@ -1,4 +1,4 @@
-.page { max-width: 1200px; margin: auto; padding: 32px 28px 150px; color: var(--text-primary); }
+.page { max-width: 430px; margin: auto; padding: 32px 20px 150px; color: var(--text-primary); }
 .hero { padding: 12px 0 30px; }
 .hero h1 { font-size: clamp(26px, 4vw, 40px); font-weight: 700; letter-spacing: -.04em; }
 .eyebrow { margin-top: 28px; color: var(--text-accent); font-size: 11px; letter-spacing: .16em; font-weight: 700; }
@@ -8,7 +8,7 @@
 .nav a:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 4px; }
 .section { margin-top: 42px; scroll-margin-top: 20px; }
 .section h2 { font-size: 23px; font-weight: 650; margin-bottom: 8px; }
-.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 20px; }
+.grid { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 20px; }
 .example { padding: 22px; border: 1px solid var(--border-control); border-radius: var(--radius-card); background: var(--surface-card); min-width: 0; }
 .example h3 { font-size: 16px; font-weight: 650; }
 .example p { margin-top: 6px; }
