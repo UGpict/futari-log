@@ -12,6 +12,7 @@ import type { OfficialPriceFact } from "../src/contracts/price";
 import {
   extractPriceCandidatesFromText,
   extractSameOriginFeeLinks,
+  officialPageTrusted,
 } from "../src/server/catalog/priceEnrich";
 import { stableFactId } from "../src/server/catalog/priceRepo";
 import { spotCostLabel } from "../src/features/session/cost-label";
@@ -238,7 +239,7 @@ describe("price enrichment accounting", () => {
     assert.equal(accounting.status, "ESTIMATED");
   });
 
-  it("dedupes fact ids for the same place+kind+source", () => {
+  it("dedupes fact ids for the same place+kind+source+amount+quote", () => {
     const a = stableFactId({
       placeId: "ChIJ_x",
       kind: "ADMISSION",
@@ -246,6 +247,8 @@ describe("price enrichment accounting", () => {
       audience: "GENERAL",
       usageKind: "PERMANENT",
       sourceUrl: "https://example.com",
+      amountMinJpy: 500,
+      quote: "一般 500円",
     });
     const b = stableFactId({
       placeId: "ChIJ_x",
@@ -254,8 +257,34 @@ describe("price enrichment accounting", () => {
       audience: "GENERAL",
       usageKind: "PERMANENT",
       sourceUrl: "https://example.com",
+      amountMinJpy: 500,
+      quote: "一般 500円",
     });
     assert.equal(a, b);
+  });
+
+  it("keeps distinct fact ids when amounts differ on the same source page", () => {
+    const a = stableFactId({
+      placeId: "ChIJ_x",
+      kind: "MENU_ITEM",
+      unit: "PER_ITEM",
+      audience: "GENERAL",
+      usageKind: "DINING",
+      sourceUrl: "https://example.com/menu",
+      amountMinJpy: 480,
+      quote: "焼き鳥 480円",
+    });
+    const b = stableFactId({
+      placeId: "ChIJ_x",
+      kind: "MENU_ITEM",
+      unit: "PER_ITEM",
+      audience: "GENERAL",
+      usageKind: "DINING",
+      sourceUrl: "https://example.com/menu",
+      amountMinJpy: 680,
+      quote: "刺身 680円",
+    });
+    assert.notEqual(a, b);
   });
 
   it("extracts admission yen from page body quotes", () => {
@@ -298,11 +327,42 @@ describe("price enrichment accounting", () => {
       "飲み放題 2980円（税込）。コース 4500円。ランチ 1200円。焼き鳥 480円 メニュー。刺身 680円（税込）。",
       "https://example.com/menu",
     );
-    assert.ok(rows.some((r) => r.kind === "SET_MENU" && r.amountMinJpy === 2980 && /飲み放題/.test(r.quote ?? "")));
+    assert.ok(rows.some((r) => r.kind === "MENU_ITEM" && r.amountMinJpy === 2980 && /飲み放題/.test(r.quote ?? "")));
     assert.ok(rows.some((r) => r.kind === "SET_MENU" && r.amountMinJpy === 4500 && /コース/.test(r.quote ?? "")));
     assert.ok(rows.some((r) => r.kind === "SET_MENU" && r.amountMinJpy === 1200 && /ランチ/.test(r.quote ?? "")));
     assert.ok(rows.some((r) => r.kind === "MENU_ITEM" && r.amountMinJpy === 480));
     assert.ok(rows.some((r) => r.tax === "INCLUDED" && r.amountMinJpy === 2980));
+  });
+
+  it("parses comma-separated and fullwidth yen amounts", () => {
+    const rows = extractPriceCandidatesFromText(
+      "一般入場料は1,500円です。コース ５，５００円（税込）。ランチセット 1,200円（税込）。",
+      "https://example.com/fee",
+    );
+    assert.ok(rows.some((r) => r.kind === "ADMISSION" && r.amountMinJpy === 1500));
+    assert.ok(rows.some((r) => r.kind === "SET_MENU" && r.amountMinJpy === 5500));
+    assert.ok(rows.some((r) => r.kind === "SET_MENU" && r.amountMinJpy === 1200));
+    assert.ok(!rows.some((r) => r.amountMinJpy === 500));
+    assert.ok(!rows.some((r) => r.amountMinJpy === 200));
+  });
+
+  it("skips addon surcharges like +300円", () => {
+    const rows = extractPriceCandidatesFromText(
+      "コース 4,500円。ドリンクセット +300円。飲み放題 +1,650円。",
+      "https://example.com/menu",
+    );
+    assert.ok(rows.some((r) => r.kind === "SET_MENU" && r.amountMinJpy === 4500));
+    assert.ok(!rows.some((r) => r.amountMinJpy === 300));
+    assert.ok(!rows.some((r) => r.amountMinJpy === 650));
+  });
+
+  it("does not treat parking tax-included yen as dining menu", () => {
+    const rows = extractPriceCandidatesFromText(
+      "駐車場 1時間 税込 400円。グランドメニュー 税込 390円。",
+      "https://example.com/menu",
+    );
+    assert.ok(!rows.some((r) => r.amountMinJpy === 400));
+    assert.ok(rows.some((r) => r.amountMinJpy === 390 && /グランドメニュー/.test(r.quote ?? "")));
   });
 
   it("extracts same-origin fee/menu links from html", () => {
@@ -314,7 +374,7 @@ describe("price enrichment accounting", () => {
     assert.ok(!links.some((u) => u.includes("other.example")));
   });
 
-  it("estimates izakaya SET_MENU as two-person ESTIMATED", () => {
+  it("estimates izakaya SET_MENU as two-person ESTIMATED without budget ceiling", () => {
     const accounting = computeCostAccounting({
       facts: [
         fact({
@@ -322,10 +382,11 @@ describe("price enrichment accounting", () => {
           kind: "SET_MENU",
           unit: "PER_PERSON",
           usageKind: "DINING",
-          amountMinJpy: 2980,
-          amountMaxJpy: 2980,
-          quote: "飲み放題 2980円",
-          confirmation: "VERIFIED",
+          amountMinJpy: 4500,
+          amountMaxJpy: 4500,
+          quote: "コース 4500円",
+          confirmation: "PARTIAL",
+          maxInclusive: false,
         }),
       ],
       dateTokyo: "2026-09-21",
@@ -335,8 +396,10 @@ describe("price enrichment accounting", () => {
       isDining: true,
     });
     assert.equal(accounting.status, "ESTIMATED");
-    assert.equal(accounting.amountMinJpy, 5960);
-    assert.match(accounting.assumptionLabel ?? "", /飲み放題/);
+    assert.equal(accounting.amountMinJpy, 9000);
+    assert.equal(accounting.maxInclusive, false);
+    assert.equal(budgetCeilingJpy(accounting), null);
+    assert.match(accounting.assumptionLabel ?? "", /コース/);
   });
 
   it("falls back to cheapest two MENU_ITEMs when drink+sweet missing", () => {
@@ -350,7 +413,8 @@ describe("price enrichment accounting", () => {
           amountMinJpy: 480,
           amountMaxJpy: 480,
           quote: "焼き鳥 480円",
-          confirmation: "VERIFIED",
+          confirmation: "PARTIAL",
+          maxInclusive: false,
         }),
         fact({
           id: "m2",
@@ -360,7 +424,8 @@ describe("price enrichment accounting", () => {
           amountMinJpy: 680,
           amountMaxJpy: 680,
           quote: "刺身 680円",
-          confirmation: "VERIFIED",
+          confirmation: "PARTIAL",
+          maxInclusive: false,
         }),
       ],
       dateTokyo: "2026-09-21",
@@ -371,10 +436,12 @@ describe("price enrichment accounting", () => {
     });
     assert.equal(accounting.status, "ESTIMATED");
     assert.equal(accounting.amountMinJpy, (480 + 680) * 2);
+    assert.equal(accounting.maxInclusive, false);
+    assert.equal(budgetCeilingJpy(accounting), null);
     assert.match(accounting.assumptionLabel ?? "", /安いメニュー2品/);
   });
 
-  it("estimates single uniform MENU_ITEM as two dishes per person", () => {
+  it("estimates single uniform MENU_ITEM only when quote marks グランドメニュー", () => {
     const accounting = computeCostAccounting({
       facts: [
         fact({
@@ -385,7 +452,8 @@ describe("price enrichment accounting", () => {
           amountMinJpy: 390,
           amountMaxJpy: 390,
           quote: "税込 390円 グランドメニュー",
-          confirmation: "VERIFIED",
+          confirmation: "PARTIAL",
+          maxInclusive: false,
         }),
       ],
       dateTokyo: "2026-09-21",
@@ -396,12 +464,68 @@ describe("price enrichment accounting", () => {
     });
     assert.equal(accounting.status, "ESTIMATED");
     assert.equal(accounting.amountMinJpy, 390 * 2 * 2);
+    assert.equal(accounting.maxInclusive, false);
     assert.match(accounting.assumptionLabel ?? "", /同一メニュー2品/);
   });
 
+  it("does not estimate bare single MENU_ITEM without uniform marker", () => {
+    const accounting = computeCostAccounting({
+      facts: [
+        fact({
+          id: "m1",
+          kind: "MENU_ITEM",
+          unit: "PER_ITEM",
+          usageKind: "DINING",
+          amountMinJpy: 400,
+          amountMaxJpy: 400,
+          quote: "税込 400円",
+          confirmation: "PARTIAL",
+        }),
+      ],
+      dateTokyo: "2026-09-21",
+      weekday: 1,
+      partySize: 2,
+      preferUsage: "DINING",
+      isDining: true,
+    });
+    assert.equal(accounting.status, "UNKNOWN");
+  });
+
+  it("prefers course SET_MENU over nomihodai-looking quotes", () => {
+    const accounting = computeCostAccounting({
+      facts: [
+        fact({
+          id: "n1",
+          kind: "MENU_ITEM",
+          unit: "PER_ITEM",
+          usageKind: "DINING",
+          amountMinJpy: 1650,
+          amountMaxJpy: 1650,
+          quote: "飲み放題 1650円",
+          confirmation: "PARTIAL",
+        }),
+        fact({
+          id: "c1",
+          kind: "SET_MENU",
+          unit: "PER_PERSON",
+          usageKind: "DINING",
+          amountMinJpy: 4500,
+          amountMaxJpy: 4500,
+          quote: "コース 4500円",
+          confirmation: "PARTIAL",
+        }),
+      ],
+      dateTokyo: "2026-09-21",
+      weekday: 1,
+      partySize: 2,
+      preferUsage: "DINING",
+      isDining: true,
+    });
+    assert.equal(accounting.amountMinJpy, 9000);
+    assert.match(accounting.assumptionLabel ?? "", /コース/);
+  });
+
   it("treats official URL + quote-in-body candidates as VERIFIED-eligible via confirmation field", () => {
-    // Enrichment upgrades confirmation when branchMatch is OFFICIAL_URL/PLACE_ID/ADDRESS
-    // and quote appears in body; extract itself stays PARTIAL until save.
     const rows = extractPriceCandidatesFromText(
       "一般入場料は1200円です。",
       "https://official.example/fee",
@@ -420,6 +544,23 @@ describe("price enrichment accounting", () => {
     });
     assert.equal(verified.confirmation, "VERIFIED");
     assert.equal(verified.branchMatch, "OFFICIAL_URL");
+  });
+
+  it("trusts official path by segment prefix, not substring leaf", () => {
+    assert.equal(
+      officialPageTrusted(
+        "https://www.tokyo-park.or.jp/park/kiyosumi/index.html",
+        "https://www.tokyo-park.or.jp/park/kiyosumi/index.html",
+      ),
+      true,
+    );
+    assert.equal(
+      officialPageTrusted(
+        "https://www.tokyo-park.or.jp/park/kiyosumi/index.html",
+        "https://www.tokyo-park.or.jp/park/kiyosumi-xxx/index.html",
+      ),
+      false,
+    );
   });
 
   it("blocks price reapply on settled sessions", () => {

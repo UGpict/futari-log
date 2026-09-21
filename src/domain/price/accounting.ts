@@ -119,7 +119,8 @@ export function computeCostAccounting(input: ComputeCostInput): CostAccounting {
         assumptionLabel: `二人の目安／各1ドリンク＋スイーツを想定`,
         amountMinJpy: total,
         amountMaxJpy: totalMax,
-        maxInclusive: drink.maxInclusive && sweet.maxInclusive,
+        // 注文仮定の概算は予算上限に使わない。
+        maxInclusive: false,
         breakdown: [
           { label: `ドリンク ×${input.partySize}`, amountJpy: drink.amountMinJpy * input.partySize, factId: drink.id },
           { label: `スイーツ ×${input.partySize}`, amountJpy: sweet.amountMinJpy * input.partySize, factId: sweet.id },
@@ -132,30 +133,40 @@ export function computeCostAccounting(input: ComputeCostInput): CostAccounting {
       };
     }
 
+    const courseMenus = applicable
+      .filter(
+        (f) =>
+          f.kind === "SET_MENU" &&
+          (f.unit === "PER_PERSON" || f.unit === "PER_SET" || f.unit === "PER_ITEM") &&
+          f.amountMinJpy != null &&
+          /コース|セット|ランチ/.test(`${f.quote ?? ""}`) &&
+          !/飲み放題/.test(`${f.quote ?? ""}`),
+      )
+      .sort((a, b) => (a.amountMinJpy ?? 0) - (b.amountMinJpy ?? 0));
     const setMenus = applicable
       .filter(
         (f) =>
-          (f.kind === "SET_MENU" || /コース|飲み放題|セット|ランチ/.test(`${f.quote ?? ""}`)) &&
+          (f.kind === "SET_MENU" || /コース|セット|ランチ/.test(`${f.quote ?? ""}`)) &&
           (f.unit === "PER_PERSON" || f.unit === "PER_SET" || f.unit === "PER_ITEM") &&
-          f.amountMinJpy != null,
+          f.amountMinJpy != null &&
+          !/飲み放題/.test(`${f.quote ?? ""}`),
       )
       .sort((a, b) => (a.amountMinJpy ?? 0) - (b.amountMinJpy ?? 0));
-    const setMenu = setMenus[0];
+    const setMenu = courseMenus[0] ?? setMenus[0];
     if (setMenu?.amountMinJpy != null) {
-      const unitMax = setMenu.amountMaxJpy ?? setMenu.amountMinJpy;
-      const total = setMenu.amountMinJpy * input.partySize;
+      const unitMin = setMenu.amountMinJpy;
+      const unitMax = setMenu.amountMaxJpy ?? unitMin;
+      const total = unitMin * input.partySize;
       const totalMax = unitMax * input.partySize;
-      const nomihodai = /飲み放題/.test(`${setMenu.quote ?? ""}`);
-      const label = nomihodai ? "飲み放題" : "コース";
       return {
         status: "ESTIMATED",
-        assumptionLabel: `二人の目安／${label}想定`,
+        assumptionLabel: `二人の目安／コース想定`,
         amountMinJpy: total,
         amountMaxJpy: totalMax,
-        maxInclusive: setMenu.maxInclusive,
+        maxInclusive: false,
         breakdown: [
           {
-            label: `${label}（一人）×${input.partySize}`,
+            label: `コース（一人）×${input.partySize}`,
             amountJpy: total,
             factId: setMenu.id,
           },
@@ -174,19 +185,21 @@ export function computeCostAccounting(input: ComputeCostInput): CostAccounting {
     if (menuItems.length >= 2) {
       const a = menuItems[0]!;
       const b = menuItems[1]!;
-      const perPerson = (a.amountMinJpy ?? 0) + (b.amountMinJpy ?? 0);
+      const aMin = a.amountMinJpy!;
+      const bMin = b.amountMinJpy!;
+      const perPerson = aMin + bMin;
       const total = perPerson * input.partySize;
       const totalMax =
-        ((a.amountMaxJpy ?? a.amountMinJpy ?? 0) + (b.amountMaxJpy ?? b.amountMinJpy ?? 0)) * input.partySize;
+        ((a.amountMaxJpy ?? aMin) + (b.amountMaxJpy ?? bMin)) * input.partySize;
       return {
         status: "ESTIMATED",
         assumptionLabel: `二人の目安／安いメニュー2品×人数を想定`,
         amountMinJpy: total,
         amountMaxJpy: totalMax,
-        maxInclusive: a.maxInclusive && b.maxInclusive,
+        maxInclusive: false,
         breakdown: [
-          { label: `メニューA ×${input.partySize}`, amountJpy: (a.amountMinJpy ?? 0) * input.partySize, factId: a.id },
-          { label: `メニューB ×${input.partySize}`, amountJpy: (b.amountMinJpy ?? 0) * input.partySize, factId: b.id },
+          { label: `メニューA ×${input.partySize}`, amountJpy: aMin * input.partySize, factId: a.id },
+          { label: `メニューB ×${input.partySize}`, amountJpy: bMin * input.partySize, factId: b.id },
         ],
         sourceUrl: a.sourceUrl ?? b.sourceUrl,
         confirmedAt: a.fetchedAt,
@@ -196,28 +209,30 @@ export function computeCostAccounting(input: ComputeCostInput): CostAccounting {
       };
     }
 
-    // 一律メニュー等で1単価しか取れないとき: 同一品2点×人数。
-    if (menuItems.length === 1 && menuItems[0]?.amountMinJpy != null) {
-      const item = menuItems[0]!;
-      const unit = item.amountMinJpy;
-      const unitMax = item.amountMaxJpy ?? unit;
-      const total = unit * 2 * input.partySize;
+    // 一律メニュー（グランドメニュー／一律）の1単価だけ: 同一品2点×人数。
+    const uniform = menuItems.find(
+      (f) => f.amountMinJpy != null && /グランドメニュー|一律/.test(`${f.quote ?? ""}`),
+    );
+    if (uniform?.amountMinJpy != null) {
+      const unitMin = uniform.amountMinJpy;
+      const unitMax = uniform.amountMaxJpy ?? unitMin;
+      const total = unitMin * 2 * input.partySize;
       const totalMax = unitMax * 2 * input.partySize;
       return {
         status: "ESTIMATED",
         assumptionLabel: `二人の目安／同一メニュー2品×人数を想定`,
         amountMinJpy: total,
         amountMaxJpy: totalMax,
-        maxInclusive: item.maxInclusive,
+        maxInclusive: false,
         breakdown: [
           {
             label: `メニュー ×2品×${input.partySize}`,
             amountJpy: total,
-            factId: item.id,
+            factId: uniform.id,
           },
         ],
-        sourceUrl: item.sourceUrl,
-        confirmedAt: item.fetchedAt,
+        sourceUrl: uniform.sourceUrl,
+        confirmedAt: uniform.fetchedAt,
         note: "注文の仮定に基づく概算。確定額・上限保証ではない",
         knownSubtotalJpy: total,
         unknownLabels: [],

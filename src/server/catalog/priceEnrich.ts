@@ -18,6 +18,9 @@ const MAX_PAGES = 4;
 const MAX_MS = 90_000;
 const MAX_SAME_ORIGIN_LINKS = 3;
 
+/** カンマ区切り・素の3〜5桁の円額。 */
+const YEN_NUM = String.raw`(\d{1,3}(?:,\d{3})+|\d{3,5})`;
+
 export type PriceEnrichInput = {
   placeId: string;
   venueName: string;
@@ -38,21 +41,66 @@ function revalidateBy(fetchedAt: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** 全角数字・全角カンマ・¥ を半角に揃える。 */
+export function normalizeYenText(text: string): string {
+  return text
+    .replace(/[０-９]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
+    .replace(/[，、]/g, ",")
+    .replace(/[￥¥]/g, "");
+}
+
+export function parseYenCapture(raw: string | undefined | null): number | null {
+  if (!raw) return null;
+  const n = Number(String(raw).replace(/,/g, ""));
+  if (!Number.isFinite(n) || n < 100) return null;
+  return n;
+}
+
+/** 直前が + / プラス / 追加 の追加料金は除外する。 */
+function isAddonAmount(body: string, matchIndex: number, matchText = ""): boolean {
+  const before = body.slice(Math.max(0, matchIndex - 12), matchIndex);
+  if (/(?:\+|＋|プラス|追加)\s*$/.test(before)) return true;
+  // 「セット +300円」「飲み放題 +1,650円」のようにラベルと金額の間にある場合。
+  if (/(?:\+|＋|プラス|追加)\s*[\d,]/.test(matchText)) return true;
+  return false;
+}
+
 function pushCandidate(out: PriceCandidate[], row: PriceCandidate) {
-  const key = `${row.kind}:${row.unit}:${row.usageKind}:${row.amountMinJpy}:${row.quote?.slice(0, 40)}`;
-  if (out.some((item) => `${item.kind}:${item.unit}:${item.usageKind}:${item.amountMinJpy}:${item.quote?.slice(0, 40)}` === key)) {
+  // SET_MENU / ADMISSION は同額を1件に。MENU_ITEM は quote も見て別品を残す。
+  const key =
+    row.kind === "MENU_ITEM"
+      ? `${row.kind}:${row.unit}:${row.usageKind}:${row.amountMinJpy}:${row.quote?.slice(0, 40)}`
+      : `${row.kind}:${row.unit}:${row.usageKind}:${row.amountMinJpy}`;
+  if (
+    out.some((item) => {
+      const itemKey =
+        item.kind === "MENU_ITEM"
+          ? `${item.kind}:${item.unit}:${item.usageKind}:${item.amountMinJpy}:${item.quote?.slice(0, 40)}`
+          : `${item.kind}:${item.unit}:${item.usageKind}:${item.amountMinJpy}`;
+      return itemKey === key;
+    })
+  ) {
     return;
   }
   out.push(row);
 }
 
-function baseDining(partial: Partial<PriceCandidate> & Pick<PriceCandidate, "kind" | "amountMinJpy" | "quote" | "sourceUrl" | "unit">): PriceCandidate {
+function baseDining(
+  partial: Partial<PriceCandidate> & {
+    kind: PriceCandidate["kind"];
+    amountMinJpy: number;
+    quote: string;
+    sourceUrl: string;
+    unit: PriceCandidate["unit"];
+  },
+): PriceCandidate {
   const yen = partial.amountMinJpy;
   return {
     kind: partial.kind,
     amountMinJpy: yen,
     amountMaxJpy: partial.amountMaxJpy ?? yen,
-    maxInclusive: partial.maxInclusive ?? true,
+    // 飲食のヒューリスティック単価は予算上限に使わない。
+    maxInclusive: false,
     currency: "JPY",
     unit: partial.unit,
     audience: "GENERAL",
@@ -78,88 +126,105 @@ export function extractPriceCandidatesFromText(
   sourceUrl: string,
 ): PriceCandidate[] {
   const out: PriceCandidate[] = [];
-  const body = text.replace(/\s+/g, " ");
+  const body = normalizeYenText(text).replace(/\s+/g, " ");
 
   const admission =
-    /(?:一般|大人)[^\d]{0,12}(?:料金|入場料|入園料)?[^\d]{0,8}(\d{3,5})\s*円/.exec(body) ??
-    /入場料[^\d]{0,8}(\d{3,5})\s*円/.exec(body) ??
-    /入園料[^\d]{0,8}(\d{3,5})\s*円/.exec(body) ??
-    /(?:一般|大人)[^\d]{0,12}税込\s*(\d{3,5})\s*円/.exec(body);
-  if (admission?.[1]) {
-    const yen = Number(admission[1]);
-    const isGarden = /入園/.test(admission[0]);
-    const isSpecial = /企画|特別展|展覧会/.test(
-      body.slice(Math.max(0, admission.index! - 40), admission.index! + 40),
-    );
-    pushCandidate(out, {
-      kind: isSpecial ? "SPECIAL_EXHIBITION" : "ADMISSION",
-      amountMinJpy: yen,
-      amountMaxJpy: yen,
-      maxInclusive: true,
-      currency: "JPY",
-      unit: "PER_PERSON",
-      audience: "GENERAL",
-      usageKind: isSpecial ? "SPECIAL_EXHIBITION" : isGarden ? "GARDEN" : "PERMANENT",
-      weekdays: [],
-      timeStart: null,
-      timeEnd: null,
-      dateStart: null,
-      dateEnd: null,
-      exclusionNote: null,
-      tax: /税込/.test(admission[0]) ? "INCLUDED" : "UNKNOWN",
-      extraFeesUnknown: true,
-      confirmation: "PARTIAL",
-      sourceUrl,
-      quote: admission[0].slice(0, 120),
-      revalidateBy: null,
-    });
+    new RegExp(String.raw`(?:一般|大人)[^\d]{0,12}(?:料金|入場料|入園料)?[^\d]{0,8}${YEN_NUM}\s*円`).exec(body) ??
+    new RegExp(String.raw`入場料[^\d]{0,8}${YEN_NUM}\s*円`).exec(body) ??
+    new RegExp(String.raw`入園料[^\d]{0,8}${YEN_NUM}\s*円`).exec(body) ??
+    new RegExp(String.raw`(?:一般|大人)[^\d]{0,12}税込\s*${YEN_NUM}\s*円`).exec(body);
+  if (admission?.[1] && !isAddonAmount(body, admission.index ?? 0, admission[0])) {
+    const yen = parseYenCapture(admission[1]);
+    if (yen != null) {
+      const isGarden = /入園/.test(admission[0]);
+      const isSpecial = /企画|特別展|展覧会/.test(
+        body.slice(Math.max(0, admission.index! - 40), admission.index! + 40),
+      );
+      pushCandidate(out, {
+        kind: isSpecial ? "SPECIAL_EXHIBITION" : "ADMISSION",
+        amountMinJpy: yen,
+        amountMaxJpy: yen,
+        maxInclusive: true,
+        currency: "JPY",
+        unit: "PER_PERSON",
+        audience: "GENERAL",
+        usageKind: isSpecial ? "SPECIAL_EXHIBITION" : isGarden ? "GARDEN" : "PERMANENT",
+        weekdays: [],
+        timeStart: null,
+        timeEnd: null,
+        dateStart: null,
+        dateEnd: null,
+        exclusionNote: null,
+        tax: /税込/.test(admission[0]) ? "INCLUDED" : "UNKNOWN",
+        extraFeesUnknown: true,
+        confirmation: "PARTIAL",
+        sourceUrl,
+        quote: admission[0].slice(0, 120),
+        revalidateBy: null,
+      });
+    }
   }
 
   const setPatterns: { re: RegExp; label: string }[] = [
-    { re: /飲み放題[^\d]{0,12}(\d{3,5})\s*円(?:\s*[（(]税込[）)])?/g, label: "飲み放題" },
-    { re: /コース[^\d]{0,12}(\d{3,5})\s*円(?:\s*[（(]税込[）)])?/g, label: "コース" },
-    { re: /セット[^\d]{0,12}(\d{3,5})\s*円(?:\s*[（(]税込[）)])?/g, label: "セット" },
-    { re: /ランチ[^\d]{0,12}(\d{3,5})\s*円(?:\s*[（(]税込[）)])?/g, label: "ランチ" },
-    { re: /(\d{3,5})\s*円\s*[（(]税込[）)]/g, label: "税込" },
-    { re: /税込\s*(\d{3,5})\s*円/g, label: "税込" },
+    { re: new RegExp(String.raw`飲み放題[^\d]{0,12}${YEN_NUM}\s*円(?:\s*[（(]税込[）)])?`, "g"), label: "飲み放題" },
+    { re: new RegExp(String.raw`コース[^\d]{0,12}${YEN_NUM}\s*円(?:\s*[（(]税込[）)])?`, "g"), label: "コース" },
+    { re: new RegExp(String.raw`セット[^\d]{0,12}${YEN_NUM}\s*円(?:\s*[（(]税込[）)])?`, "g"), label: "セット" },
+    { re: new RegExp(String.raw`ランチ[^\d]{0,12}${YEN_NUM}\s*円(?:\s*[（(]税込[）)])?`, "g"), label: "ランチ" },
+    { re: new RegExp(String.raw`${YEN_NUM}\s*円\s*[（(]税込[）)]`, "g"), label: "税込" },
+    { re: new RegExp(String.raw`税込\s*${YEN_NUM}\s*円`, "g"), label: "税込" },
   ];
   for (const { re, label } of setPatterns) {
     let m: RegExpExecArray | null;
     let count = 0;
     while ((m = re.exec(body)) && count < 4) {
-      const yen = Number(m[1]);
-      if (!Number.isFinite(yen) || yen < 100) continue;
+      if (isAddonAmount(body, m.index, m[0])) continue;
+      const yen = parseYenCapture(m[1]);
+      if (yen == null) continue;
+      // 同一文脈のみ見る（前の文の「駐車場」で後続メニューを落とさない）。
+      const nearby = body.slice(Math.max(0, m.index - 16), m.index + m[0].length);
+      if (/駐車|コインパーキング|駐輪|ロッカー|郵便/.test(nearby)) continue;
       count += 1;
       const taxIncluded = /税込/.test(m[0]);
-      const nearby = body.slice(Math.max(0, m.index - 24), m.index + m[0].length + 24);
-      const isNomihodai = /飲み放題/.test(m[0]) || label === "飲み放題";
+      const isNomihodai = label === "飲み放題" || /飲み放題/.test(m[0]);
       const isCourse =
-        /コース|セット|ランチ/.test(m[0] + nearby) || ["コース", "セット", "ランチ"].includes(label);
+        !isNomihodai &&
+        (/コース|セット|ランチ/.test(m[0] + nearby) || ["コース", "セット", "ランチ"].includes(label));
+      const uniform =
+        label === "税込" && /グランドメニュー|一律|全品|全メニュー/.test(nearby);
+      const quoteBase = m[0] + (uniform ? " グランドメニュー" : "");
       pushCandidate(
         out,
         baseDining({
-          kind: isCourse || isNomihodai ? "SET_MENU" : "MENU_ITEM",
-          unit: isCourse || isNomihodai ? "PER_PERSON" : "PER_ITEM",
+          // 飲み放題は追加料金になりやすいので MENU_ITEM 扱い（コース選定から外す）。
+          kind: isCourse ? "SET_MENU" : "MENU_ITEM",
+          unit: isCourse ? "PER_PERSON" : "PER_ITEM",
           amountMinJpy: yen,
           amountMaxJpy: yen,
           sourceUrl,
-          quote: (m[0] + ( /グランドメニュー|一律/.test(nearby) ? " グランドメニュー" : "")).slice(0, 120),
+          quote: (isNomihodai ? `${quoteBase} 飲み放題` : quoteBase).slice(0, 120),
           tax: taxIncluded ? "INCLUDED" : "UNKNOWN",
         }),
       );
     }
   }
 
-  const menuRe = /([ぁ-んァ-ン一-龥A-Za-z]{2,20})[^\d]{0,6}(\d{3,5})\s*円(?:\s*[（(]税込[）)])?/g;
+  const menuRe = new RegExp(
+    String.raw`([ぁ-んァ-ン一-龥A-Za-z]{2,20})[^\d]{0,6}${YEN_NUM}\s*円(?:\s*[（(]税込[）)])?`,
+    "g",
+  );
   let m: RegExpExecArray | null;
   let menuCount = 0;
   while ((m = menuRe.exec(body)) && menuCount < 8) {
+    if (isAddonAmount(body, m.index, m[0])) continue;
     const name = m[1] ?? "";
-    const yen = Number(m[2]);
-    const nearby = name + body.slice(m.index, m.index + 30);
+    const yen = parseYenCapture(m[2]);
+    if (yen == null) continue;
+    const before = body.slice(Math.max(0, m.index - 20), m.index);
+    const local = `${before}${name}${m[0]}`;
+    if (/駐車|コインパーキング|駐輪|ロッカー|郵便/.test(local)) continue;
     if (
       !/ドリンク|コーヒー|ケーキ|スイーツ|パフェ|紅茶|お茶|ラテ|メニュー|ビール|日本酒|ハイボール|焼き鳥|刺身|定食/.test(
-        nearby,
+        local,
       )
     ) {
       continue;
@@ -193,8 +258,9 @@ export function extractSameOriginFeeLinks(html: string, pageUrl: string, limit =
   } catch {
     return [];
   }
+  // hours|visit|開館 は営業時間ページに枠を食いやすいのでパス判定から外す。
   const feePath =
-    /料金|入場|チケット|観覧|menu|price|fee|ticket|admission|ryokin|museum-info|hours|開館|visit/;
+    /料金|入場|チケット|観覧|menu|price|fee|ticket|admission|ryokin|museum-info/;
   const feeLabel = /料金|入場|チケット|メニュー|料金表|観覧料|観覧|開館時間|price|menu|fee|admission/i;
   const out: string[] = [];
   const anchorRe = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
@@ -229,28 +295,31 @@ export function extractSameOriginFeeLinks(html: string, pageUrl: string, limit =
 
 function quoteInBody(body: string, quote: string | null): boolean {
   if (!quote) return false;
-  const norm = (s: string) => s.replace(/\s+/g, "");
+  const norm = (s: string) => normalizeYenText(s).replace(/\s+/g, "");
   return norm(body).includes(norm(quote).slice(0, 24));
 }
 
 /** 共有ドメインの別施設価格を避ける。店名の短い核が引用付近にあること。 */
 export function venueNearQuote(body: string, quote: string | null, venueName: string): boolean {
   if (!quote || !venueName) return false;
-  const normBody = body.replace(/\s+/g, " ");
-  const normQuote = quote.replace(/\s+/g, " ").slice(0, 40);
+  const normBody = normalizeYenText(body).replace(/\s+/g, " ");
+  const normQuote = normalizeYenText(quote).replace(/\s+/g, " ").slice(0, 40);
   const idx = normBody.indexOf(normQuote.slice(0, Math.min(24, normQuote.length)));
   if (idx < 0) return false;
   const window = normBody.slice(Math.max(0, idx - 160), idx + normQuote.length + 160);
   const core = venueName.replace(/\s+/g, "").slice(0, 4);
   if (core.length >= 2 && window.replace(/\s+/g, "").includes(core)) return true;
-  // 短い別名（清澄庭園 → 清澄）
   const compact = venueName.replace(/(公園|庭園|美術館|博物館|店|カフェ|食堂)$/g, "").slice(0, 4);
   return compact.length >= 2 && window.replace(/\s+/g, "").includes(compact);
 }
 
+function pathSegments(pathname: string): string[] {
+  return pathname.split("/").filter(Boolean);
+}
+
 /**
  * 公式サイト単館（パスがほぼ /）は origin 全体を信頼。
- * パス付き公式 URL（例: /park/kiyosumi/）はその配下だけ信頼し、共有ポータルの別施設を弾く。
+ * パス付き公式 URL（例: /park/kiyosumi/）はその配下だけ信頼（セグメント完全一致）。
  */
 export function officialPageTrusted(websiteUri: string | null | undefined, pageUrl: string): boolean {
   if (!websiteUri) return false;
@@ -261,8 +330,10 @@ export function officialPageTrusted(websiteUri: string | null | undefined, pageU
     const fileTrimmed = site.pathname.replace(/\/[^/]+\.[a-z0-9]+$/i, "/");
     const basePath = fileTrimmed.replace(/\/+$/, "") || "";
     if (basePath.length <= 1) return true;
-    const leaf = basePath.split("/").filter(Boolean).pop() ?? "";
-    return page.pathname.startsWith(basePath) || (leaf.length >= 3 && page.pathname.includes(`/${leaf}`));
+    const siteSegs = pathSegments(basePath);
+    const pageSegs = pathSegments(page.pathname);
+    if (siteSegs.length === 0) return true;
+    return siteSegs.every((seg, i) => pageSegs[i] === seg);
   } catch {
     return false;
   }
@@ -274,7 +345,12 @@ function branchMatch(
   body: string,
 ): OfficialPriceFact["branchMatch"] {
   try {
-    if (input.websiteUri && pageUrl.startsWith(new URL(input.websiteUri).origin)) return "OFFICIAL_URL";
+    if (input.websiteUri) {
+      const siteOrigin = new URL(input.websiteUri).origin;
+      const pageOrigin = new URL(pageUrl).origin;
+      // startsWith(origin) は example.com.evil.jp に誤ヒットするため origin 完全一致。
+      if (pageOrigin === siteOrigin) return "OFFICIAL_URL";
+    }
   } catch {
     /* ignore bad websiteUri */
   }
@@ -294,6 +370,10 @@ function enqueueUrlNext(urls: string[], url: string, afterIndex: number, max = M
   if (!url || urls.includes(url) || urls.length >= max) return;
   const insertAt = Math.min(afterIndex + 1, urls.length);
   urls.splice(insertAt, 0, url);
+}
+
+function isFacilityKind(kind: OfficialPriceFact["kind"]): boolean {
+  return kind === "ADMISSION" || kind === "SPECIAL_EXHIBITION";
 }
 
 export async function enrichSpotPrice(
@@ -354,6 +434,8 @@ export async function enrichSpotPrice(
     let cursor = 0;
     let factsSaved = 0;
 
+    const pagesRemaining = () => Math.max(0, MAX_PAGES - run.pagesFetched);
+
     const processQueuedPages = async () => {
       while (cursor < urls.length) {
         if (Date.now() > deadline || run.pagesFetched >= MAX_PAGES) {
@@ -371,7 +453,6 @@ export async function enrichSpotPrice(
         // 同名別店の流用を避ける。NAME_ONLY / UNCONFIRMED は保存しない。
         if (match === "UNCONFIRMED" || match === "NAME_ONLY") continue;
 
-        // 公式サイトから辿った料金ページを citation より先に処理する。
         let insertAfter = cursor - 1;
         for (const link of extractSameOriginFeeLinks(page.html || page.text, pageUrl)) {
           const before = urls.length;
@@ -395,20 +476,17 @@ export async function enrichSpotPrice(
         const candidates = extractPriceCandidatesFromText(page.text, pageUrl);
         for (const c of candidates) {
           if (!quoteInBody(page.text, c.quote)) continue;
-          // 共有ドメインの別施設価格を落とす（単館公式 origin は許容）。
-          if (
-            (c.kind === "ADMISSION" || c.kind === "SPECIAL_EXHIBITION") &&
-            !officialPageTrusted(input.websiteUri, pageUrl) &&
-            !venueNearQuote(page.text, c.quote, input.venueName)
-          ) {
-            continue;
+
+          const trustedOfficial = match === "OFFICIAL_URL" && officialPageTrusted(input.websiteUri, pageUrl);
+          // 共有ドメイン上の別施設・別店価格を落とす（施設・飲食とも）。
+          if (!trustedOfficial && !venueNearQuote(page.text, c.quote, input.venueName)) {
+            // ADDRESS / PLACE_ID はページ単位の一致があるので許容。
+            if (match !== "PLACE_ID" && match !== "ADDRESS") continue;
           }
-          // 本文照合 + 公式/Place ID/住所 → VERIFIED（要約のみは禁止）。
+
+          // VERIFIED は公式 origin 完全一致かつ施設系のみ。飲食ヒューリスティックは PARTIAL。
           const confirmation: OfficialPriceFact["confirmation"] =
-            match === "OFFICIAL_URL" || match === "PLACE_ID" || match === "ADDRESS"
-              ? "VERIFIED"
-              : "UNKNOWN";
-          if (confirmation === "UNKNOWN") continue;
+            trustedOfficial && isFacilityKind(c.kind) ? "VERIFIED" : "PARTIAL";
 
           const id = stableFactId({
             placeId: input.placeId,
@@ -417,6 +495,8 @@ export async function enrichSpotPrice(
             audience: c.audience,
             usageKind: c.usageKind,
             sourceUrl: c.sourceUrl,
+            amountMinJpy: c.amountMinJpy,
+            quote: c.quote,
           });
           const existing = (await listFactsForPlace(input.placeId)).find((f) => f.id === id);
           if (existing && existing.confirmation === "VERIFIED" && confirmation !== "VERIFIED") {
@@ -441,6 +521,11 @@ export async function enrichSpotPrice(
 
     const runSearch = async (query: string) => {
       if (run.searchCount >= MAX_SEARCH || Date.now() > deadline) return;
+      // ページ枠が残っていないときは有料検索しない。
+      if (pagesRemaining() <= 0) {
+        run.stopReason = run.stopReason ?? "page_limit";
+        return;
+      }
       const search = await groundedGoogleSearch({
         query,
         model: env.orcaSearchModel,
@@ -457,12 +542,12 @@ export async function enrichSpotPrice(
     // 公式サイトと同一オリジン料金ページを先に処理（citation で page 枠を使い切らない）。
     await processQueuedPages();
 
-    if (factsSaved === 0 && run.searchCount < MAX_SEARCH && Date.now() < deadline) {
+    if (factsSaved === 0 && run.searchCount < MAX_SEARCH && Date.now() < deadline && pagesRemaining() > 0) {
       await runSearch([input.venueName, input.address, input.placeId, "料金 公式"].filter(Boolean).join(" "));
       await processQueuedPages();
     }
 
-    if (factsSaved === 0 && run.searchCount < MAX_SEARCH && Date.now() < deadline) {
+    if (factsSaved === 0 && run.searchCount < MAX_SEARCH && Date.now() < deadline && pagesRemaining() > 0) {
       await runSearch(`${input.venueName} 入場料 OR メニュー 料金 公式サイト`);
       await processQueuedPages();
     }

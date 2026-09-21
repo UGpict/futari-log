@@ -212,12 +212,18 @@ export async function getSessionSnapshot(uid: string, sessionId: string) {
     const spotIds = plan
       ? [...new Set(plan.items.map((item) => item.spotId))]
       : Object.keys(found.bundle.spots);
-    for (const spotId of spotIds) {
-      const spot = found.bundle.spots[spotId];
-      if (!spot) continue;
-      found.bundle.spots[spotId] = await applyStoredPricesToSpot(spot, {
-        dateTokyo: found.bundle.session.input.dateTokyo,
-      });
+    const dateTokyo = found.bundle.session.input.dateTokyo;
+    const updated = await Promise.all(
+      spotIds.map(async (spotId) => {
+        const spot = found.bundle.spots[spotId];
+        if (!spot) return null;
+        const next = await applyStoredPricesToSpot(spot, { dateTokyo });
+        return { spotId, next };
+      }),
+    );
+    for (const row of updated) {
+      if (!row) continue;
+      found.bundle.spots[row.spotId] = row.next;
     }
   }
 

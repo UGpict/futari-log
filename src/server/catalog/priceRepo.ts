@@ -157,7 +157,7 @@ export async function releasePriceLock(placeId: string, owner: string): Promise<
   }
 }
 
-/** 同一内容の fact が増殖しないよう、placeId+kind+unit+audience+usage+sourceUrl で安定 ID。 */
+/** 同一内容の fact が増殖しないよう、placeId+kind+unit+audience+usage+sourceUrl+金額+quote で安定 ID。 */
 export function stableFactId(parts: {
   placeId: string;
   kind: string;
@@ -165,8 +165,20 @@ export function stableFactId(parts: {
   audience: string;
   usageKind: string;
   sourceUrl: string | null;
+  amountMinJpy?: number | null;
+  quote?: string | null;
 }): string {
-  const key = [parts.placeId, parts.kind, parts.unit, parts.audience, parts.usageKind, parts.sourceUrl ?? ""].join("|");
+  const quoteKey = (parts.quote ?? "").replace(/\s+/g, "").slice(0, 48);
+  const key = [
+    parts.placeId,
+    parts.kind,
+    parts.unit,
+    parts.audience,
+    parts.usageKind,
+    parts.sourceUrl ?? "",
+    parts.amountMinJpy ?? "",
+    quoteKey,
+  ].join("|");
   let h = 0;
   for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
   return `pf_${h.toString(16)}_${parts.placeId.slice(0, 8)}`;
