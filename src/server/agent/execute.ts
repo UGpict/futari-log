@@ -10,7 +10,6 @@ import { evaluateAutoApply } from "@/domain/plan/evaluateAutoApply";
 import { classifyReplanIntent, replanNoChangeQuestion, replanRequestSatisfied } from "@/domain/plan/replanIntent";
 import { newId } from "@/lib/ids";
 import { realNowIso } from "@/lib/time";
-import { callLLM, llmActionSchema } from "@/server/llm";
 import type { ProviderCtx } from "@/server/providers";
 import { attachSpotImages } from "@/server/providers/geminiGrounding";
 import { appendRunEvent, getRun, nextEventSeq, patchRunDoc, withApproval, withRun } from "@/server/repositories/store";
@@ -293,9 +292,7 @@ export async function executeRun(
       await appendEvent(
         runId,
         "HTTP_ATTEMPT",
-        imaged.queries.length
-          ? `Gemini grounding でスポット画像 ${Object.values(imaged.spots).filter((s) => s.imageUrl).length} 件`
-          : "スポット画像（Gemini 未設定または未ヒット）",
+        "スポット画像（Places。未取得はプレースホルダ。Gemini grounding は同期では呼ばない）",
         {
           payload: { queries: imaged.queries, providers: Object.values(imaged.spots).map((s) => s.imageProvider) },
         },
@@ -398,11 +395,11 @@ export async function executeRun(
 async function runReflection(runId: string, signal: AbortSignal) {
   const loaded = await getRun(runId);
   if (!loaded) return;
-  const note = (loaded.run as Run & { reflectionNote?: string }).waitingQuestion
-    ? null
-    : loaded.run.waitingQuestion;
+  const reflectionId = loaded.run.reflectionId;
+  const contentVersion = loaded.run.reflectionContentVersion;
 
-  if (!loaded.run.waitingQuestion) {
+  // 旧: reflectionId なし → 固定質問（互換）。新分析は reflectionId 必須。
+  if (!reflectionId) {
     const question = {
       id: newId("q"),
       prompt: "展示の途中で疲れていたとのこと。相手が何を大変そうにしていたか、いちばん近いものは？",
@@ -413,30 +410,209 @@ async function runReflection(runId: string, signal: AbortSignal) {
         "保存しない",
       ],
     };
-    await callLLM({
-      task: "reflect",
-      messages: [{ role: "user", content: "振り返りから確認質問を1つ" }],
-      schema: llmActionSchema,
-      runId,
-      signal,
-      mockValue: {
-        selectedSpotIds: [],
-        rejected: [],
-        assumptions: [question.prompt],
-      },
-    });
     await patchRun(runId, { status: "WAITING_INPUT", waitingQuestion: question, leaseOwner: null });
     await appendEvent(runId, "INPUT_REQUIRED", question.prompt, { payload: question });
     return;
   }
 
-  void note;
-  await patchRun(runId, {
-    status: "SUCCEEDED",
-    finishedAt: realNowIso(),
-    leaseOwner: null,
+  const reflection = loaded.couple.reflections[reflectionId];
+  if (!reflection) {
+    await patchRun(runId, {
+      status: "FAILED",
+      error: "reflection missing",
+      finishedAt: realNowIso(),
+      leaseOwner: null,
+    });
+    return;
+  }
+  if (contentVersion != null && reflection.contentVersion !== contentVersion) {
+    await patchRun(runId, {
+      status: "CANCELLED",
+      error: "stale reflection content version",
+      finishedAt: realNowIso(),
+      leaseOwner: null,
+    });
+    await appendEvent(runId, "RUN_FINISHED", "本文が更新されたため旧分析を打ち切り");
+    return;
+  }
+
+  const plan = loaded.bundle.session.currentPlanVersion
+    ? loaded.bundle.planHistory[String(loaded.bundle.session.currentPlanVersion)]
+    : null;
+  const planSummary = plan
+    ? plan.items
+        .map((it) => {
+          const spot = loaded.bundle.spots[it.spotId];
+          const visit = reflection.visits?.find((v) => v.planItemId === it.id);
+          return `${spot?.name ?? it.spotId} visited=${visit?.visited ?? "unknown"}`;
+        })
+        .join(" / ")
+    : "no plan";
+
+  const approved = Object.values(loaded.couple.memories)
+    .filter((m) => m.active)
+    .map((m) => ({ id: m.id, content: m.content, sourceType: m.sourceType }));
+
+  const { analyzeReflectionNote, newAnalysisQuestionId } = await import("./reflectAnalyze");
+  const followUp = loaded.run.instruction;
+  const { action, llm } = await analyzeReflectionNote({
+    runId,
+    maskedNote: reflection.maskedNote,
+    title: reflection.title,
+    mood: reflection.mood,
+    visits: (reflection.visits ?? []).map((v) => ({
+      spotId: v.spotId,
+      visited: v.visited,
+      rating: v.rating,
+    })),
+    planSummary,
+    approvedMemories: approved,
+    followUpAnswer: followUp,
+    signal,
   });
-  await appendEvent(runId, "RUN_FINISHED", "確認質問を作成済み");
+
+  await appendEvent(runId, "MODEL_SELECTED", `${llm.pool} / ${llm.actualModel}`, {
+    pool: llm.pool,
+    model: llm.actualModel,
+    requestedModel: llm.requestedModel,
+    actualModel: llm.actualModel,
+    usage: {
+      promptTokens: llm.promptTokens,
+      completionTokens: llm.completionTokens,
+      costUsd: llm.costUsd,
+      costJpy: llm.costJpy,
+      latencyMs: llm.latencyMs,
+      ok: llm.ok,
+    },
+    payload: { agent: "reflect", action: action?.action ?? null },
+  });
+
+  await withRun(runId, (found) => {
+    if (!found) return;
+    if (llm.ok && llm.costJpy != null) {
+      found.run.cost.llmJpy = (found.run.cost.llmJpy ?? 0) + llm.costJpy;
+      found.run.cost.mundaneCalls += 1;
+    } else if (llm.ok) {
+      found.run.cost.unaccountedCalls += 1;
+    }
+  });
+
+  if (!action || !llm.ok) {
+    await withRun(runId, (found) => {
+      if (!found) return;
+      const r = found.couple.reflections[reflectionId];
+      if (r && r.contentVersion === reflection.contentVersion) {
+        r.analysisStatus = "FAILED";
+        r.analysisError = llm.error ?? "analysis failed";
+        r.updatedAt = realNowIso();
+      }
+      found.run.status = "FAILED";
+      found.run.error = llm.error ?? "analysis failed";
+      found.run.finishedAt = realNowIso();
+      found.run.leaseOwner = null;
+    });
+    await appendEvent(runId, "RUN_FINISHED", "振り返り分析失敗（本文は保持）");
+    return;
+  }
+
+  if (action.action === "ASK_ONE" && action.question?.prompt) {
+    const question = {
+      id: newAnalysisQuestionId(),
+      prompt: action.question.prompt,
+      options: action.question.options?.length
+        ? action.question.options
+        : ["はい", "いいえ", "分からない"],
+    };
+    await withRun(runId, (found) => {
+      if (!found) return;
+      const r = found.couple.reflections[reflectionId];
+      if (r && r.contentVersion === reflection.contentVersion) {
+        r.analysisStatus = "WAITING_INPUT";
+        r.updatedAt = realNowIso();
+      }
+      found.run.status = "WAITING_INPUT";
+      found.run.waitingQuestion = question;
+      found.run.instruction = null;
+      found.run.leaseOwner = null;
+    });
+    await appendEvent(runId, "INPUT_REQUIRED", question.prompt, {
+      payload: { agent: "reflect", question },
+    });
+    return;
+  }
+
+  await withRun(runId, (found) => {
+    if (!found) return;
+    const r = found.couple.reflections[reflectionId];
+    if (!r || r.contentVersion !== reflection.contentVersion) {
+      found.run.status = "CANCELLED";
+      found.run.error = "stale reflection content version";
+      found.run.finishedAt = realNowIso();
+      found.run.leaseOwner = null;
+      return;
+    }
+
+    if (action.action === "CREATE_CANDIDATES") {
+      for (const c of action.candidates) {
+        if (c.sourceType === "HYPOTHESIS") continue;
+        // HARD は曖昧観察から自動作成しない
+        const strength = c.strength === "HARD" && c.sourceType === "OBSERVATION" ? "SOFT" : c.strength;
+        const cid = newId("mc");
+        found.couple.memoryCandidates[cid] = {
+          id: cid,
+          coupleId: found.couple.couple.id,
+          sessionId: found.bundle.session.id,
+          reflectionId,
+          reflectionVersion: r.contentVersion,
+          answerId: followUp ? "followup" : null,
+          subject: c.subject,
+          type: c.type,
+          content: c.content,
+          sourceType: c.sourceType,
+          evidenceQuote: c.evidenceQuote,
+          strength,
+          scope: c.scope,
+          planDirectives: c.planDirectives ?? [],
+          createdAt: realNowIso(),
+        };
+        const approvalId = newId("appr");
+        found.couple.approvals[approvalId] = {
+          id: approvalId,
+          coupleId: found.couple.couple.id,
+          sessionId: found.bundle.session.id,
+          runId,
+          planVersionFrom: found.bundle.session.currentPlanVersion ?? 0,
+          planVersionTo: found.bundle.session.currentPlanVersion ?? 0,
+          kind: "MEMORY_SAVE",
+          status: "PENDING",
+          summary: `記憶候補: ${c.content}`,
+          targetCandidateId: cid,
+          targetMemoryId: null,
+          expectedVersion: null,
+          diff: null,
+          consumedAt: null,
+          createdAt: realNowIso(),
+        };
+      }
+    }
+
+    r.analysisStatus = "SUCCEEDED";
+    r.analysisError = null;
+    r.updatedAt = realNowIso();
+    found.bundle.session.status = "REFLECTED";
+    found.run.status = "SUCCEEDED";
+    found.run.finishedAt = realNowIso();
+    found.run.waitingQuestion = null;
+    found.run.leaseOwner = null;
+    found.run.instruction = null;
+  });
+  await appendEvent(
+    runId,
+    "RUN_FINISHED",
+    action.action === "CREATE_CANDIDATES"
+      ? `記憶候補 ${action.candidates.length} 件（承認待ち）`
+      : action.note ?? action.action,
+  );
 }
 
 export async function applyApproval(input: {

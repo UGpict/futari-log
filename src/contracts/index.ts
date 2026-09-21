@@ -3,6 +3,7 @@ export * from "./planning";
 export * from "./me";
 export * from "./session";
 export * from "./memory";
+export * from "./reflection";
 export * from "./replay";
 export * from "./catalog";
 export * from "./calendar";

@@ -89,7 +89,7 @@ export function walkMinutesOfLeg(
   return 0;
 }
 
-/** 記憶から明示的な総徒歩上限を読む。HARD のみ強制。SOFT は強制しない。 */
+/** 記憶から明示的な総徒歩上限を読む。HARD + WALK_HARD_CAP のみ強制。本文 regex は使わない。 */
 export function resolveWalkHardTotal(memories: Memory[] = []): {
   minutes: number | null;
   memoryIds: string[];
@@ -99,17 +99,15 @@ export function resolveWalkHardTotal(memories: Memory[] = []): {
   for (const memory of memories) {
     if (!memory.active) continue;
     if (memory.strength !== "HARD") continue;
-    if (memory.type !== "CONSTRAINT" && memory.type !== "CARE") continue;
-    const match = memory.content.match(
-      /(?:総?徒歩|歩く(?:時間|距離)?|徒歩合計)[^\d]{0,12}(\d{1,3})\s*分|(?:(\d{1,3})\s*分)[^\n。]{0,8}(?:以上|まで|以内|を超|超えない|歩く)/,
-    );
-    if (!match) continue;
-    const n = Number(match[1] || match[2]);
-    if (!Number.isFinite(n) || n <= 0 || n > 600) continue;
-    best = best == null ? n : Math.min(best, n);
-    memoryIds.push(memory.id);
+    for (const d of memory.planDirectives ?? []) {
+      if (d.kind !== "WALK_HARD_CAP") continue;
+      const n = d.walkHardCapMinutes;
+      if (n == null || !Number.isFinite(n) || n <= 0 || n > 600) continue;
+      best = best == null ? n : Math.min(best, n);
+      memoryIds.push(memory.id);
+    }
   }
-  return { minutes: best, memoryIds };
+  return { minutes: best, memoryIds: [...new Set(memoryIds)] };
 }
 
 export type WalkLimitOptions = {

@@ -225,6 +225,8 @@ export async function insertPendingRun(input: {
   instruction?: string | null;
   targetPlanItemId?: string | null;
   basePlanVersion?: number | null;
+  reflectionId?: string | null;
+  reflectionContentVersion?: number | null;
   idempotencyKey?: string | null;
   bodyHash: string;
 }): Promise<
@@ -257,6 +259,8 @@ export async function insertPendingRun(input: {
     resultPlanVersion: null,
     waitingQuestion: null,
     waitingApprovalId: null,
+    reflectionId: input.reflectionId ?? null,
+    reflectionContentVersion: input.reflectionContentVersion ?? null,
     error: null,
     cost: {
       llmUsd: env.runtime === "MOCK" ? 0 : null,

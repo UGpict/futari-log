@@ -384,6 +384,53 @@ describe("file backend isolation", () => {
       assert.equal(stale.status, 409);
       assert.equal(stale.error, "stale version");
     }
+
+    const memSaveId = `appr_mem_${created.id}`;
+    const candidateId = `mc_${created.id}`;
+    await withSession(created.id, (found) => {
+      if (!found) return;
+      found.bundle.session.currentPlanVersion = 2;
+      found.couple.memoryCandidates[candidateId] = {
+        id: candidateId,
+        coupleId: couple.id,
+        sessionId: created.id,
+        reflectionId: "ref_x",
+        reflectionVersion: 1,
+        answerId: null,
+        subject: "SELF",
+        type: "CARE",
+        content: "次回は休憩を挟む",
+        sourceType: "SELF_REPORT",
+        evidenceQuote: "疲れた",
+        strength: "SOFT",
+        scope: "NEXT_DATE",
+        planDirectives: [],
+        createdAt: realNowIso(),
+      };
+      found.couple.approvals[memSaveId] = {
+        id: memSaveId,
+        coupleId: couple.id,
+        sessionId: created.id,
+        runId: "run_mem",
+        planVersionFrom: 1,
+        planVersionTo: 1,
+        kind: "MEMORY_SAVE",
+        status: "PENDING",
+        summary: "記憶候補: 次回は休憩を挟む",
+        targetCandidateId: candidateId,
+        targetMemoryId: null,
+        expectedVersion: null,
+        diff: null,
+        consumedAt: null,
+        createdAt: realNowIso(),
+      };
+    });
+    const memStale = await decideApproval(uid, memSaveId, "APPROVE");
+    assert.equal(memStale.ok, false);
+    if (!memStale.ok) {
+      assert.equal(memStale.status, 409);
+      assert.match(memStale.error, /stale plan version/);
+    }
   });
 
   after(() => {

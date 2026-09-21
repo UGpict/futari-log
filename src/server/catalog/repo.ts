@@ -190,8 +190,10 @@ export async function listEvents(filter: {
   genre?: string;
   areaName?: string;
 }): Promise<CatalogEventRecord[]> {
+  // Firestore は複合インデックス前でも欠落を減らすため多めに読み、アプリ側で日付適合を判定する。
+  // TODO: dateStart/dateEnd レンジ用インデックス導入後はサーバ側クエリへ寄せる。
   if (useFirestore()) {
-    const snap = await adminDb().collection(EVENTS).limit(80).get();
+    const snap = await adminDb().collection(EVENTS).limit(200).get();
     return snap.docs.map((d) => d.data() as CatalogEventRecord).filter((e) => matchEvent(e, filter));
   }
   return Object.values(readFileDb().events).filter((e) => matchEvent(e, filter));

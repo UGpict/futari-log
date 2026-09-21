@@ -62,6 +62,7 @@ describe("memory scope", () => {
       content: "長く立つのがしんどい",
       sourceType: "PARTNER_STATEMENT_REPORTED",
       reflectionId: "r",
+      reflectionVersion: 1,
       answerId: "q",
       evidenceQuote: "長く立つのがしんどいと言っていた",
       confirmation: "USER_CONFIRMED",
@@ -70,6 +71,7 @@ describe("memory scope", () => {
       strength: "SOFT",
       scope: "NEXT_DATE",
       targetSessionId: "ses_next",
+      planDirectives: [],
       active: true,
       version: 1,
       supersedes: null,
@@ -77,5 +79,6 @@ describe("memory scope", () => {
     assert.equal(canReadMemory(base, "ses_next"), true);
     assert.equal(canReadMemory(base, "ses_other"), false);
     assert.equal(canReadMemory({ ...base, active: false }, "ses_next"), false);
+    assert.equal(canReadMemory({ ...base, targetSessionId: null }, "ses_other"), true);
   });
 });

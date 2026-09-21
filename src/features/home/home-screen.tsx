@@ -99,7 +99,7 @@ export function HomeScreen() {
   const { me } = useMe();
   const { plans, error: plansError } = useCalendarPlans(me?.coupleId);
   const [reflecting, setReflecting] = useState(false);
-  const { records, save, remove, today, isFixture } = useDateJournal(me?.uid);
+  const { records, save, saveToServer, remove, today, isFixture } = useDateJournal(me?.uid);
   const [monthOverride, setMonthOverride] = useState<string | null>(null);
   const currentMonth = isFixture ? "2026-09" : today.slice(0, 7);
   const monthKey = monthOverride ?? currentMonth;
@@ -135,11 +135,30 @@ export function HomeScreen() {
   }
 
   async function saveMemory(record: DateMemory) {
-    save(record);
+    const dayPlans = plans.filter((plan) => plan.date === record.date);
+    const reflectable = dayPlans.filter((plan) =>
+      ["DONE", "REFLECTED", "CONFIRMED", "IN_PROGRESS"].includes(plan.status),
+    );
+    // 同日複数は勝手に紐付けない。1件だけならそのセッションへ保存。0件ならローカルのみ。
+    if (!isFixture && reflectable.length === 1) {
+      try {
+        await saveToServer(reflectable[0].id, record);
+        setNotice("振り返りを保存しました。分析は裏で続きます。");
+      } catch {
+        save(record);
+        setNotice("オフライン保存しました。再接続後にサーバーへ送れます。");
+      }
+    } else {
+      save(record);
+      setNotice(
+        reflectable.length > 1
+          ? "同日に複数の予定があるため、端末にのみ保存しました（セッション紐付けは未選択）。"
+          : "振り返り完了！スタンプを押しました",
+      );
+    }
     setReflecting(false);
     setStampedDate(record.date);
     setSelectedDate(null);
-    setNotice("振り返り完了！スタンプを押しました");
   }
 
   const selectedPlans = plans.filter((plan) => plan.date === selectedDate);
