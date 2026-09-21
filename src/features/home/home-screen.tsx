@@ -13,6 +13,7 @@ import { DateCreateButton } from "@/components/date-create-button";
 import { Toast } from "@/components/toast";
 import { DevelopmentLink } from "@/components/development-link";
 import { HomeLogo } from "@/components/home-logo";
+import { AccountMenu } from "@/components/account-menu";
 import { MoodSticker, moods, type Mood } from "@/components/mood-sticker";
 import { HomeSheet } from "./home-sheet";
 import { MemoryScreen } from "@/features/memory/memory-screen";
@@ -96,7 +97,7 @@ function FeedbackEditor({ date, record, onSave }: {
 }
 
 export function HomeScreen() {
-  const { me } = useMe();
+  const { me, setMe } = useMe();
   const { plans, error: plansError } = useCalendarPlans(me?.coupleId);
   const [reflecting, setReflecting] = useState(false);
   const { records, save, saveToServer, remove, today, isFixture } = useDateJournal(me?.uid);
@@ -245,6 +246,7 @@ export function HomeScreen() {
               <h1><HomeLogo className={styles.logo} /></h1>
             </div>
             <div className={styles.headerActions}>
+              <AccountMenu me={me} onMe={setMe} />
               <DevelopmentLink onResetToday={() => { remove(today); setSelectedDate(null); setReflecting(false); setNotice("今日の記録を削除しました"); }} />
               <IconButton type="button" label="ふたりの記憶を開く" onClick={() => setPanel("memory")}><NotebookPen size={23} /></IconButton>
             </div>
