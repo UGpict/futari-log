@@ -23,14 +23,30 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return data;
 }
 
+/**
+ * Establish a session cookie for API calls.
+ *
+ * 1. Firebase client user present → exchange idToken via /api/auth/session
+ * 2. Else valid existing Cookie → keep using it (legacy cookie-only anonymous; no migration)
+ * 3. Else signInAnonymously → exchange idToken
+ *
+ * POST /api/auth/anonymous remains for scripts; the browser path prefers the client SDK.
+ */
 export async function ensureAuth(): Promise<MeResponse> {
   if (fixturesEnabled()) {
     return api<MeResponse>("/api/me");
   }
+
+  const { refreshSessionFromCurrentUser, startAnonymousFirebaseSession } = await import("./auth");
+  const refreshed = await refreshSessionFromCurrentUser();
+  if (refreshed) {
+    return api<MeResponse>("/api/me");
+  }
+
   try {
     return await api<MeResponse>("/api/me");
   } catch {
-    await api("/api/auth/anonymous", { method: "POST" });
+    await startAnonymousFirebaseSession();
     return api<MeResponse>("/api/me");
   }
 }

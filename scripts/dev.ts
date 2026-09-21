@@ -49,6 +49,7 @@ async function main() {
     childEnv.NEXT_PUBLIC_FIREBASE_API_KEY = env.firebaseApiKey ?? "fake-api-key-for-emulator";
     childEnv.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN = env.firebaseAuthDomain ?? "localhost";
     childEnv.NEXT_PUBLIC_FIREBASE_APP_ID = env.firebaseAppId ?? "1:0:web:emulator";
+    childEnv.NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST = authHost;
 
     const already = (await portUp(`http://${authHost}`)) && (await portUp(`http://${fsHost}`));
     if (!already) {
