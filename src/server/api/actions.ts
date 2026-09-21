@@ -920,6 +920,8 @@ export async function saveReflection(
   });
   if (run.ok) {
     enqueuedRunId = run.runId;
+    // duplicated 時は同一 withSession 内で status を見て再 kick 可否を決める（追加の getRun / Firestore 読取なし）
+    let shouldKick = false;
     await withSession(sessionId, (found) => {
       if (!found) return;
       const reflection = found.couple.reflections[reflectionIdOut];
@@ -931,9 +933,17 @@ export async function saveReflection(
       if (r) {
         r.reflectionId = reflectionIdOut;
         r.reflectionContentVersion = contentVersionOut;
+        if (!run.duplicated) {
+          shouldKick = true;
+        } else if (r.status === "PENDING") {
+          // INTERRUPTED は claimRun が PENDING 以外を拒否するため再 kick しても実行されない（claimRun は変更しない）
+          shouldKick = true;
+        }
+      } else if (!run.duplicated) {
+        shouldKick = true;
       }
     });
-    if (!run.duplicated) {
+    if (shouldKick) {
       const { kickRun } = await import("@/server/workflows/dispatch");
       kickRun(run.runId, "REFLECTION");
     }
