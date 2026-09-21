@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import type { Memory, Spot } from "../src/domain/schemas";
 import { collectDirectiveEffects, stayMinutesForSpot } from "../src/domain/memory/directives";
 import { bindNextDateMemories, canReadMemory, candidateToMemory } from "../src/domain/memory";
-import { resolveWalkHardTotal } from "../src/domain/plan/walkLimits";
+import { resolveWalkHardTotal, evaluateWalkLimits } from "../src/domain/plan/walkLimits";
 
 function mem(partial: Partial<Memory> & Pick<Memory, "id" | "content" | "planDirectives">): Memory {
   return {
@@ -141,5 +141,125 @@ describe("structured memory directives", () => {
     bindNextDateMemories(memories, "ses_used", ["mem_a"]);
     assert.equal(memories.mem_a.targetSessionId, "ses_used");
     assert.equal(canReadMemory(memories.mem_a, "ses_other"), false);
+  });
+});
+
+describe("planDirectives correct violating inputs", () => {
+  it("walk hard cap: total over the approved HARD limit is flagged as exceeds", () => {
+    const hard = mem({
+      id: "mem_walk",
+      content: "徒歩は短めに",
+      strength: "HARD",
+      type: "CONSTRAINT",
+      planDirectives: [
+        {
+          kind: "WALK_HARD_CAP",
+          categories: [],
+          spotId: null,
+          maxStayMinutes: null,
+          walkHardCapMinutes: 40,
+        },
+      ],
+    });
+    const legs = [
+      { mode: "WALK" as const, durationMinutes: { value: 25, evidenceIds: [] as string[] } },
+      { mode: "WALK" as const, durationMinutes: { value: 25, evidenceIds: [] as string[] } },
+    ];
+    const without = evaluateWalkLimits("WALK", legs, { hardTotalMinutes: null, enforcePerLeg: false });
+    const cap = resolveWalkHardTotal([hard]);
+    const withCap = evaluateWalkLimits("WALK", legs, {
+      hardTotalMinutes: cap.minutes,
+      enforcePerLeg: false,
+    });
+    assert.equal(without.exceeds, false);
+    assert.equal(cap.minutes, 40);
+    assert.equal(withCap.totalMinutes, 50);
+    assert.equal(withCap.overTotal, true);
+    assert.equal(withCap.exceeds, true);
+  });
+
+  it("rest: seated-rest directive shortens HIGH standingBurden stay (default 50 → 35)", () => {
+    const rest = mem({
+      id: "mem_rest2",
+      content: "座れる休憩を優先",
+      planDirectives: [
+        {
+          kind: "PREFER_SEATED_REST",
+          categories: [],
+          spotId: null,
+          maxStayMinutes: null,
+          walkHardCapMinutes: null,
+        },
+      ],
+    });
+    const exhibit = spot({
+      id: "ex",
+      name: "展示",
+      categories: ["exhibit"],
+      standingBurden: { value: "HIGH", evidenceIds: [] },
+      restEase: { value: "LIMITED", evidenceIds: [] },
+    });
+    const baseline = stayMinutesForSpot(exhibit, collectDirectiveEffects([]), 50);
+    const corrected = stayMinutesForSpot(exhibit, collectDirectiveEffects([rest]), 50);
+    assert.equal(baseline.stay, 50);
+    assert.equal(corrected.stay, 35);
+    assert.ok(corrected.influences.some((i) => i.effect === "DURATION" && i.memoryId === "mem_rest2"));
+  });
+
+  it("stay: SHORTEN_CATEGORY_STAY shortens matching category stay to maxStayMinutes", () => {
+    const shorten = mem({
+      id: "mem_short",
+      content: "展示は短めに",
+      planDirectives: [
+        {
+          kind: "SHORTEN_CATEGORY_STAY",
+          categories: ["exhibit"],
+          spotId: null,
+          maxStayMinutes: 30,
+          walkHardCapMinutes: null,
+        },
+      ],
+    });
+    const exhibit = spot({
+      id: "ex2",
+      name: "美術館",
+      categories: ["museum", "exhibit"],
+      standingBurden: { value: "LOW", evidenceIds: [] },
+    });
+    const cafe = spot({
+      id: "cf",
+      name: "カフェ",
+      categories: ["cafe"],
+      standingBurden: { value: "LOW", evidenceIds: [] },
+      restEase: { value: "EASY", evidenceIds: [] },
+    });
+    const effects = collectDirectiveEffects([shorten]);
+    assert.equal(stayMinutesForSpot(exhibit, effects, 50).stay, 30);
+    assert.equal(stayMinutesForSpot(cafe, effects, 50).stay, 50);
+  });
+
+  it("revisit: REVISIT_SPOT ids are ordered ahead of non-revisit candidates", () => {
+    const revisit = mem({
+      id: "mem_rev",
+      content: "あの店にまた行きたい",
+      planDirectives: [
+        {
+          kind: "REVISIT_SPOT",
+          categories: [],
+          spotId: "spot_fav",
+          maxStayMinutes: null,
+          walkHardCapMinutes: null,
+        },
+      ],
+    });
+    const effects = collectDirectiveEffects([revisit]);
+    assert.ok(effects.revisitSpotIds.has("spot_fav"));
+    const unlocked = ["spot_new", "spot_fav", "spot_other"];
+    const ordered = [...unlocked].sort((a, b) => {
+      const aRev = effects.revisitSpotIds.has(a) ? 0 : 1;
+      const bRev = effects.revisitSpotIds.has(b) ? 0 : 1;
+      return aRev - bRev;
+    });
+    assert.deepEqual(ordered, ["spot_fav", "spot_new", "spot_other"]);
   });
 });
