@@ -14,7 +14,7 @@ import { SERVICE_AREA_NOTICE, tokyoToday } from "@/config/public";
 import type { PlaceCandidate } from "@/contracts";
 import { MemoMascot } from "@/components/memo-mascot";
 import { AiSparkIcon } from "@/components/ai-spark-icon";
-import { Plus, ChevronLeft, ChevronRight, ArrowRight, Check, ChevronDown, Sparkles, CalendarHeart, Clock3, MapPinned } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, ArrowRight, Check, ChevronDown, Sparkles, CalendarHeart, Clock3, MapPinned, Beef, Fish, Pizza, CakeSlice, Utensils, Coffee, TreePine, Waves, Sandwich, Flame, Film, PawPrint, Gamepad2, Palette, ShoppingBag, Store, Landmark, BookOpen, Camera, type LucideIcon } from "lucide-react";
 import styles from "./home.module.css";
 
 const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
@@ -99,6 +99,7 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
   const optionCarouselRef = useRef<HTMLDivElement>(null);
   const optionDragRef = useRef({ active: false, moved: false, startX: 0, scrollLeft: 0 });
   const [draggingOptions, setDraggingOptions] = useState(false);
+  const [moreOptionsRight, setMoreOptionsRight] = useState(false);
   const categoryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
     if (categoryTimer.current) clearTimeout(categoryTimer.current);
@@ -140,14 +141,26 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     if (optionDragRef.current.moved) window.setTimeout(() => { optionDragRef.current.moved = false; }, 0);
   }
+  function updateOptionScroll() {
+    const carousel = optionCarouselRef.current;
+    if (!carousel) return;
+    setMoreOptionsRight(carousel.scrollLeft + carousel.clientWidth < carousel.scrollWidth - 2);
+  }
   const [category, setCategory] = useState<string | null>(null);
   const categories = [
-    { id: "food", label: "おいしいもの", subtitle: "好きな味を、ふたりで。", wish: "おいしいものを楽しむデート", position: "0% 0%", question: "何か食べたいもの、ある？", options: ["お肉", "お寿司", "イタリアン", "スイーツ", "食べ歩き"] },
-    { id: "relax", label: "のんびり過ごす", subtitle: "今日は、ふたりのペースで。", wish: "のんびり過ごすデート", position: "100% 0%", question: "どんなふうに、ひと息つこう？", options: ["カフェ", "公園さんぽ", "海を眺める", "ピクニック", "温泉"] },
-    { id: "play", label: "遊びにいく", subtitle: "一緒なら、もっと楽しい。", wish: "遊びや体験を楽しむデート", position: "0% 100%", question: "気になる遊びは、ある？", options: ["水族館", "映画", "動物園", "遊園地", "ものづくり体験"] },
-    { id: "town", label: "街をぶらぶら", subtitle: "寄り道から、小さな発見。", wish: "街歩きや寄り道を楽しむデート", position: "100% 100%", question: "どんな寄り道をしよう？", options: ["ショッピング", "雑貨屋めぐり", "美術館・展示", "本屋めぐり", "街の写真を撮る"] },
+    { id: "food", label: "おいしいもの", subtitle: "好きな味を、ふたりで。", wish: "おいしいものを楽しむデート", position: "0% 0%", question: "何か食べたいもの、ある？", options: [{ label: "お肉", icon: Beef }, { label: "お寿司", icon: Fish }, { label: "イタリアン", icon: Pizza }, { label: "スイーツ", icon: CakeSlice }, { label: "食べ歩き", icon: Utensils }] },
+    { id: "relax", label: "のんびり過ごす", subtitle: "今日は、ふたりのペースで。", wish: "のんびり過ごすデート", position: "100% 0%", question: "どんなふうに、ひと息つこう？", options: [{ label: "カフェ", icon: Coffee }, { label: "公園さんぽ", icon: TreePine }, { label: "海を眺める", icon: Waves }, { label: "ピクニック", icon: Sandwich }, { label: "温泉", icon: Flame }] },
+    { id: "play", label: "遊びにいく", subtitle: "一緒なら、もっと楽しい。", wish: "遊びや体験を楽しむデート", position: "0% 100%", question: "気になる遊びは、ある？", options: [{ label: "水族館", icon: Fish }, { label: "映画", icon: Film }, { label: "動物園", icon: PawPrint }, { label: "遊園地", icon: Gamepad2 }, { label: "ものづくり体験", icon: Palette }] },
+    { id: "town", label: "街をぶらぶら", subtitle: "寄り道から、小さな発見。", wish: "街歩きや寄り道を楽しむデート", position: "100% 100%", question: "どんな寄り道をしよう？", options: [{ label: "ショッピング", icon: ShoppingBag }, { label: "雑貨屋めぐり", icon: Store }, { label: "美術館・展示", icon: Landmark }, { label: "本屋めぐり", icon: BookOpen }, { label: "街の写真を撮る", icon: Camera }] },
   ];
-  const currentCategory = categories.find((item) => item.id === category);
+  const currentCategory = categories.find((item) => item.id === category) as (typeof categories)[number] | undefined;
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      if (optionCarouselRef.current) optionCarouselRef.current.scrollLeft = 0;
+      updateOptionScroll();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [currentCategory?.id, showCategories]);
   function move(next: number) {
     if (advanceTimer.current) return;
     const commit = () => {
@@ -373,11 +386,14 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
             </button>)}
           </div>}
           {!showCategories && currentCategory && <div className={styles.dateDetails} key={currentCategory.id}>
-            <button type="button" className={styles.categoryBack} onClick={() => setShowCategories(true)}><ChevronLeft size={14} />気分を選び直す</button>
-            <div className={styles.selectedCategoryPhoto} style={{ backgroundPosition: currentCategory.position }}><strong>{currentCategory.label}</strong></div>
+            <button type="button" className={styles.categorySummary} aria-label={`気分を選び直す（現在：${currentCategory.label}）`} onClick={() => setShowCategories(true)}>
+              <span className={styles.categorySummaryBack}><ChevronLeft size={18} /></span>
+              <strong>{currentCategory.label}</strong>
+              <span className={styles.categoryThumbnail} style={{ backgroundPosition: currentCategory.position }} aria-hidden="true" />
+            </button>
             <h4 className={styles.categoryQuestion}>{currentCategory.question}</h4>
             <p className={styles.planHint}>選ばずにおまかせでもOK・複数選択可</p>
-            <div ref={optionCarouselRef} className={`${styles.planChips} ${styles.optionCarousel}`} data-dragging={draggingOptions} aria-label="気になること（任意）" tabIndex={0}
+            <div ref={optionCarouselRef} className={`${styles.planChips} ${styles.optionCarousel}`} data-dragging={draggingOptions} data-more-right={moreOptionsRight} aria-label="気になること（任意）" tabIndex={0} onScroll={updateOptionScroll}
               onPointerDown={startOptionDrag} onPointerMove={moveOptionDrag} onPointerUp={endOptionDrag} onPointerCancel={endOptionDrag}
               onClickCapture={(event) => {
                 if (!optionDragRef.current.moved) return;
@@ -390,7 +406,10 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
                 event.preventDefault();
                 carousel.scrollLeft += event.deltaY;
               }}>
-              {currentCategory.options.map((option) => <button type="button" key={option} aria-pressed={selected.includes(option)} onClick={() => setSelected(selected.includes(option) ? selected.filter((item) => item !== option) : [...selected, option])}>{selected.includes(option) && <Check size={13} />}{option}</button>)}
+              {currentCategory.options.map((option: { label: string; icon: LucideIcon }) => {
+                const OptionIcon = option.icon;
+                return <button type="button" key={option.label} aria-pressed={selected.includes(option.label)} onClick={() => setSelected(selected.includes(option.label) ? selected.filter((item) => item !== option.label) : [...selected, option.label])}><span className={styles.optionIcon}><OptionIcon size={14} /></span>{selected.includes(option.label) && <Check className={styles.optionCheck} size={12} />}{option.label}</button>;
+              })}
             </div>
           </div>}
           <div className={styles.aiWishArea}>
