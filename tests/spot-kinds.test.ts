@@ -70,7 +70,7 @@ describe("wish to scout types", () => {
 
   it("maps the remaining chips to Places types", () => {
     const mapped = scoutJobsFromWishes("お肉、映画、温泉、ショッピング、ボウリング、街の写真を撮る");
-    assert.ok(mapped.jobs.some((job) => job.includedTypes.includes("restaurant")));
+    assert.ok(mapped.jobs.some((job) => job.includedTypes.includes("steak_house")));
     assert.ok(mapped.jobs.some((job) => job.includedTypes.includes("movie_theater")));
     assert.ok(mapped.unsupported.includes("温泉"));
     assert.equal(
@@ -83,6 +83,17 @@ describe("wish to scout types", () => {
     const stage = scoutJobsFromWishes("舞台を見たい");
     assert.ok(stage.jobs.some((job) => job.includedTypes.includes("performing_arts_theater")));
     assert.equal(stage.jobs.some((job) => job.includedTypes.includes("movie_theater")), false);
+  });
+
+  it("keeps cuisine chips as separate scout jobs", () => {
+    const mapped = scoutJobsFromWishes("おいしいものを楽しむデート。気になること：お肉、お寿司、イタリアン");
+    assert.ok(mapped.jobs.some((job) => job.category === "食事-焼肉"));
+    assert.ok(mapped.jobs.some((job) => job.category === "食事-寿司"));
+    assert.ok(mapped.jobs.some((job) => job.category === "食事-イタリアン"));
+    assert.equal(spotMatchesWish({ name: "寿司屋", categories: ["sushi_restaurant"] }, "お肉"), false);
+    assert.equal(spotMatchesWish({ name: "寿司屋", categories: ["sushi_restaurant"] }, "お寿司"), true);
+    assert.equal(spotMatchesWish({ name: "焼肉", categories: ["steak_house"] }, "お肉"), true);
+    assert.equal(spotMatchesWish({ name: "食堂", categories: ["restaurant"] }, "お肉"), false);
   });
 
   it("asks before searching when 温泉 cannot be type-fulfilled", () => {

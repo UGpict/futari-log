@@ -25,6 +25,10 @@ export type ScoutBucket = "walk" | "exhibit" | "sweets" | "other";
 
 export type WishFacetId =
   | "dining"
+  | "meat"
+  | "sushi"
+  | "italian"
+  | "street_food"
   | "sweets"
   | "sweet_treat"
   | "cafe"
@@ -47,7 +51,8 @@ export type WishFacetId =
   | "sauna"
   | "sento"
   | "bar"
-  | "town";
+  | "town"
+  | "craft";
 
 export type WishConfidence = "type" | "name";
 
@@ -338,15 +343,70 @@ export const WISH_FACETS: readonly WishFacet[] = [
     scoutCategory: "スイーツ",
   },
   {
+    id: "meat",
+    kind: "dining",
+    wish: /お肉|焼肉/,
+    searchTypes: ["steak_house", "barbecue_restaurant"],
+    fulfillTypes: ["steak_house", "barbecue_restaurant"],
+    name: /焼肉|ステーキ|お肉|肉料理|yakiniku|steak/i,
+    bucket: "other",
+    rankPreference: "POPULARITY",
+    scoutCategory: "食事-焼肉",
+  },
+  {
+    id: "sushi",
+    kind: "dining",
+    wish: /お寿司|寿司/,
+    searchTypes: ["sushi_restaurant"],
+    fulfillTypes: ["sushi_restaurant"],
+    name: /寿司|すし|sushi/i,
+    bucket: "other",
+    rankPreference: "POPULARITY",
+    scoutCategory: "食事-寿司",
+  },
+  {
+    id: "italian",
+    kind: "dining",
+    wish: /イタリアン/,
+    searchTypes: ["italian_restaurant", "pizza_restaurant"],
+    fulfillTypes: ["italian_restaurant", "pizza_restaurant"],
+    name: /イタリアン|イタリア|ピザ|pasta|pizza|italian/i,
+    bucket: "other",
+    rankPreference: "POPULARITY",
+    scoutCategory: "食事-イタリアン",
+  },
+  {
+    id: "street_food",
+    kind: "dining",
+    wish: /食べ歩き/,
+    searchTypes: ["meal_takeaway", "market"],
+    fulfillTypes: ["meal_takeaway", "market", "food_court"],
+    name: /食べ歩き|屋台|フードコート|市場|market/i,
+    bucket: "other",
+    rankPreference: "DISTANCE",
+    scoutCategory: "食事-食べ歩き",
+  },
+  {
     id: "dining",
     kind: "dining",
-    wish: /お肉|お寿司|寿司|イタリアン|食べ歩き|食事|おいしい|レストラン|焼肉|食堂|ランチ|ディナー/,
+    wish: /食事|おいしい|レストラン|食堂|ランチ|ディナー/,
     searchTypes: ["restaurant"],
     fulfillTypes: [...SPOT_KIND_DEFS.dining.placeTypes],
-    name: /レストラン|飲食店|料理|食堂|寿司|焼肉|ランチ|ディナー|restaurant/i,
+    name: /レストラン|飲食店|料理|食堂|ランチ|ディナー|restaurant/i,
     bucket: "other",
     rankPreference: "POPULARITY",
     scoutCategory: "食事",
+  },
+  {
+    id: "craft",
+    kind: "leisure",
+    wish: /ものづくり体験|ものづくり/,
+    searchTypes: [],
+    fulfillTypes: [],
+    name: /ものづくり|工房|体験工房/i,
+    bucket: "other",
+    rankPreference: "DISTANCE",
+    scoutCategory: "ものづくり体験",
   },
   {
     id: "museum",
@@ -694,6 +754,19 @@ export function explainWishMatch(spot: SpotTypeSource, content: string): WishMat
 
 export function spotMatchesWish(spot: SpotTypeSource, content: string): boolean {
   return explainWishMatches(spot, content).some((item) => item.confidence === "type");
+}
+
+export function spotFulfillsFacet(spot: SpotTypeSource, facetId: WishFacetId): boolean {
+  const facet = WISH_FACETS.find((item) => item.id === facetId);
+  if (!facet?.fulfillTypes.length) return false;
+  return intersectingTypes(typedSet(typesOf(spot)), facet.fulfillTypes).length > 0;
+}
+
+/** Type-fulfillable facets mentioned in wish text (excludes 温泉 / ものづくり etc.). */
+export function planningFacetsFromWish(text: string): WishFacetId[] {
+  return facetsFromWishText(text)
+    .filter((facet) => facet.fulfillTypes.length > 0)
+    .map((facet) => facet.id);
 }
 
 export type SpotScoutJob = {

@@ -187,6 +187,37 @@ describe("planner candidate pick", () => {
     assert.ok(picked.selected.includes("ChIJ-cafe"));
   });
 
+  it("picks one spot per cuisine chip in the wish text", () => {
+    const spot = (id: string, name: string, categories: string[]) => ({
+      id,
+      name,
+      lat: 35.68,
+      lng: 139.76,
+      categories,
+      environment: { value: "INDOOR" as const, evidenceIds: [] as string[] },
+      costForTwoJpy: { value: { min: 5000, max: 8000 }, evidenceIds: [] as string[] },
+      restEase: { value: "EASY" as const, evidenceIds: [] as string[] },
+      standingBurden: { value: "LOW" as const, evidenceIds: [] as string[] },
+      officialUrl: null,
+    });
+    const picked = pickFromCandidates({
+      walk: [],
+      exhibit: [],
+      sweets: [],
+      other: [
+        spot("mock:yakiniku", "焼肉", ["steak_house", "restaurant"]),
+        spot("mock:sushi", "寿司", ["sushi_restaurant", "restaurant"]),
+        spot("mock:generic-dining", "食堂", ["restaurant"]),
+      ],
+      lockedIds: [],
+      rain: false,
+      avoidIds: [],
+      wishText: "おいしいものを楽しむデート。お肉。お寿司",
+    });
+    assert.ok(picked.selected.includes("mock:yakiniku"));
+    assert.ok(picked.selected.includes("mock:sushi"));
+  });
+
   it("excludes the original cafe when the wish is to replace it", () => {
     const spot = (id: string) => ({
       id,

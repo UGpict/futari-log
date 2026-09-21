@@ -49,7 +49,11 @@
 | 遊び・体験 | ものづくり | なし | なし |
 | 温泉・スパ | スパ | `spa` | 同左 |
 | 温泉・スパ | 温泉 | なし（Places に温泉 type が無い） | 検索前に確認。スパへの変更は回答後 |
-| 食事 | 食事 | `restaurant` 系 | 同左 |
+| 食事 | 食事・おいしいもの | `restaurant` 系 | 同左 |
+| 食事 | お肉・焼肉 | `steak_house` / `barbecue_restaurant` | 同左 |
+| 食事 | お寿司 | `sushi_restaurant` | 同左 |
+| 食事 | イタリアン | `italian_restaurant` / `pizza_restaurant` | 同左 |
+| 食事 | 食べ歩き | `meal_takeaway` / `market` など | 同左 |
 | カフェ | カフェ | `cafe` 系 | 同左 |
 
 `cafe` と `restaurant` を両方持つ店は、カフェのアイコンでも食事候補から消さない。`cafe` だけでは食事の希望を達成しない。
