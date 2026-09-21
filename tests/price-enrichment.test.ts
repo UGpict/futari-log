@@ -327,7 +327,7 @@ describe("price enrichment accounting", () => {
       "飲み放題 2980円（税込）。コース 4500円。ランチ 1200円。焼き鳥 480円 メニュー。刺身 680円（税込）。",
       "https://example.com/menu",
     );
-    assert.ok(rows.some((r) => r.kind === "MENU_ITEM" && r.amountMinJpy === 2980 && /飲み放題/.test(r.quote ?? "")));
+    assert.ok(rows.some((r) => r.kind === "SET_MENU" && r.amountMinJpy === 2980 && /飲み放題/.test(r.quote ?? "")));
     assert.ok(rows.some((r) => r.kind === "SET_MENU" && r.amountMinJpy === 4500 && /コース/.test(r.quote ?? "")));
     assert.ok(rows.some((r) => r.kind === "SET_MENU" && r.amountMinJpy === 1200 && /ランチ/.test(r.quote ?? "")));
     assert.ok(rows.some((r) => r.kind === "MENU_ITEM" && r.amountMinJpy === 480));
@@ -496,8 +496,8 @@ describe("price enrichment accounting", () => {
       facts: [
         fact({
           id: "n1",
-          kind: "MENU_ITEM",
-          unit: "PER_ITEM",
+          kind: "SET_MENU",
+          unit: "PER_PERSON",
           usageKind: "DINING",
           amountMinJpy: 1650,
           amountMaxJpy: 1650,
@@ -523,6 +523,78 @@ describe("price enrichment accounting", () => {
     });
     assert.equal(accounting.amountMinJpy, 9000);
     assert.match(accounting.assumptionLabel ?? "", /コース/);
+  });
+
+  it("estimates nomihodai alone as two-person drinking ESTIMATED", () => {
+    const accounting = computeCostAccounting({
+      facts: [
+        fact({
+          id: "n1",
+          kind: "SET_MENU",
+          unit: "PER_PERSON",
+          usageKind: "DINING",
+          amountMinJpy: 2980,
+          amountMaxJpy: 2980,
+          quote: "飲み放題 2980円",
+          confirmation: "PARTIAL",
+          maxInclusive: false,
+        }),
+      ],
+      dateTokyo: "2026-09-21",
+      weekday: 1,
+      partySize: 2,
+      preferUsage: "DINING",
+      isDining: true,
+    });
+    assert.equal(accounting.status, "ESTIMATED");
+    assert.equal(accounting.amountMinJpy, 5960);
+    assert.equal(accounting.maxInclusive, false);
+    assert.equal(budgetCeilingJpy(accounting), null);
+    assert.match(accounting.assumptionLabel ?? "", /飲み放題/);
+  });
+
+  it("prefers nomihodai over cheap two MENU_ITEMs for drinking spots", () => {
+    const accounting = computeCostAccounting({
+      facts: [
+        fact({
+          id: "n1",
+          kind: "SET_MENU",
+          unit: "PER_PERSON",
+          usageKind: "DINING",
+          amountMinJpy: 2980,
+          amountMaxJpy: 2980,
+          quote: "飲み放題 2980円",
+          confirmation: "PARTIAL",
+        }),
+        fact({
+          id: "m1",
+          kind: "MENU_ITEM",
+          unit: "PER_ITEM",
+          usageKind: "DINING",
+          amountMinJpy: 390,
+          amountMaxJpy: 390,
+          quote: "焼き鳥 390円",
+          confirmation: "PARTIAL",
+        }),
+        fact({
+          id: "m2",
+          kind: "MENU_ITEM",
+          unit: "PER_ITEM",
+          usageKind: "DINING",
+          amountMinJpy: 480,
+          amountMaxJpy: 480,
+          quote: "刺身 480円",
+          confirmation: "PARTIAL",
+        }),
+      ],
+      dateTokyo: "2026-09-21",
+      weekday: 1,
+      partySize: 2,
+      preferUsage: "DINING",
+      isDining: true,
+    });
+    assert.equal(accounting.amountMinJpy, 5960);
+    assert.match(accounting.assumptionLabel ?? "", /飲み放題/);
   });
 
   it("treats official URL + quote-in-body candidates as VERIFIED-eligible via confirmation field", () => {

@@ -179,8 +179,50 @@ export function computeCostAccounting(input: ComputeCostInput): CostAccounting {
       };
     }
 
+    // 飲み屋向け: コースが無いとき飲み放題単価×人数（+追加の飲み放題は抽出側で除外済み）。
+    const nomihodaiMenus = applicable
+      .filter(
+        (f) =>
+          /飲み放題/.test(`${f.quote ?? ""}`) &&
+          (f.unit === "PER_PERSON" || f.unit === "PER_SET" || f.unit === "PER_ITEM") &&
+          f.amountMinJpy != null,
+      )
+      .sort((a, b) => (a.amountMinJpy ?? 0) - (b.amountMinJpy ?? 0));
+    const nomihodai = nomihodaiMenus[0];
+    if (nomihodai?.amountMinJpy != null) {
+      const unitMin = nomihodai.amountMinJpy;
+      const unitMax = nomihodai.amountMaxJpy ?? unitMin;
+      const total = unitMin * input.partySize;
+      const totalMax = unitMax * input.partySize;
+      return {
+        status: "ESTIMATED",
+        assumptionLabel: `二人の目安／飲み放題想定`,
+        amountMinJpy: total,
+        amountMaxJpy: totalMax,
+        maxInclusive: false,
+        breakdown: [
+          {
+            label: `飲み放題（一人）×${input.partySize}`,
+            amountJpy: total,
+            factId: nomihodai.id,
+          },
+        ],
+        sourceUrl: nomihodai.sourceUrl,
+        confirmedAt: nomihodai.fetchedAt,
+        note: "注文の仮定に基づく概算。確定額・上限保証ではない",
+        knownSubtotalJpy: total,
+        unknownLabels: [],
+      };
+    }
+
     const menuItems = applicable
-      .filter((f) => f.kind === "MENU_ITEM" && f.unit === "PER_ITEM" && f.amountMinJpy != null)
+      .filter(
+        (f) =>
+          f.kind === "MENU_ITEM" &&
+          f.unit === "PER_ITEM" &&
+          f.amountMinJpy != null &&
+          !/飲み放題/.test(`${f.quote ?? ""}`),
+      )
       .sort((a, b) => (a.amountMinJpy ?? 0) - (b.amountMinJpy ?? 0));
     if (menuItems.length >= 2) {
       const a = menuItems[0]!;

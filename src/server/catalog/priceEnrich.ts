@@ -195,9 +195,9 @@ export function extractPriceCandidatesFromText(
       pushCandidate(
         out,
         baseDining({
-          // 飲み放題は追加料金になりやすいので MENU_ITEM 扱い（コース選定から外す）。
-          kind: isCourse ? "SET_MENU" : "MENU_ITEM",
-          unit: isCourse ? "PER_PERSON" : "PER_ITEM",
+          // 飲み放題はコースと分け、一人あたりの飲み放題単価として残す。
+          kind: isCourse || isNomihodai ? "SET_MENU" : "MENU_ITEM",
+          unit: isCourse || isNomihodai ? "PER_PERSON" : "PER_ITEM",
           amountMinJpy: yen,
           amountMaxJpy: yen,
           sourceUrl,
