@@ -628,7 +628,7 @@
 .routeEnd[open] summary strong { display: none; }
 .routeEnd summary > svg { align-self: start; margin-top: 1px; transition: transform .2s ease; }
 .routeEnd[open] summary > svg { transform: rotate(180deg); }
-.routeEndEditor { position: relative; z-index: 2; max-height: 180px; margin: -19px 0 0 44px; overflow: hidden; padding: 0; background: transparent; animation: routeEditorOpen .3s cubic-bezier(.22, 1, .36, 1) both; transform-origin: top; }
+.routeEndEditor { position: relative; z-index: 2; max-height: 180px; margin: -8px 0 0 44px; overflow: hidden; padding: 0; background: transparent; animation: routeEditorOpen .3s cubic-bezier(.22, 1, .36, 1) both; transform-origin: top; }
 .routeEndEditor input { width: 100%; }
 @keyframes routeEditorOpen { from { max-height: 0; opacity: 0; transform: translateY(-6px); } to { max-height: 180px; opacity: 1; transform: translateY(0); } }
 .placeSuggest { display: grid; gap: 4px; margin: 8px 0 0; max-height: min(240px, 36dvh); overflow: auto; }
