@@ -386,39 +386,43 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
             </button>)}
           </div>}
           {!showCategories && currentCategory && <div className={styles.dateDetails} key={currentCategory.id}>
-            <button type="button" className={styles.categorySummary} aria-label={`気分を選び直す（現在：${currentCategory.label}）`} onClick={() => setShowCategories(true)}>
-              <span className={styles.categorySummaryBack}><ChevronLeft size={18} /></span>
-              <span className={styles.categoryThumbnail} style={{ backgroundPosition: currentCategory.position }} aria-hidden="true" />
-              <strong>{currentCategory.label}</strong>
-              <small>複数選択可</small>
-            </button>
-            <div ref={optionCarouselRef} className={`${styles.planChips} ${styles.optionCarousel}`} data-dragging={draggingOptions} data-more-right={moreOptionsRight} aria-label="気になること（任意）" tabIndex={0} onScroll={updateOptionScroll}
-              onPointerDown={startOptionDrag} onPointerMove={moveOptionDrag} onPointerUp={endOptionDrag} onPointerCancel={endOptionDrag}
-              onClickCapture={(event) => {
-                if (!optionDragRef.current.moved) return;
-                event.preventDefault();
-                event.stopPropagation();
-                optionDragRef.current.moved = false;
-              }} onWheel={(event) => {
-                const carousel = event.currentTarget;
-                if (Math.abs(event.deltaY) <= Math.abs(event.deltaX) || carousel.scrollWidth <= carousel.clientWidth) return;
-                event.preventDefault();
-                carousel.scrollLeft += event.deltaY;
-              }}>
-              {currentCategory.options.map((option: { label: string; icon: LucideIcon }) => {
-                const OptionIcon = option.icon;
-                return <button type="button" key={option.label} aria-pressed={selected.includes(option.label)} onClick={() => setSelected(selected.includes(option.label) ? selected.filter((item) => item !== option.label) : [...selected, option.label])}><span className={styles.optionIcon}><OptionIcon size={14} /></span>{selected.includes(option.label) && <Check className={styles.optionCheck} size={12} />}{option.label}</button>;
-              })}
+            <div className={styles.categoryDetailGroup}>
+              <button type="button" className={styles.categorySummary} aria-label={`気分を選び直す（現在：${currentCategory.label}）`} onClick={() => setShowCategories(true)}>
+                <span className={styles.categorySummaryBack}><ChevronLeft size={18} /></span>
+                <span className={styles.categoryThumbnail} style={{ backgroundPosition: currentCategory.position }} aria-hidden="true" />
+                <strong>{currentCategory.label}</strong>
+                <small>複数選択可</small>
+              </button>
+              <div ref={optionCarouselRef} className={`${styles.planChips} ${styles.optionCarousel}`} data-dragging={draggingOptions} data-more-right={moreOptionsRight} aria-label="気になること（任意）" tabIndex={0} onScroll={updateOptionScroll}
+                onPointerDown={startOptionDrag} onPointerMove={moveOptionDrag} onPointerUp={endOptionDrag} onPointerCancel={endOptionDrag}
+                onClickCapture={(event) => {
+                  if (!optionDragRef.current.moved) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  optionDragRef.current.moved = false;
+                }} onWheel={(event) => {
+                  const carousel = event.currentTarget;
+                  if (Math.abs(event.deltaY) <= Math.abs(event.deltaX) || carousel.scrollWidth <= carousel.clientWidth) return;
+                  event.preventDefault();
+                  carousel.scrollLeft += event.deltaY;
+                }}>
+                {currentCategory.options.map((option: { label: string; icon: LucideIcon }) => {
+                  const OptionIcon = option.icon;
+                  return <button type="button" key={option.label} aria-pressed={selected.includes(option.label)} onClick={() => setSelected(selected.includes(option.label) ? selected.filter((item) => item !== option.label) : [...selected, option.label])}><span className={styles.optionIcon}><OptionIcon size={14} /></span>{selected.includes(option.label) && <Check className={styles.optionCheck} size={12} />}{option.label}</button>;
+                })}
+              </div>
             </div>
+            <label className={`${styles.formLabel} ${styles.wishField}`}><span>追加の希望 <small>任意</small></span><small className={styles.wishHelp}>選んだ内容に加えて、伝えたいことがあれば教えてね</small><TextArea rows={1} maxLength={1500} placeholder="海が見えるところで、ゆっくりしたい" value={form.self} onChange={(e) => setForm({ ...form, self: e.target.value })} /></label>
           </div>}
-          <div className={styles.aiWishArea}>
+          {(showCategories || !currentCategory) && <div className={styles.aiWishArea}>
+            <div className={styles.choiceDivider}><span>または</span></div>
             <button className={styles.aiChoice} type="button" aria-pressed={selected.includes("おまかせ")} onClick={() => { setCategory(null); setShowCategories(true); setSelected(selected.includes("おまかせ") ? [] : ["おまかせ"]); }}>
               <AiSparkIcon />
               <span><strong>全部おまかせ</strong><small>AIがふたりに合う過ごし方を提案</small></span>
               {selected.includes("おまかせ") && <Check size={16} />}
             </button>
-            <label className={`${styles.formLabel} ${styles.wishField}`}><span>希望があれば教えてね <small>任意</small></span><TextArea rows={1} maxLength={1500} placeholder="海が見えるところで、ゆっくりしたい" value={form.self} onChange={(e) => setForm({ ...form, self: e.target.value })} /></label>
-          </div>
+            <label className={`${styles.formLabel} ${styles.wishField}`}><span>追加の希望 <small>任意</small></span><small className={styles.wishHelp}>選んだ内容やおまかせに加えて、伝えたいこと</small><TextArea rows={1} maxLength={1500} placeholder="海が見えるところで、ゆっくりしたい" value={form.self} onChange={(e) => setForm({ ...form, self: e.target.value })} /></label>
+          </div>}
         </>}
         {step === 1 && <div className={styles.schedulePanel}>
           <p className={styles.areaNotice}>{SERVICE_AREA_NOTICE}。都外の場所は確認します。</p>
@@ -462,7 +466,7 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
       </section>
       <footer className={styles.planFooter}>
         {(error || authError) && <p role="alert" className={styles.error}>{error || authError}</p>}
-        {step < 2 ? <Button fullWidth type="button" className={styles.primaryButton} disabled={advancing || selectingCategory || (step === 0 ? !category && !selected.length && !form.self.trim() : !timingValid || !placeValid)} onClick={() => move(step + 1)}>{step === 0 ? (selected.some((item) => item !== "おまかせ") || form.self.trim() ? "この希望で進む" : "この気分でおまかせ") : "予算と希望へ"}<ArrowRight size={18} /></Button> : <><p className={styles.planTotalSummary}><strong>ふたりで {total.toLocaleString()}円まで</strong><small>{form.startTime}〜{form.endTime} · {meetPlace?.name ?? "集合未選択"}</small></p><Button fullWidth type="button" className={styles.primaryButton} disabled={busy || !me || !valid} onClick={() => void submit()}><Sparkles size={18} />{!me ? "準備中…" : busy ? "プランを考えています…" : "この内容でプランをつくる"}</Button></>}
+        {step < 2 ? <Button fullWidth type="button" className={styles.primaryButton} disabled={advancing || selectingCategory || (step === 0 ? !category && !selected.length && !form.self.trim() : !timingValid || !placeValid)} onClick={() => move(step + 1)}>{step === 0 ? "この内容で日時へ" : "予算と希望へ"}<ArrowRight size={18} /></Button> : <><p className={styles.planTotalSummary}><strong>ふたりで {total.toLocaleString()}円まで</strong><small>{form.startTime}〜{form.endTime} · {meetPlace?.name ?? "集合未選択"}</small></p><Button fullWidth type="button" className={styles.primaryButton} disabled={busy || !me || !valid} onClick={() => void submit()}><Sparkles size={18} />{!me ? "準備中…" : busy ? "プランを考えています…" : "この内容でプランをつくる"}</Button></>}
       </footer>
       {me && me.blockers.length > 0 && step === 2 && <details className={styles.environmentDetails}><summary>実行環境について</summary>{me.blockers.map((blocker) => <p key={blocker.code}>{blocker.item}</p>)}</details>}
     </div>
