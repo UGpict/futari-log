@@ -135,6 +135,7 @@
 .eventMeta > span { display: inline-flex; min-width: 0; align-items: center; gap: 3px; overflow: hidden; border: 1px solid #eadde3; border-radius: 999px; padding: 5px 8px; background: #fffdfcf2; color: #7e6675; font-size: 8px; font-weight: 700; white-space: nowrap; text-overflow: ellipsis; box-shadow: 0 3px 10px #4b34420c; }
 .eventMeta > span:nth-child(2) { flex: 0 1 auto; }
 .eventMeta > span:last-child:not(:nth-child(2)) { flex: 0 0 auto; border-color: #d66f91; background: #d66f91; color: white; }
+.eventDemoBadge { border-color: #c4b5be !important; background: #efe8ec !important; color: #6f5b68 !important; }
 .eventCopy, .eventAction { position: relative; z-index: 1; }
 .eventCopy { display: flex; flex-direction: column; gap: 3px; }
 .eventCopy strong { color: #665361; font-size: 15px; font-weight: 700; line-height: 1.35; }
