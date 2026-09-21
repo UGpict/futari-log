@@ -115,7 +115,13 @@ export function getEnv() {
           ? "firestore"
           : "file";
 
-  const authBackend: AuthBackend = emulator || firebasePublicConfigured ? "firebase" : "mock";
+  const explicitAuth = read("AUTH_BACKEND");
+  const authBackend: AuthBackend =
+    explicitAuth === "mock" || explicitAuth === "firebase"
+      ? explicitAuth
+      : emulator || firebasePublicConfigured
+        ? "firebase"
+        : "mock";
   const onCloudRun = Boolean(read("K_SERVICE"));
 
   return {
