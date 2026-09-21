@@ -14,7 +14,7 @@ import { tokyoToday } from "@/config/public";
 import type { PlaceCandidate } from "@/contracts";
 import { MemoMascot } from "@/components/memo-mascot";
 import { AiSparkIcon } from "@/components/ai-spark-icon";
-import { Plus, ChevronLeft, ChevronRight, ArrowRight, Check, ChevronDown, Sparkles, CalendarHeart, Clock3, MapPin, Flag, Beef, Fish, Pizza, CakeSlice, Utensils, Coffee, TreePine, Waves, Sandwich, Flame, Film, PawPrint, Gamepad2, Palette, ShoppingBag, Store, Landmark, BookOpen, Camera, Sunrise, Sun, Sunset, Moon, type LucideIcon } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, ArrowRight, Check, ChevronDown, Sparkles, CalendarHeart, Clock3, MapPin, Flag, Beef, Fish, Pizza, CakeSlice, Utensils, Coffee, TreePine, Waves, Sandwich, Flame, Film, PawPrint, Gamepad2, Palette, ShoppingBag, Store, Landmark, BookOpen, Camera, type LucideIcon } from "lucide-react";
 import styles from "./home.module.css";
 
 const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
@@ -25,10 +25,10 @@ const timeOptions = Array.from({ length: 34 }, (_, index) => {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 });
 const timePresets = [
-  { label: "朝から", start: "09:00", end: "15:00", icon: Sunrise },
-  { label: "昼から", start: "11:00", end: "17:00", icon: Sun },
-  { label: "午後から", start: "13:00", end: "18:00", icon: Sunset },
-  { label: "夜から", start: "17:00", end: "21:00", icon: Moon },
+  { label: "朝から", start: "09:00", end: "15:00" },
+  { label: "昼から", start: "11:00", end: "17:00" },
+  { label: "午後から", start: "13:00", end: "18:00" },
+  { label: "夜から", start: "17:00", end: "21:00" },
 ] as const;
 
 function parseDate(value: string) {
@@ -502,7 +502,7 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
           <fieldset className={styles.scheduleTime}><legend className="sr-only">時間帯</legend>
             <div className={styles.timePresets} data-has-selection={selectedTimePreset >= 0} style={{ "--time-index": Math.max(0, selectedTimePreset) } as CSSProperties}>
               <span className={styles.timePresetIndicator} aria-hidden="true" />
-              {timePresets.map((item) => { const TimeIcon = item.icon; return <button type="button" key={item.label} aria-pressed={form.startTime === item.start && form.endTime === item.end} onClick={() => setForm({ ...form, startTime: item.start, endTime: item.end })}><TimeIcon size={13} aria-hidden="true" />{item.label}</button>; })}
+              {timePresets.map((item) => <button type="button" key={item.label} aria-pressed={form.startTime === item.start && form.endTime === item.end} onClick={() => setForm({ ...form, startTime: item.start, endTime: item.end })}>{item.label}</button>)}
             </div>
             <div className={styles.inlineTimes}><Clock3 size={17} aria-hidden="true" /><label><span>開始</span><SelectInput aria-label="開始時刻" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</SelectInput><ChevronDown size={16} aria-hidden="true" /></label><span>〜</span><label><span>終了</span><SelectInput aria-label="終了時刻" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</SelectInput><ChevronDown size={16} aria-hidden="true" /></label></div>
           </fieldset>
