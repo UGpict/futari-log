@@ -7,6 +7,7 @@ import { FutariLogo } from "./futari-logo";
 import { readAuthEntry } from "@/client/auth-entry";
 
 const publicPrefixes = ["/auth", "/dev"];
+const emptySubscribe = () => () => {};
 
 function subscribe(callback: () => void) {
   window.addEventListener("storage", callback);
@@ -21,13 +22,14 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const isPublic = publicPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+  const hydrated = useSyncExternalStore(emptySubscribe, () => true, () => false);
   const hasAuthEntry = useSyncExternalStore(subscribe, () => Boolean(readAuthEntry()), () => false);
 
   useEffect(() => {
-    if (!isPublic && !hasAuthEntry) router.replace("/auth");
-  }, [hasAuthEntry, isPublic, router]);
+    if (hydrated && !isPublic && !hasAuthEntry) router.replace("/auth");
+  }, [hasAuthEntry, hydrated, isPublic, router]);
 
-  if (!isPublic && !hasAuthEntry) {
+  if (!isPublic && (!hydrated || !hasAuthEntry)) {
     return <main className="grid min-h-svh place-items-center" aria-label="認証状態を確認しています"><FutariLogo className="h-auto w-36" /></main>;
   }
   return children;
