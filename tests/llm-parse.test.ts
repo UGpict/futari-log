@@ -5,6 +5,7 @@ import {
   classifyLlmJsonAgainstSchema,
   extractJsonObject,
   LLM_FAILURE_CONTENT_CHARS,
+  llmParseFailureEventPayload,
   previewMaskedLlmContent,
 } from "../src/server/llm/index";
 
@@ -50,5 +51,36 @@ describe("previewMaskedLlmContent", () => {
     const preview = previewMaskedLlmContent(long);
     assert.equal(preview.length, LLM_FAILURE_CONTENT_CHARS + 1); // plus ellipsis
     assert.ok(preview.endsWith("…"));
+  });
+});
+
+describe("llmParseFailureEventPayload", () => {
+  it("omits content preview so Firestore events do not store private reflection text", () => {
+    const payload = llmParseFailureEventPayload({
+      task: "reflect",
+      attempt: 1,
+      repaired: false,
+      kind: "schema_validation_failed",
+      zodFlatten: { formErrors: [], fieldErrors: { action: ["Invalid"] } },
+      requestedModel: "openai/gpt-4o-mini",
+      actualModel: "gpt-4o-mini-2024-07-18",
+    });
+    assert.equal(payload.failureKind, "schema_validation_failed");
+    assert.equal(payload.task, "reflect");
+    assert.equal(payload.attempt, 1);
+    assert.equal(payload.actualModel, "gpt-4o-mini-2024-07-18");
+    assert.ok(payload.zodFlatten);
+    assert.equal("contentPreview" in payload, false);
+    assert.equal("contentTruncated" in payload, false);
+    assert.deepEqual(Object.keys(payload).sort(), [
+      "actualModel",
+      "agent",
+      "attempt",
+      "failureKind",
+      "repaired",
+      "requestedModel",
+      "task",
+      "zodFlatten",
+    ]);
   });
 });

@@ -29,14 +29,47 @@ export const TASK_POOL: Record<LlmTask, Pool> = {
 };
 
 /**
- * Masked LLM failure body truncate length for logs + run events.
+ * Masked LLM failure body truncate length for Cloud Logging only.
  * LIVE sample failure used ~82 completion tokens (~300–400 chars of JSON).
  * 800 chars keeps typical short failures intact for Zod diagnosis while
- * bounding Firestore event / Cloud Logging payload size (not a full max_tokens dump).
+ * bounding log payload size. Not written to Firestore run events.
  */
 export const LLM_FAILURE_CONTENT_CHARS = 800;
 
 export type LlmParseFailureKind = "json_parse_failed" | "schema_validation_failed";
+
+/** Firestore NOTICE payload — no reflection/LLM body preview (private couple text). */
+export type LlmParseFailureEventPayload = {
+  agent: "llm";
+  task: LlmTask;
+  attempt: number;
+  repaired: boolean;
+  failureKind: LlmParseFailureKind;
+  zodFlatten: ReturnType<z.ZodError["flatten"]> | null;
+  requestedModel: string;
+  actualModel: string;
+};
+
+export function llmParseFailureEventPayload(input: {
+  task: LlmTask;
+  attempt: number;
+  repaired: boolean;
+  kind: LlmParseFailureKind;
+  zodFlatten: ReturnType<z.ZodError["flatten"]> | null;
+  requestedModel: string;
+  actualModel: string;
+}): LlmParseFailureEventPayload {
+  return {
+    agent: "llm",
+    task: input.task,
+    attempt: input.attempt,
+    repaired: input.repaired,
+    failureKind: input.kind,
+    zodFlatten: input.zodFlatten,
+    requestedModel: input.requestedModel,
+    actualModel: input.actualModel,
+  };
+}
 
 export type LlmCallResult<T> = {
   data: T | null;
@@ -106,30 +139,22 @@ async function recordLlmParseFailure(input: {
   actualModel: string;
 }): Promise<void> {
   const contentPreview = previewMaskedLlmContent(input.content);
-  const payload = {
-    agent: "llm" as const,
-    task: input.task,
-    attempt: input.attempt,
-    repaired: input.repaired,
-    failureKind: input.kind,
-    contentPreview,
-    contentTruncated: maskPii(input.content).masked.length > LLM_FAILURE_CONTENT_CHARS,
-    zodFlatten: input.zodFlatten,
-    requestedModel: input.requestedModel,
-    actualModel: input.actualModel,
-  };
+  const contentTruncated = maskPii(input.content).masked.length > LLM_FAILURE_CONTENT_CHARS;
+  const eventPayload = llmParseFailureEventPayload(input);
 
-  // Structured log: Cloud Logging retention (typically 30d default) — full diagnostic shape.
+  // Structured log (short retention): include masked preview for diagnosis.
   console.info(
     JSON.stringify({
       severity: "WARNING",
       message: "llm_parse_failure",
       runId: input.runId,
-      ...payload,
+      ...eventPayload,
+      contentPreview,
+      contentTruncated,
     }),
   );
 
-  // Run event: durable with the session for postmortem; same truncated preview (no raw PII).
+  // Run event (long-lived Firestore): metadata only — no note/body preview.
   try {
     const seq = await nextEventSeq(input.runId);
     const event: AppEvent = {
@@ -145,7 +170,7 @@ async function recordLlmParseFailure(input: {
       requestedModel: input.requestedModel,
       actualModel: input.actualModel,
       usage: null,
-      payload,
+      payload: eventPayload,
     };
     await appendRunEvent(input.runId, event);
   } catch (error) {
