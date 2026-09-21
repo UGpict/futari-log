@@ -18,6 +18,7 @@ import { Toast } from "@/components/toast";
 import { HomeLogo } from "@/components/home-logo";
 import { SpotCardImage } from "./spot-photo";
 import { spotVisual } from "./spot-visuals";
+import { spotCostLabel, spotCostSourceNote } from "./cost-label";
 import type { SessionSnapshot } from "@/contracts";
 import styles from "./session.module.css";
 
@@ -211,7 +212,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
                 <div className={styles.spotTop}><span className={styles.category}>{visual.label}</span><small><Clock3 size={12} />{duration}分</small>{item.locked && <small>時間固定</small>}{item.progress === "DONE" && <small><Check size={12} />訪問済み</small>}</div>
                 <h3>{spot?.name ?? "立ち寄りスポット"}</h3>
                 <p>{item.reason}</p>
-                <div className={styles.spotFoot}><span>{spot?.costForTwoJpy.value ? (spot.costForTwoJpy.value.max === 0 ? "無料" : `¥${spot.costForTwoJpy.value.max.toLocaleString()}まで / ふたり`) : "料金は要確認"}</span>{spot?.officialUrl && <a href={spot.officialUrl} target="_blank" rel="noreferrer">公式サイト <ExternalLink size={12} /></a>}</div>
+                <div className={styles.spotFoot}><span>{spotCostLabel(spot)}{spotCostSourceNote(spot) ? ` · ${spotCostSourceNote(spot)}` : ""}</span>{(spot?.costAccounting?.sourceUrl || spot?.officialUrl) && <a href={spot?.costAccounting?.sourceUrl || spot?.officialUrl || undefined} target="_blank" rel="noreferrer">出典 <ExternalLink size={12} /></a>}</div>
                 {!["DONE", "REFLECTED"].includes(data.session.status) && <button className={styles.changeSpot} disabled={Boolean(active) || pending} onClick={() => openFeedback({ id: item.id, name: spot?.name ?? "このスポット", locked: item.locked })}><MessageCircle size={14} />ここを変えたい<ArrowUpRight size={13} /></button>}
               </div>
             </article>}

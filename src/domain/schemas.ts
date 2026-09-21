@@ -72,6 +72,40 @@ export const spotSchema = z.object({
       max: z.number(),
     }),
   ),
+  /** Places の単位不明価格帯。二人料金には使わない。 */
+  placesPriceBand: z
+    .object({
+      minJpy: z.number().nullable(),
+      maxJpy: z.number().nullable(),
+      maxInclusive: z.boolean(),
+      unitUnknown: z.literal(true),
+      source: z.literal("places.priceRange"),
+    })
+    .nullable()
+    .optional(),
+  /** 収集済み公式単価からの会計（CALCULATED / ESTIMATED / UNKNOWN）。 */
+  costAccounting: z
+    .object({
+      status: z.enum(["CALCULATED", "ESTIMATED", "UNKNOWN"]),
+      assumptionLabel: z.string().nullable(),
+      amountMinJpy: z.number().nullable(),
+      amountMaxJpy: z.number().nullable(),
+      maxInclusive: z.boolean(),
+      breakdown: z.array(
+        z.object({
+          label: z.string(),
+          amountJpy: z.number().nullable(),
+          factId: z.string().nullable(),
+        }),
+      ),
+      sourceUrl: z.string().nullable(),
+      confirmedAt: z.string().nullable(),
+      note: z.string().nullable(),
+      knownSubtotalJpy: z.number().nullable(),
+      unknownLabels: z.array(z.string()),
+    })
+    .nullable()
+    .optional(),
   restEase: factSchema(restEaseSchema),
   standingBurden: factSchema(standingBurdenSchema),
   officialUrl: z.string().nullable(),
@@ -341,6 +375,7 @@ export const runKindSchema = z.enum([
   "REPLAN",
   "REFLECTION",
   "NEXT_PLAN",
+  "PRICE_ENRICH",
 ]);
 export type RunKind = z.infer<typeof runKindSchema>;
 

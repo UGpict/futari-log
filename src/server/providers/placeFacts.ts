@@ -1,3 +1,5 @@
+import { parsePlacesPriceBand } from "@/domain/price/accounting";
+
 /** Weekday rule from regularOpeningHours (day 0=Sun). Multiple rules may share a day (split hours). */
 export type PlaceHoursRule = {
   days: number[];
@@ -271,6 +273,10 @@ export function parseCurrentDatedHours(
   return out;
 }
 
+/**
+ * 互換用。完全な JPY min+max のみ返す。start のみは null（二人料金にしない）。
+ * 新規は parsePlacesPriceBand を使う。
+ */
 export function parseYenRange(
   raw:
     | {
@@ -280,18 +286,14 @@ export function parseYenRange(
     | null
     | undefined,
 ): { min: number; max: number } | null {
-  if (!raw) return null;
-  const currencies = [raw.startPrice?.currencyCode, raw.endPrice?.currencyCode].filter(
-    (c): c is string => Boolean(c),
-  );
-  if (currencies.some((c) => c !== "JPY")) return null;
-  const min = raw.startPrice?.units != null ? Number(raw.startPrice.units) : NaN;
-  const max = raw.endPrice?.units != null ? Number(raw.endPrice.units) : NaN;
-  if (Number.isFinite(min) && Number.isFinite(max)) return { min, max };
-  if (Number.isFinite(min)) return { min, max: min };
-  if (Number.isFinite(max)) return { min: max, max };
+  const parsed = parsePlacesPriceBand(raw);
+  if (!parsed) return null;
+  const { minJpy, maxJpy } = parsed.band;
+  if (minJpy != null && maxJpy != null) return { min: minJpy, max: maxJpy };
   return null;
 }
+
+export { parsePlacesPriceBand };
 
 function hmToMin(hm: string): number {
   const [h, m] = hm.split(":").map(Number);

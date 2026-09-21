@@ -27,7 +27,8 @@
 | `{ns}lookups/{kind}:{id}` | session / run / approval / memory / replay の位置 |
 | `{ns}idempotency/{key}` | startRun 冪等 |
 
-カタログ `catalogEvents` / `catalogVenues` / `catalogIngestRuns` は変更しない。
+| `catalogEvents` / `catalogVenues` / `catalogIngestRuns` | イベントカタログ（変更しない） |
+| `spotPriceFacts` / `spotPriceEvidence` / `spotPriceEnrichRuns` / `spotPriceEnrichLocks` | 施設料金の事実・証拠・実行ログ・重複抑止（単一文書に集約しない） |
 
 ## カレンダー
 

@@ -17,6 +17,10 @@ import { heartbeat, claimRun, WORKER_ID } from "./lease";
 import { orchestrateGather, orchestratePlanning } from "./orchestrate";
 import { canReadMemory } from "@/domain/memory";
 import type { AgentId } from "./types";
+import { enrichSpotPrice } from "@/server/catalog/priceEnrich";
+import { placeIdFromPriceEnrichTrigger } from "@/server/catalog/enqueuePriceEnrich";
+import { addDailyPriceEnrichCost } from "@/server/catalog/priceRepo";
+import { tokyoToday } from "@/lib/time";
 
 async function appendEvent(
   runId: string,
@@ -99,6 +103,12 @@ export async function executeRun(
     if (run.kind === "REFLECTION") {
       if (phase === "gather") return;
       await runReflection(runId, controller.signal);
+      return;
+    }
+
+    if (run.kind === "PRICE_ENRICH") {
+      if (phase === "gather") return;
+      await runPriceEnrich(runId, run, controller.signal);
       return;
     }
 
@@ -389,6 +399,85 @@ export async function executeRun(
   } finally {
     clearInterval(beat);
     clearTimeout(timer);
+  }
+}
+
+async function runPriceEnrich(runId: string, run: Run, signal: AbortSignal) {
+  await appendEvent(runId, "RUN_STARTED", "PRICE_ENRICH を開始");
+  type Payload = {
+    placeId: string;
+    venueName: string;
+    websiteUri?: string | null;
+    address?: string | null;
+  };
+  let payload: Payload | null = null;
+  try {
+    if (run.instruction) payload = JSON.parse(run.instruction) as Payload;
+  } catch {
+    payload = null;
+  }
+  const placeId = payload?.placeId ?? placeIdFromPriceEnrichTrigger(run.trigger);
+  const venueName = payload?.venueName;
+  if (!placeId || !venueName) {
+    await patchRun(runId, {
+      status: "FAILED",
+      error: "price enrich payload missing",
+      finishedAt: realNowIso(),
+      leaseOwner: null,
+    });
+    await appendEvent(runId, "NOTICE", "placeId/venueName missing");
+    return;
+  }
+  if (signal.aborted) {
+    await patchRun(runId, {
+      status: "INTERRUPTED",
+      error: "deadline",
+      finishedAt: realNowIso(),
+      leaseOwner: null,
+    });
+    return;
+  }
+  const result = await enrichSpotPrice({
+    placeId,
+    venueName,
+    websiteUri: payload?.websiteUri,
+    address: payload?.address,
+    reason: "price_enrich_run",
+    owner: `run:${runId}`,
+  });
+  const enrichCostUsd = result.costUsd ?? 0;
+  if (enrichCostUsd > 0) await addDailyPriceEnrichCost(tokyoToday(), enrichCostUsd);
+
+  if (result.ok) {
+    await withRun(runId, (found) => {
+      if (!found) return;
+      found.run.status = "SUCCEEDED";
+      found.run.finishedAt = realNowIso();
+      found.run.leaseOwner = null;
+      found.run.error = null;
+      if (enrichCostUsd > 0) {
+        found.run.cost.llmUsd = (found.run.cost.llmUsd ?? 0) + enrichCostUsd;
+        found.run.cost.hardCalls += 1;
+      }
+    });
+    await appendEvent(runId, "RUN_FINISHED", `料金事実 ${result.factsSaved}件を保存`, {
+      payload: { enrichRunId: result.runId, status: result.status, factsSaved: result.factsSaved },
+    });
+  } else {
+    await withRun(runId, (found) => {
+      if (!found) return;
+      found.run.status = "FAILED";
+      found.run.finishedAt = realNowIso();
+      found.run.leaseOwner = null;
+      found.run.error = result.error ?? result.status;
+      if (enrichCostUsd > 0) {
+        found.run.cost.llmUsd = (found.run.cost.llmUsd ?? 0) + enrichCostUsd;
+        found.run.cost.hardCalls += 1;
+      }
+    });
+    await appendEvent(runId, "NOTICE", result.error ?? result.status, {
+      payload: { enrichRunId: result.runId, status: result.status },
+    });
   }
 }
 

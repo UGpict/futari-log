@@ -5,6 +5,8 @@ process.env.NEXT_PUBLIC_USE_API_FIXTURES = "false";
 process.env.ENABLE_EVENT_CATALOG = "false";
 process.env.FIRESTORE_NAMESPACE = "localverify20260920";
 
+export {};
+
 async function main() {
   const { getEnv } = await import("../src/config/env");
   const env = getEnv();

@@ -570,7 +570,7 @@ export async function insertPendingRun(input: InsertRunInput): Promise<
         .map((doc) => stripRun(doc.data())?.run)
         .filter((run): run is Run => Boolean(run))
         .filter((r) => ["PENDING", "RUNNING", "WAITING_INPUT", "WAITING_APPROVAL"].includes(r.status));
-      if (active.length >= 1 && input.kind !== "REFLECTION") {
+      if (active.length >= 1 && input.kind !== "REFLECTION" && input.kind !== "PRICE_ENRICH") {
         return {
           ok: false as const,
           status: 409,
