@@ -191,6 +191,10 @@ async function groundedFromGemini(args: {
   };
 
   let res: Response;
+  const groundingTimeoutMs = args.via === "orcarouter" ? 20_000 : 35_000;
+  const groundingSignal = args.signal
+    ? AbortSignal.any([args.signal, AbortSignal.timeout(groundingTimeoutMs)])
+    : AbortSignal.timeout(groundingTimeoutMs);
   try {
     res =
       args.via === "orcarouter"
@@ -204,7 +208,7 @@ async function groundedFromGemini(args: {
                 "X-OrcaRouter-Include-Cost": "true",
               },
               body: JSON.stringify(body),
-              signal: args.signal ?? AbortSignal.timeout(20000),
+              signal: groundingSignal,
             },
           )
         : await fetch(`${GOOGLE_GEMINI_ENDPOINT}/${encodeURIComponent(modelId)}:generateContent`, {
@@ -214,7 +218,7 @@ async function groundedFromGemini(args: {
               "x-goog-api-key": args.googleApiKey ?? "",
             },
             body: JSON.stringify(body),
-            signal: args.signal ?? AbortSignal.timeout(35000),
+            signal: groundingSignal,
           });
   } catch (error) {
     return {
