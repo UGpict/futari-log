@@ -153,9 +153,31 @@
 
 #### 条件1: 認証
 
-- カスタムトークン（IAM `signJwt`）は TokenCreator 付与後も org/IAM で拒否。
-- **代替**: isDemo カップルの `ownerUid` を一時的に新規匿名 UID へ差し替え → API 実行 → **元の ownerUid に復元済み**（確認: prefix `dh33Ruhi`）。
-- SA 鍵ファイルは作成せず（作成は組織ポリシーで禁止）。一時スクリプト／トークンはリポジトリに未コミット。
+- カスタムトークン発行（IAM `signJwt`）は org/IAM により拒否された。
+- 実行時はカップル `ownerUid` を一時 UID（prefix `OYgPNvTu`）へ差し替え、API 実行後に元の ownerUid（prefix `dh33Ruhi`）へ復元した。
+- SA 鍵ファイルは作成していない。一時スクリプト／トークンはリポジトリに未コミット。
+- **次回以降**: 計測スクリプトが第 N 回の認証情報を保持し、同一所有者で継続できるようにする。
+
+#### 所有者の整合性確認（読み取りのみ・修正なし）
+
+対象: 差し替え期間（`2026-09-21T05:19Z`–`05:25Z`）に作成・更新されたドキュメント、および第3回既知 ID。カップル復元後 ownerUid（prefix `dh33Ruhi`）との一致を確認。列挙 158 件。
+
+| 結果 | 件数 |
+| --- | --- |
+| couple 復元済み | 1（`cpl_12021f0e14f50f62` ownerUid=dh33Ruhi…） |
+| ownerUid/uid 一致 | 1（`ses_6fb5e8716a56cad4`） |
+| 当該フィールドなし | 151（events / spots / memories / reflections / approvals 等） |
+| **不一致** | **5** |
+
+**不一致（修正せず停止）**:
+
+| ドキュメント | フィールド | 現在の値（prefix） | 期待（復元後） |
+| --- | --- | --- | --- |
+| `sessions/ses_20c6113af0f1ffbf` | `ownerUid` | `OYgPNvTu`… | `dh33Ruhi`… |
+| `runs/run_4652a646b7ba0cbb`（上記 session 配下） | `ownerUid` | `OYgPNvTu`… | `dh33Ruhi`… |
+| `runs/run_a6b27aba9022bb19`（`ses_6fb5e8716a56cad4` 配下） | `ownerUid` | `OYgPNvTu`… | `dh33Ruhi`… |
+| `idempotency/arch-v2-r3-ses_20c6113af0f1ffbf` | `uid` | `OYgPNvTu`… | `dh33Ruhi`… |
+| `idempotency/reflect:ref_6c0307f24db4badb:v1` | `uid` | `OYgPNvTu`… | `dh33Ruhi`… |
 
 #### REFLECTION 出力
 
