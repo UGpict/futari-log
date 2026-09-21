@@ -569,6 +569,8 @@
 .scheduleSectionBody { display: grid; gap: 9px; padding: 9px; border: 1px solid #eadfe6; border-radius: 22px; background: linear-gradient(145deg, #fff 0%, #fff9fb 100%); box-shadow: 0 7px 24px #7653650a; }
 .scheduleDatePicker { position: relative; }
 .scheduleDate { display: flex; width: 100%; min-height: 54px; align-items: center; gap: 11px; border: 1px solid #f0e5eb; border-radius: 15px; padding: 8px 12px; background: white; color: #bd7798; text-align: left; }
+.dateSticker { display: grid; width: 35px; height: 37px; flex: 0 0 35px; place-items: center; transform: rotate(-4deg); }
+.dateSticker > svg { display: block; width: 35px; height: 37px; }
 .scheduleDate > span { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }
 .scheduleDate strong { color: #695362; font-size: 15px; font-weight: 650; }
 .scheduleDate > svg:last-child { transition: transform .18s; }
@@ -606,21 +608,22 @@
 .inlineTimes label > svg { position: absolute; right: 9px; bottom: 13px; color: #bd7798; pointer-events: none; }
 .inlineTimes > span { align-self: center; color: #bba5b3; }
 .meetingCard { position: relative; border: 1px solid #ebdfe6; border-radius: 20px; background: linear-gradient(145deg, #fff, #fffafb); padding: 12px; box-shadow: 0 7px 24px #7653650a; }
-.meetingCard::before { content: ''; position: absolute; top: 34px; bottom: 32px; left: 26px; width: 2px; border-radius: 2px; background: linear-gradient(#eb82a8, #c8a3dd); opacity: .55; }
-.routeStart { position: relative; display: grid; grid-template-columns: 29px minmax(0, 1fr); gap: 9px; }
-.routeMarker { position: relative; z-index: 1; display: grid; width: 29px; height: 29px; place-items: center; border: 3px solid white; border-radius: 50%; background: linear-gradient(145deg, #ef7da4, #c690d5); color: white; box-shadow: 0 3px 9px #b96d9030; }
+.meetingCard::before { content: ''; position: absolute; top: 38px; bottom: 35px; left: 29px; width: 2px; border-radius: 2px; background: linear-gradient(#eb82a8, #c8a3dd); opacity: .45; }
+.routeStart { position: relative; display: grid; grid-template-columns: 35px minmax(0, 1fr); gap: 9px; }
+.routeMarker { position: relative; z-index: 1; display: grid; width: 35px; height: 37px; place-items: center; }
+.routeMarker > svg { display: block; width: 35px; height: 37px; }
 .routeContent { min-width: 0; }
 .routeContent label { display: grid; gap: 2px; }
 .routeContent label > span, .routeEnd summary small { color: #a18c99; font-size: 9px; }
 .meetingCard input { min-height: 32px; border: 0; padding: 2px 0; background: transparent; color: #695362; }
 .routeEnd { position: relative; margin-top: 10px; }
-.routeEnd summary { display: grid; grid-template-columns: 29px minmax(0, 1fr) 18px; align-items: center; gap: 9px; min-height: 34px; color: #9d8796; cursor: pointer; list-style: none; }
+.routeEnd summary { display: grid; grid-template-columns: 35px minmax(0, 1fr) 18px; align-items: center; gap: 9px; min-height: 37px; color: #9d8796; cursor: pointer; list-style: none; }
 .routeEnd summary::-webkit-details-marker { display: none; }
 .routeEnd summary > span:nth-child(2) { display: grid; min-width: 0; gap: 1px; }
 .routeEnd summary strong { overflow: hidden; color: #715968; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .routeEnd summary > svg { transition: transform .2s ease; }
 .routeEnd[open] summary > svg { transform: rotate(180deg); }
-.routeEndEditor { margin: 6px 0 0 38px; padding: 8px 10px; border-radius: 13px; background: #faf5f8; animation: planEnter .2s ease both; }
+.routeEndEditor { margin: 6px 0 0 44px; padding: 8px 10px; border-radius: 13px; background: #faf5f8; animation: planEnter .2s ease both; }
 .routeEndEditor input { width: 100%; border-bottom: 1px solid #eadce4; }
 .placeSuggest { display: grid; gap: 4px; margin: 8px 0 0; max-height: min(240px, 36dvh); overflow: auto; }
 .placeSuggest button { display: grid; gap: 2px; text-align: left; border: 0; border-radius: 12px; padding: 8px 10px; background: #faf6f8; color: #695362; font-size: 12px; }

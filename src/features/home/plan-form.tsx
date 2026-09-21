@@ -14,7 +14,8 @@ import { tokyoToday } from "@/config/public";
 import type { PlaceCandidate } from "@/contracts";
 import { MemoMascot } from "@/components/memo-mascot";
 import { AiSparkIcon } from "@/components/ai-spark-icon";
-import { Plus, ChevronLeft, ChevronRight, ArrowRight, Check, ChevronDown, Sparkles, CalendarHeart, MapPin, Flag, Beef, Fish, Pizza, CakeSlice, Utensils, Coffee, TreePine, Waves, Sandwich, Flame, Film, PawPrint, Gamepad2, Palette, ShoppingBag, Store, Landmark, BookOpen, Camera, type LucideIcon } from "lucide-react";
+import { PlanStickerIcon } from "@/components/plan-sticker-icon";
+import { Plus, ChevronLeft, ChevronRight, ArrowRight, Check, ChevronDown, Sparkles, Beef, Fish, Pizza, CakeSlice, Utensils, Coffee, TreePine, Waves, Sandwich, Flame, Film, PawPrint, Gamepad2, Palette, ShoppingBag, Store, Landmark, BookOpen, Camera, type LucideIcon } from "lucide-react";
 import styles from "./home.module.css";
 
 const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
@@ -483,7 +484,7 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
             <div className={styles.scheduleSectionBody}>
           <div className={styles.scheduleDatePicker}>
             <button type="button" className={styles.scheduleDate} aria-expanded={calendarOpen} aria-controls="plan-calendar" onClick={() => { if (calendarTimer.current) return; setCalendarMonth(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1)); setCalendarOpen(!calendarOpen); }}>
-              <CalendarHeart size={20} /><span><strong>{dateLabel}</strong></span><ChevronDown size={17} />
+              <span className={styles.dateSticker}><PlanStickerIcon kind="calendar" /></span><span><strong>{dateLabel}</strong></span><ChevronDown size={17} />
             </button>
             {calendarOpen && <div id="plan-calendar" className={styles.planCalendar} role="dialog" aria-label="日にちを選ぶ">
               <div className={styles.planCalendarHeader}>
@@ -512,12 +513,12 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
           <section className={styles.scheduleSection} aria-label="集合と解散">
             <div className={styles.meetingCard}>
               <div className={styles.routeStart}>
-                <span className={styles.routeMarker}><MapPin size={14} /></span>
+                <span className={styles.routeMarker}><PlanStickerIcon kind="start" /></span>
                 <div className={styles.routeContent}><label><span>待ち合わせ</span><TextInput aria-label="集合場所" value={form.meetName} onChange={(e) => { setMeetPlace(null); setForm({ ...form, meetName: e.target.value }); }} placeholder="駅や目印になる場所" autoComplete="off" /></label>
                   <PlaceSuggest query={form.meetName} selected={meetPlace} search={meetSearch} label="集合場所の候補" onPick={(place) => { setMeetPlace(place); setForm((current) => ({ ...current, meetName: place.name })); }} />
                 </div>
               </div>
-              <details className={styles.routeEnd}><summary><span className={styles.routeMarker}><Flag size={13} /></span><span><small>解散</small><strong>{form.endName || "待ち合わせと同じ"}</strong></span><ChevronDown size={14} /></summary><div className={styles.routeEndEditor}><TextInput aria-label="解散場所" value={form.endName} onChange={(e) => { setEndPlace(null); setForm({ ...form, endName: e.target.value }); }} placeholder={meetPlace?.name ?? "解散場所"} autoComplete="off" />
+              <details className={styles.routeEnd}><summary><span className={styles.routeMarker}><PlanStickerIcon kind="goal" /></span><span><small>解散</small><strong>{form.endName || "待ち合わせと同じ"}</strong></span><ChevronDown size={14} /></summary><div className={styles.routeEndEditor}><TextInput aria-label="解散場所" value={form.endName} onChange={(e) => { setEndPlace(null); setForm({ ...form, endName: e.target.value }); }} placeholder={meetPlace?.name ?? "解散場所"} autoComplete="off" />
                 {form.endName.trim().length >= 2 || endPlace ? <PlaceSuggest query={form.endName} selected={endPlace} search={endSearch} label="解散場所の候補" onPick={(place) => { setEndPlace(place); setForm((current) => ({ ...current, endName: place.name })); }} /> : <p className={styles.placeHint}>別の場所で解散するときだけ入力できます。</p>}
               </div></details>
             </div>

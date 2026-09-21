@@ -1,7 +1,7 @@
 import { useId } from "react";
 
 /** Illustrated plan facts, with the same cut-paper edge as mood stickers. */
-export function PlanStickerIcon({ kind }: { kind: "time" | "budget" | "spots" | "wave" }) {
+export function PlanStickerIcon({ kind }: { kind: "time" | "budget" | "spots" | "wave" | "calendar" | "start" | "goal" }) {
   const shadow = `plan-sticker-${useId().replaceAll(":", "")}`;
   return <svg viewBox="0 0 80 84" fill="none" aria-hidden="true">
     <defs><filter id={shadow} x="-30%" y="-30%" width="160%" height="170%" colorInterpolationFilters="sRGB"><feDropShadow dx="0" dy="2.5" stdDeviation="1.3" floodColor="#63594e" floodOpacity=".23" /></filter></defs>
@@ -31,6 +31,23 @@ export function PlanStickerIcon({ kind }: { kind: "time" | "budget" | "spots" | 
         <path d="M40 10C25 10 14 21 14 36C14 48 30 63 36 69Q40 73 44 69C50 63 66 48 66 36C66 21 55 10 40 10Z" fill="#86a89a" stroke="#fffdfb" strokeWidth="6" />
         <circle cx="40" cy="35" r="10" fill="#fff8ee" />
         <path d="M23 27Q26 20 32 19" stroke="#bdd1c4" strokeWidth="4" strokeLinecap="round" />
+      </>}
+      {kind === "calendar" && <>
+        <path d="M17 22Q17 15 24 15H57Q64 15 64 22V63Q64 70 57 70H24Q17 70 17 63Z" fill="#ef9aaa" stroke="#fffdfb" strokeWidth="6" />
+        <path d="M17 31H64" stroke="#fffdfb" strokeWidth="5" />
+        <path d="M28 11V23M53 11V23" stroke="#667b72" strokeWidth="6" strokeLinecap="round" />
+        <path d="M29 44H36M45 44H52M29 56H36M45 56H52" stroke="#fff6ef" strokeWidth="5" strokeLinecap="round" />
+      </>}
+      {kind === "start" && <>
+        <path d="M40 10C25 10 14 21 14 36C14 49 29 64 36 71Q40 75 44 71C51 64 66 49 66 36C66 21 55 10 40 10Z" fill="#e883a5" stroke="#fffdfb" strokeWidth="6" />
+        <circle cx="40" cy="35" r="10" fill="#fff6ef" />
+        <path d="M23 27Q26 20 32 19" stroke="#f5bbca" strokeWidth="4" strokeLinecap="round" />
+      </>}
+      {kind === "goal" && <>
+        <path d="M24 68V17" stroke="#667b72" strokeWidth="7" strokeLinecap="round" />
+        <path d="M27 18Q43 8 61 20L54 38Q41 31 27 40Z" fill="#c899d4" stroke="#fffdfb" strokeWidth="6" />
+        <circle cx="24" cy="69" r="6" fill="#667b72" stroke="#fffdfb" strokeWidth="4" />
+        <path d="M34 18Q40 16 46 18" stroke="#e9caef" strokeWidth="4" strokeLinecap="round" />
       </>}
     </g>
   </svg>;
