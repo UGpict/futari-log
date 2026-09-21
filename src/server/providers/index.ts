@@ -73,6 +73,16 @@ function haversineMeters(
   return 2 * R * Math.asin(Math.sqrt(s));
 }
 
+/** Meet/end/fixed at the same venue must not invent travel + buffer (AI HACK office flow). */
+export function isSameTravelPoint(
+  from: { lat: number; lng: number; spotId?: string | null },
+  to: { lat: number; lng: number; spotId?: string | null },
+): boolean {
+  if (from.spotId && to.spotId && from.spotId === to.spotId) return true;
+  if (!Number.isFinite(from.lat) || !Number.isFinite(to.lat)) return false;
+  return haversineMeters(from, to) <= 40;
+}
+
 function cacheGet<T>(ctx: ProviderCtx, key: string, ttlMs: number): T | null {
   const hit = ctx.cache.get(key);
   if (!hit) return null;
@@ -370,6 +380,29 @@ export async function estimateTravel(
     departureAt: string;
   },
 ): Promise<RouteEstimate & { delayMinutes: number }> {
+  if (isSameTravelPoint(args.from, args.to)) {
+    return {
+      durationMinutes: 0,
+      distanceMeters: 0,
+      walkMinutesWithin: args.mode === "WALK" ? 0 : 0,
+      bufferMinutes: 0,
+      kind: "API",
+      failure: null,
+      cached: false,
+      attempts: [],
+      ...driveDepartureFields(args.mode, args.departureAt),
+      delayMinutes: 0,
+      evidence: evidence({
+        kind: "API",
+        provider: "routes",
+        sourceRef: `${args.from.spotId ?? "latlng"}->${args.to.spotId ?? "latlng"}`,
+        sourceField: "duration",
+        fetchedAt: realNowIso(),
+        validFor: null,
+        note: "同一地点のため移動なし（余裕分も加算しない）",
+      }),
+    };
+  }
   const delayOverlay = ctx.overlays.find(
     (o) =>
       o.kind === "TRAVEL_DELAY" &&
