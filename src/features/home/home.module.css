@@ -312,7 +312,11 @@
 .dateMoodCaption small { font-size: 9px; color: #967e8d; }
 .dateMoodCard[aria-pressed="true"] { border-color: #cb7999; background: #fff0f5; }
 .dateMoodCheck { position: absolute; top: 9px; right: 9px; display: grid; place-items: center; width: 23px; height: 23px; border-radius: 50%; border: 1.5px solid #fff; background: #ffffffa8; }
-.dateMoodCard[aria-pressed="true"] .dateMoodCheck { color: #fff; background: #c16d92; }
+.dateMoodCard[aria-pressed="true"] .dateMoodCheck {
+  color: #fff;
+  background: linear-gradient(135deg, #ea7096 0%, #f09ab1 54%, #aa95da 100%);
+  box-shadow: 0 2px 7px #e979a64d;
+}
 .dateDetails { border-radius: var(--radius-card); padding: 14px; background: #f6eef3; border: 1px solid #ebdee7; animation: appear .2s ease-out; }
 .dateDetailHeading { display: flex; align-items: center; gap: 7px; }
 .dateDetailHeading > svg { width: 38px; height: 38px; flex-shrink: 0; }
