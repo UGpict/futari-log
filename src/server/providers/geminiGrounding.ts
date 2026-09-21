@@ -1,5 +1,6 @@
 import { getEnv } from "@/config/env";
 import type { Evidence, Spot } from "@/domain/schemas";
+import { withTimeout } from "@/lib/abort";
 import { newId } from "@/lib/ids";
 import { realNowIso } from "@/lib/time";
 import { hydratePlacePhotos } from "./placePhotos";
@@ -167,9 +168,7 @@ async function groundedFromGemini(args: {
 
   let res: Response;
   const groundingTimeoutMs = args.via === "orcarouter" ? 20_000 : 35_000;
-  const groundingSignal = args.signal
-    ? AbortSignal.any([args.signal, AbortSignal.timeout(groundingTimeoutMs)])
-    : AbortSignal.timeout(groundingTimeoutMs);
+  const groundingSignal = withTimeout(args.signal, groundingTimeoutMs);
   try {
     res =
       args.via === "orcarouter"
@@ -317,7 +316,7 @@ async function fetchOgImage(pageUrl: string, signal?: AbortSignal): Promise<stri
     const res = await fetch(pageUrl, {
       headers: { Accept: "text/html", "User-Agent": "FutariLog/0.6 (grounded-image)" },
       redirect: "follow",
-      signal: signal ?? AbortSignal.timeout(6000),
+      signal: withTimeout(signal, 6000),
     });
     if (!res.ok) return null;
     const type = res.headers.get("content-type") ?? "";

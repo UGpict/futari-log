@@ -1,6 +1,7 @@
 import { getEnv } from "@/config/env";
 import { LLM_PRICE_TABLE, MODEL_PARAMS } from "@/config/settings";
 import type { AppEvent } from "@/domain/schemas";
+import { withTimeout } from "@/lib/abort";
 import { newId } from "@/lib/ids";
 import { realNowIso } from "@/lib/time";
 import { maskPii } from "@/server/privacy/mask";
@@ -246,7 +247,7 @@ export async function callLLM<T>(input: {
       method: "POST",
       headers: orcaHeaders(),
       body: JSON.stringify(body),
-      signal: input.signal ?? AbortSignal.timeout(25000),
+      signal: withTimeout(input.signal, 25000),
     });
     const latencyMs = Date.now() - started;
     const actualModel =
@@ -396,7 +397,7 @@ export async function callOrcaJson<T>(input: {
       max_tokens: MODEL_PARAMS.maxTokens,
       response_format: { type: "json_object" as const },
     }),
-    signal: input.signal ?? AbortSignal.timeout(25000),
+    signal: withTimeout(input.signal, 25000),
   });
   const latencyMs = Date.now() - started;
   const actualModel =
