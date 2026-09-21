@@ -115,7 +115,7 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
           ? me.demoCalendarAnchorDate
           : "2026-09-21",
     };
-  }, [demoCalendar, me?.demoCalendarStickers, me?.demoCalendarAnchorDate]);
+  }, [demoCalendar, me]);
   const demoRecords = useMemo(
     () => (resolvedDemo.enabled ? buildDemoCalendarRecords(resolvedDemo.anchorDate) : []),
     [resolvedDemo.enabled, resolvedDemo.anchorDate],
@@ -371,8 +371,8 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
             {selectedPlans.map((plan) => {
               const canReflect = Boolean(today) && selectedDate <= today;
               return <article className={styles.calendarPlanCard} key={plan.id}>
-                <div className={styles.calendarPlanTitle}><span className={styles.ghostMascot}><MoodSticker mood="happy" /></span><div><small>{plan.startTime}–{plan.endTime} · {plan.status === "DRAFT" ? "相談中" : ["DONE", "REFLECTED"].includes(plan.status) ? "おでかけ済み" : "予定"}</small><h3>{plan.title}</h3></div></div>
-                <Link className={styles.planOpenLink} href={`/sessions/${plan.id}`}>プランを見る・修正する<ChevronRight size={17} /></Link>
+                <div className={styles.calendarPlanTitle}><span className={styles.planCardSticker}><PlanStickerIcon kind="calendar" /></span><div><small>{plan.startTime}〜{plan.endTime}<em>{plan.status === "DRAFT" ? "相談中" : ["DONE", "REFLECTED"].includes(plan.status) ? "おでかけ済み" : "予定"}</em></small><h3>{plan.title}</h3></div></div>
+                <Link className={styles.planOpenLink} href={`/sessions/${plan.id}`}>プランを見る<ChevronRight size={17} /></Link>
                 {canReflect ? <Button fullWidth className={styles.primaryButton} onClick={() => setReflecting(true)}>{recordsByDate.has(selectedDate) && !selectedRecord?.demo ? "振り返りを見る・編集する" : "この日を振り返る"}<MoodSticker mood="relaxed" /></Button> : <p className={styles.localNote}>{plan.status === "DRAFT" ? "まずはプランを決めよう。振り返りはデートのあとに。" : "デートが終わったら、ここから振り返れます。"}</p>}
               </article>;
             })}

@@ -79,7 +79,6 @@ export function MemoryScreen({ coupleId, embedded = false }: { coupleId: string 
             </> : <>
               <p className={styles.content}>{memory.content}</p>
               <footer className={styles.noteFooter}>
-                {memory.local && <small>この端末に保存</small>}
                 <div className={styles.actions}>
                   <Button variant="ghost" size="compact" onClick={() => { setEdit({ ...edit, [memory.id]: memory.content }); setEditingId(memory.id); }}>編集</Button>
                   <Button variant="ghost" size="compact" disabled={removingId !== null} onClick={() => void removeMemo(memory.id, memory.local)}>{removingId === memory.id ? "削除中…" : "削除"}</Button>

@@ -1,17 +1,11 @@
 import { useId } from "react";
 
 /** Illustrated plan facts, with the same cut-paper edge as mood stickers. */
-export function PlanStickerIcon({ kind }: { kind: "time" | "budget" | "spots" | "wave" | "calendar" | "start" | "goal" | "walk" | "drive" | "transit" }) {
+export function PlanStickerIcon({ kind }: { kind: "time" | "budget" | "spots" | "calendar" | "start" | "goal" | "walk" | "drive" | "transit" }) {
   const shadow = `plan-sticker-${useId().replaceAll(":", "")}`;
   return <svg viewBox="0 0 80 84" fill="none" aria-hidden="true">
     <defs><filter id={shadow} x="-30%" y="-30%" width="160%" height="170%" colorInterpolationFilters="sRGB"><feDropShadow dx="0" dy="2.5" stdDeviation="1.3" floodColor="#63594e" floodOpacity=".23" /></filter></defs>
     <g filter={`url(#${shadow})`} strokeLinejoin="round">
-      {kind === "wave" && <>
-        <path d="M31 69L24 59L13 43C9 37 16 32 20 37L27 45L20 22C18 15 26 13 28 19L35 37L31 14C30 7 39 6 40 13L44 35L45 17C45 10 54 11 53 18L53 39L58 28C61 22 68 26 65 32L61 51C59 60 54 64 51 70Z" fill="#dfb98d" stroke="#fffdfb" strokeWidth="5.5" />
-        <path d="M28 46Q38 42 42 53" stroke="#b28a67" strokeWidth="3" strokeLinecap="round" />
-        <path d="M30 69L51 70" stroke="#8fa89b" strokeWidth="8" strokeLinecap="round" />
-        <path d="M9 20L6 14M64 12L68 8" stroke="#8fa89b" strokeWidth="4" strokeLinecap="round" />
-      </>}
       {kind === "time" && <>
         <circle cx="40" cy="39" r="29" fill="#dc9183" stroke="#fffdfb" strokeWidth="6" />
         <circle cx="40" cy="39" r="21.5" fill="#fff8ee" />

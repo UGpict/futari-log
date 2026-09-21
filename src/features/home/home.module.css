@@ -772,11 +772,18 @@
   color: #8a7382;
   background: #f3ebea;
 }
-.calendarPlanCard { padding: 16px 0; border-bottom: 1px dashed #e6d5e2; }
+.plannedDay { display: grid; gap: 10px; }
+.plannedDay > .eyebrow { margin: -3px 2px 1px; font-size: 10px; letter-spacing: .04em; }
+.calendarPlanCard { padding: 14px; border: 0; border-radius: 23px; background: linear-gradient(145deg, #fff 0%, #fff3f7 62%, #f3efff 120%); box-shadow: 0 9px 28px #76536512; }
 .calendarPlanTitle { display: flex; align-items: center; gap: 9px; }
-.calendarPlanTitle small { font-size: 10px; color: var(--text-muted); }
-.calendarPlanTitle h3 { font-size: 14px; line-height: 1.7; margin-top: 3px; }
-.ghostMascot { width: 49px; flex-shrink: 0; opacity: .35; transform: rotate(-8deg); }
+.calendarPlanTitle > div { min-width: 0; }
+.calendarPlanTitle small { display: flex; align-items: center; gap: 6px; color: #a08b98; font-size: 10px; }
+.calendarPlanTitle small em { padding: 3px 7px; border-radius: 999px; background: #ffffffb8; color: #a45f7e; font-size: 8px; font-style: normal; font-weight: 650; }
+.calendarPlanTitle h3 { margin-top: 4px; color: #66505f; font-size: 14px; font-weight: 650; line-height: 1.55; }
+.planCardSticker { display: grid; width: 51px; height: 53px; flex: 0 0 51px; place-items: center; transform: rotate(-5deg); }
+.planCardSticker svg { width: 51px; height: 53px; }
+.calendarPlanCard .planOpenLink { margin: 13px 0 8px; }
+.calendarPlanCard .primaryButton { min-height: 48px; margin-top: 7px; border: 0; background: linear-gradient(135deg, #e76f96 0%, #ee90ad 55%, #b397dc 115%); color: #fff; box-shadow: 0 7px 18px #b85b842b; }
 .planOpenLink { display: flex; align-items: center; justify-content: space-between; min-height: 44px; border: 0; border-radius: 16px; padding: 10px 14px; margin: 14px 0 10px; color: var(--text-accent); background: #ffffffc9; box-shadow: 0 4px 14px #7653650d; font-size: 12px; }
 
 .reflectionPlanLink { display: flex; align-items: center; gap: 7px; min-height: 40px; padding: 8px 12px; margin-bottom: 14px; border: 1px solid #ecdfE8; border-radius: 12px; color: #a17f99; font-size: 11px; }
