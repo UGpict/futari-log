@@ -12,6 +12,10 @@ import type {
 } from "@/domain/schemas";
 import { WALK_LIMITS } from "@/config/settings";
 import { explainWishMatches } from "@/contracts/spotKinds";
+import {
+  collectDirectiveEffects,
+  stayMinutesForSpot,
+} from "@/domain/memory/directives";
 import { preferenceMatchIds, validatePlan } from "@/domain/plan/validatePlan";
 import { newId } from "@/lib/ids";
 import { addMinutes, minutesBetween, tokyoDateTime } from "@/lib/time";
@@ -48,10 +52,8 @@ export async function buildPlan(input: {
   const evidence: Evidence[] = [];
   const spots = { ...input.spots };
   const start = tokyoDateTime(input.input.dateTokyo, input.input.startTime);
-  const standingCare = input.memories.filter(
-    (m) => m.active && /立|歩/.test(m.content) && m.strength !== undefined,
-  );
-  const restCare = standingCare.length > 0;
+  const effects = collectDirectiveEffects(input.memories);
+  const restCare = effects.preferSeatedRest.length > 0;
 
   const detailsNeeded = input.orderedSpotIds.filter((id) => !spots[id]);
   for (const id of detailsNeeded.slice(0, 6)) {
@@ -77,46 +79,29 @@ export async function buildPlan(input: {
   });
 
   const lockedIds = locked.map((l) => l.spotId).filter((x): x is string => Boolean(x));
-  const unlocked = uniqueIds(input.orderedSpotIds).filter(
+  let unlocked = uniqueIds(input.orderedSpotIds).filter(
     (id) => spots[id] && !lockedIds.includes(id),
   );
+  if (effects.revisitSpotIds.size) {
+    unlocked = [...unlocked].sort((a, b) => {
+      const aRev = effects.revisitSpotIds.has(a) ? 0 : 1;
+      const bRev = effects.revisitSpotIds.has(b) ? 0 : 1;
+      return aRev - bRev;
+    });
+  }
 
   const items: PlanItem[] = [];
   const influences: Plan["memoryInfluences"] = [];
   const prevBySpot = new Map((input.previousItems ?? []).map((i) => [i.spotId, i]));
 
   function baseStay(spot: Spot): number {
-    if (restCare && (spot.standingBurden.value === "HIGH" || spot.standingBurden.value === "MEDIUM")) return 35;
-    if (restCare && spot.restEase.value === "EASY") return 40;
-    return 50;
+    return stayMinutesForSpot(spot, effects, 50).stay;
   }
 
   function stayAndMemory(spot: Spot): { stay: number; memIds: string[] } {
-    let stay = 50;
-    const memIds: string[] = [];
-    if (restCare && (spot.standingBurden.value === "HIGH" || spot.standingBurden.value === "MEDIUM")) {
-      stay = 35;
-      for (const m of standingCare) {
-        memIds.push(m.id);
-        influences.push({
-          memoryId: m.id,
-          effect: "DURATION",
-          detail: `${spot.name} の滞在を短くした`,
-        });
-      }
-    }
-    if (restCare && spot.restEase.value === "EASY") {
-      stay = 40;
-      for (const m of standingCare) {
-        memIds.push(m.id);
-        influences.push({
-          memoryId: m.id,
-          effect: "REST_INSERT",
-          detail: `${spot.name} を休憩として配置`,
-        });
-      }
-    }
-    return { stay, memIds: [...new Set(memIds)] };
+    const { stay, influences: inf } = stayMinutesForSpot(spot, effects, 50);
+    for (const row of inf) influences.push(row);
+    return { stay, memIds: [...new Set(inf.map((i) => i.memoryId))] };
   }
 
   function makeItem(
@@ -131,6 +116,16 @@ export async function buildPlan(input: {
     }
     const spot = spots[spotId];
     const { memIds } = stayAndMemory(spot);
+    if (effects.revisitSpotIds.has(spotId)) {
+      for (const m of effects.revisitSpotIds.get(spotId) ?? []) {
+        influences.push({
+          memoryId: m.id,
+          effect: "PRIORITY",
+          detail: `${spot.name} を承認済みの再訪希望として優先`,
+        });
+        memIds.push(m.id);
+      }
+    }
     return {
       id: newId("it"),
       spotId,
@@ -140,7 +135,7 @@ export async function buildPlan(input: {
       locked: Boolean(appt),
       lockReason: appt ? "時刻固定" : null,
       matchesPreferenceIds: preferenceMatchIds(spot, input.input.preferences),
-      memoryIds: memIds,
+      memoryIds: [...new Set(memIds)],
       reason: reasonFor(spot, input.input),
       evidenceIds: [...spot.environment.evidenceIds, ...spot.costForTwoJpy.evidenceIds],
     };
@@ -185,14 +180,14 @@ export async function buildPlan(input: {
 
   if (restCare && !items.some((it) => spots[it.spotId]?.restEase.value === "EASY")) {
     influences.push({
-      memoryId: standingCare[0]?.id ?? "unknown",
+      memoryId: effects.preferSeatedRest[0]?.id ?? "unknown",
       effect: "NONE",
       detail: "休憩候補は行程条件を既に満たすか、候補不足で追加していない",
     });
   }
-  if (standingCare.length && influences.length === 0) {
+  if (effects.preferSeatedRest.length && influences.length === 0) {
     influences.push({
-      memoryId: standingCare[0].id,
+      memoryId: effects.preferSeatedRest[0].id,
       effect: "NONE",
       detail: "既に条件を満たしているため変更なし",
     });

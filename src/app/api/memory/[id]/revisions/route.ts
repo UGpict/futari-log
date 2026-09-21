@@ -11,7 +11,7 @@ export async function POST(
   const { id } = await ctx.params;
   const body = await readJson(request, reviseMemoryRequestSchema);
   if ("error" in body) return body.error;
-  const result = await reviseMemory(auth.uid, id, body.data.content);
+  const result = await reviseMemory(auth.uid, id, body.data.content, body.data.expectedVersion);
   if (!result.ok) return json({ error: result.error }, result.status);
   return json(result);
 }

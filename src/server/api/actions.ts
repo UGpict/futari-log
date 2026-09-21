@@ -5,7 +5,7 @@ import {
   type RunKind,
   type ScenarioKind,
 } from "@/domain/schemas";
-import { candidateToMemory } from "@/domain/memory";
+import { candidateToMemory, bindNextDateMemories } from "@/domain/memory";
 import { parseWalkAckScope, hasUnverifiedTravel } from "@/domain/plan/walkLimits";
 import { readMemories, writeMemories } from "@/server/agent/memory";
 import { maskPii } from "@/server/privacy/mask";
@@ -417,15 +417,39 @@ export async function answerQuestion(uid: string, runId: string, questionId: str
       found.run.error = answer;
       return { ok: true as const, restart: false };
     }
+    // 振り返り分析の一問確認: 回答を instruction に残して再開（Worker 非占有）
+    if (found.run.kind === "REFLECTION" && found.run.reflectionId) {
+      found.run.instruction = answer;
+      found.run.status = "PENDING";
+      found.run.waitingQuestion = null;
+      found.run.leaseOwner = null;
+      const reflection = found.couple.reflections[found.run.reflectionId];
+      if (reflection) {
+        reflection.analysisStatus = "PENDING";
+        reflection.updatedAt = realNowIso();
+      }
+      return { ok: true as const, restart: true, sessionId: found.bundle.session.id };
+    }
+    // 旧固定質問フロー互換（reflectionId なしの REFLECTION）
     const reflectionId = newId("ref");
     const masked = maskPii(answer);
     found.couple.reflections[reflectionId] = {
       id: reflectionId,
       sessionId: found.bundle.session.id,
       coupleId: found.couple.couple.id,
+      planVersion: found.bundle.session.currentPlanVersion,
+      dateTokyo: found.bundle.session.input.dateTokyo,
+      title: "",
+      mood: null,
       rawNote: masked.masked,
       maskedNote: masked.masked,
+      visits: [],
+      contentVersion: 1,
+      analysisStatus: "SUCCEEDED",
+      analysisRunId: runId,
+      analysisError: null,
       createdAt: realNowIso(),
+      updatedAt: realNowIso(),
     };
     found.bundle.session.status = "REFLECTED";
     if (answer !== "保存しない" && answer !== "分からない") {
@@ -435,14 +459,26 @@ export async function answerQuestion(uid: string, runId: string, questionId: str
         coupleId: found.couple.couple.id,
         sessionId: found.bundle.session.id,
         reflectionId,
+        reflectionVersion: 1,
         answerId: questionId,
-        subject: "PARTNER",
+        subject: "SELF",
         type: "CARE",
         content: answer,
-        sourceType: "PARTNER_STATEMENT_REPORTED",
+        sourceType: "SELF_REPORT",
         evidenceQuote: masked.masked,
         strength: "SOFT",
         scope: "NEXT_DATE",
+        planDirectives: /立|歩|休憩|座/.test(answer)
+          ? [
+              {
+                kind: "PREFER_SEATED_REST",
+                categories: [],
+                spotId: null,
+                maxStayMinutes: null,
+                walkHardCapMinutes: null,
+              },
+            ]
+          : [],
         createdAt: realNowIso(),
       };
       const approvalId = newId("appr");
@@ -456,6 +492,9 @@ export async function answerQuestion(uid: string, runId: string, questionId: str
         kind: "MEMORY_SAVE",
         status: "PENDING",
         summary: `記憶候補: ${answer}`,
+        targetCandidateId: cid,
+        targetMemoryId: null,
+        expectedVersion: null,
         diff: null,
         consumedAt: null,
         createdAt: realNowIso(),
@@ -503,26 +542,41 @@ export async function decideApproval(uid: string, approvalId: string, decision: 
       return { ok: true as const, approval };
     }
     if (approval.kind === "MEMORY_SAVE" || approval.kind === "MEMORY_EDIT") {
-      approval.status = decision === "APPROVE" ? "CONSUMED" : "REJECTED";
-      approval.consumedAt = realNowIso();
       if (decision === "APPROVE") {
-        const candidate = Object.values(found.couple.memoryCandidates).find(
-          (c) => c.sessionId === approval.sessionId && approval.summary.includes(c.content),
-        );
-        if (candidate && candidate.answerId) {
-          if (approval.kind === "MEMORY_EDIT") {
-            const old = Object.values(found.couple.memories).find((m) => m.content !== candidate.content && m.active);
-            if (old) old.active = false;
+        const candidate = approval.targetCandidateId
+          ? found.couple.memoryCandidates[approval.targetCandidateId]
+          : null;
+        if (!candidate) {
+          return { ok: false as const, status: 404, error: "candidate not found" };
+        }
+        if (approval.kind === "MEMORY_EDIT") {
+          const oldId = approval.targetMemoryId;
+          const old = oldId ? found.couple.memories[oldId] : null;
+          if (!old) return { ok: false as const, status: 404, error: "memory not found" };
+          if (approval.expectedVersion != null && old.version !== approval.expectedVersion) {
+            return { ok: false as const, status: 409, error: "stale memory version" };
           }
+          old.active = false;
           const mem = candidateToMemory({
             candidate,
             approvedAt: realNowIso(),
             targetSessionId: null,
-            supersedes: approval.kind === "MEMORY_EDIT" ? approval.id : null,
+            supersedes: old.id,
+            version: old.version + 1,
+          });
+          // 編集後も同じ mem_ 接頭辞で新 ID。旧は inactive。
+          found.couple.memories[mem.id] = mem;
+        } else {
+          const mem = candidateToMemory({
+            candidate,
+            approvedAt: realNowIso(),
+            targetSessionId: null,
           });
           found.couple.memories[mem.id] = mem;
         }
       }
+      approval.status = decision === "APPROVE" ? "CONSUMED" : "REJECTED";
+      approval.consumedAt = realNowIso();
       return { ok: true as const, approval };
     }
     return { ok: false as const, status: 400, error: "kind" };
@@ -559,6 +613,9 @@ export async function updateProgress(
         };
       }
       found.bundle.session.status = "CONFIRMED";
+      const planForBind = found.bundle.planHistory[String(version)];
+      const usedIds = planForBind?.items.flatMap((it) => it.memoryIds) ?? [];
+      bindNextDateMemories(found.couple.memories, sessionId, usedIds);
     }
     if (body.status) found.bundle.session.status = body.status;
     if (body.location) found.bundle.session.currentLocation = body.location;
@@ -616,17 +673,26 @@ export async function injectScenario(
   });
 }
 
-export async function reviseMemory(uid: string, memoryId: string, content: string) {
+export async function reviseMemory(
+  uid: string,
+  memoryId: string,
+  content: string,
+  expectedVersion: number,
+) {
   const masked = maskPii(content);
   return withMemory(memoryId, (found) => {
     if (!found) return { ok: false as const, status: 404, error: "not found" };
     if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
+    if (found.memory.version !== expectedVersion) {
+      return { ok: false as const, status: 409, error: "stale memory version" };
+    }
     const cid = newId("mc");
     found.couple.memoryCandidates[cid] = {
       id: cid,
       coupleId: found.couple.couple.id,
-      sessionId: found.memory.reflectionId,
+      sessionId: found.memory.targetSessionId ?? `memedit:${found.memory.id}`,
       reflectionId: found.memory.reflectionId,
+      reflectionVersion: found.memory.reflectionVersion ?? 1,
       answerId: found.memory.answerId,
       subject: found.memory.subject,
       type: found.memory.type,
@@ -635,19 +701,23 @@ export async function reviseMemory(uid: string, memoryId: string, content: strin
       evidenceQuote: found.memory.evidenceQuote,
       strength: found.memory.strength,
       scope: found.memory.scope,
+      planDirectives: found.memory.planDirectives ?? [],
       createdAt: realNowIso(),
     };
     const approvalId = newId("appr");
     found.couple.approvals[approvalId] = {
       id: approvalId,
       coupleId: found.couple.couple.id,
-      sessionId: found.memory.reflectionId,
+      sessionId: found.memory.targetSessionId ?? `memedit:${found.memory.id}`,
       runId: "revision",
       planVersionFrom: found.memory.version,
       planVersionTo: found.memory.version + 1,
       kind: "MEMORY_EDIT",
       status: "PENDING",
       summary: `記憶候補: ${masked.masked}`,
+      targetCandidateId: cid,
+      targetMemoryId: found.memory.id,
+      expectedVersion: found.memory.version,
       diff: null,
       consumedAt: null,
       createdAt: realNowIso(),
@@ -729,14 +799,186 @@ export async function listMemory(uid: string, coupleId: string) {
   const couple = await loadCouple(coupleId);
   if (!couple) return { ok: false as const, status: 404, error: "not found" };
   if (couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
+  const pendingByCandidate = new Map(
+    Object.values(couple.approvals)
+      .filter((a) => a.status === "PENDING" && a.targetCandidateId)
+      .map((a) => [a.targetCandidateId!, a.id]),
+  );
   return {
     ok: true as const,
     ...presentMemoryList({
       ok: true,
       memories: Object.values(couple.memories),
-      candidates: Object.values(couple.memoryCandidates),
+      candidates: Object.values(couple.memoryCandidates).map((c) => ({
+        ...c,
+        approvalId: pendingByCandidate.get(c.id) ?? null,
+      })),
     }),
   };
+}
+
+export async function saveReflection(
+  uid: string,
+  sessionId: string,
+  body: {
+    title?: string;
+    note: string;
+    mood?: "happy" | "relaxed" | "tired" | "sad" | null;
+    planVersion?: number | null;
+    visits?: {
+      planItemId: string;
+      spotId: string;
+      visited: boolean;
+      rating?: "good" | "ok" | "bad" | null;
+      note?: string | null;
+    }[];
+    reflectionId?: string;
+    expectedContentVersion?: number;
+  },
+) {
+  const masked = maskPii(body.note);
+  const titleMasked = maskPii(body.title ?? "");
+  let enqueuedRunId: string | null = null;
+  let reflectionIdOut = "";
+  let contentVersionOut = 1;
+
+  const saved = await withSession(sessionId, (found) => {
+    if (!found) return { ok: false as const, status: 404, error: "not found" };
+    if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
+    const now = realNowIso();
+    const planVersion =
+      body.planVersion ?? found.bundle.session.currentPlanVersion ?? null;
+    let reflection = body.reflectionId ? found.couple.reflections[body.reflectionId] : null;
+    if (body.reflectionId && !reflection) {
+      return { ok: false as const, status: 404, error: "reflection not found" };
+    }
+    if (reflection && body.expectedContentVersion != null && reflection.contentVersion !== body.expectedContentVersion) {
+      return { ok: false as const, status: 409, error: "stale reflection version" };
+    }
+    if (reflection && reflection.sessionId !== sessionId) {
+      return { ok: false as const, status: 409, error: "session mismatch" };
+    }
+    const nextVersion = reflection ? reflection.contentVersion + 1 : 1;
+    const id = reflection?.id ?? newId("ref");
+    reflection = {
+      id,
+      sessionId,
+      coupleId: found.couple.couple.id,
+      planVersion,
+      dateTokyo: found.bundle.session.input.dateTokyo,
+      title: titleMasked.masked.slice(0, 60),
+      mood: body.mood ?? null,
+      rawNote: masked.masked,
+      maskedNote: masked.masked,
+      visits: (body.visits ?? []).map((v) => ({
+        planItemId: v.planItemId,
+        spotId: v.spotId,
+        visited: v.visited,
+        rating: v.rating ?? null,
+        note: v.note ? maskPii(v.note).masked : null,
+      })),
+      contentVersion: nextVersion,
+      analysisStatus: "PENDING",
+      analysisRunId: null,
+      analysisError: null,
+      createdAt: reflection?.createdAt ?? now,
+      updatedAt: now,
+    };
+    found.couple.reflections[id] = reflection;
+    if (["DONE", "CONFIRMED", "IN_PROGRESS", "REFLECTED"].includes(found.bundle.session.status)) {
+      found.bundle.session.status = "REFLECTED";
+    }
+    reflectionIdOut = id;
+    contentVersionOut = nextVersion;
+    return { ok: true as const, reflection };
+  });
+
+  if (!saved.ok) return saved;
+
+  const run = await insertPendingRun({
+    uid,
+    sessionId,
+    kind: "REFLECTION",
+    trigger: `reflection:${reflectionIdOut}:v${contentVersionOut}`,
+    reflectionId: reflectionIdOut,
+    reflectionContentVersion: contentVersionOut,
+    idempotencyKey: `reflect:${reflectionIdOut}:v${contentVersionOut}`,
+    bodyHash: sha256(JSON.stringify({ reflectionIdOut, contentVersionOut, note: masked.masked })),
+  });
+  if (run.ok) {
+    enqueuedRunId = run.runId;
+    await withSession(sessionId, (found) => {
+      if (!found) return;
+      const reflection = found.couple.reflections[reflectionIdOut];
+      if (reflection) {
+        reflection.analysisRunId = run.runId;
+        reflection.analysisStatus = "PENDING";
+      }
+      const r = found.bundle.runs[run.runId];
+      if (r) {
+        r.reflectionId = reflectionIdOut;
+        r.reflectionContentVersion = contentVersionOut;
+      }
+    });
+    if (!run.duplicated) {
+      const { kickRun } = await import("@/server/workflows/dispatch");
+      kickRun(run.runId, "REFLECTION");
+    }
+  }
+
+  const reflection = saved.reflection;
+  return {
+    ok: true as const,
+    analysisEnqueued: Boolean(enqueuedRunId),
+    reflection: {
+      id: reflection.id,
+      sessionId: reflection.sessionId,
+      planVersion: reflection.planVersion,
+      dateTokyo: reflection.dateTokyo,
+      title: reflection.title,
+      note: reflection.maskedNote,
+      mood: reflection.mood,
+      visits: reflection.visits,
+      contentVersion: reflection.contentVersion,
+      analysisStatus: reflection.analysisStatus,
+      analysisRunId: enqueuedRunId ?? reflection.analysisRunId,
+      analysisError: reflection.analysisError,
+      createdAt: reflection.createdAt,
+      updatedAt: reflection.updatedAt,
+      waitingQuestion: null,
+    },
+  };
+}
+
+export async function listSessionReflections(uid: string, sessionId: string) {
+  return withSession(sessionId, (found) => {
+    if (!found) return { ok: false as const, status: 404, error: "not found" };
+    if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
+    const reflections = Object.values(found.couple.reflections)
+      .filter((r) => r.sessionId === sessionId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((r) => {
+        const run = r.analysisRunId ? found.bundle.runs[r.analysisRunId] : null;
+        return {
+          id: r.id,
+          sessionId: r.sessionId,
+          planVersion: r.planVersion,
+          dateTokyo: r.dateTokyo,
+          title: r.title,
+          note: r.maskedNote,
+          mood: r.mood,
+          visits: r.visits ?? [],
+          contentVersion: r.contentVersion,
+          analysisStatus: r.analysisStatus,
+          analysisRunId: r.analysisRunId,
+          analysisError: r.analysisError,
+          createdAt: r.createdAt,
+          updatedAt: r.updatedAt,
+          waitingQuestion: run?.status === "WAITING_INPUT" ? run.waitingQuestion : null,
+        };
+      });
+    return { ok: true as const, reflections };
+  });
 }
 
 export async function getReplay(uid: string, replayId: string) {
