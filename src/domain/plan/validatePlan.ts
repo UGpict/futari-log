@@ -217,22 +217,44 @@ export function validatePlan(plan: Plan, ctx: PlanContext): ValidationResult {
 
   const costMaxes: number[] = [];
   let costUnknown = false;
+  let knownSubtotal = 0;
+  let hasKnownPartial = false;
   for (const item of items) {
     const spot = spots[item.spotId];
     if (!spot) continue;
-    if (spot.costForTwoJpy.value == null) {
+    const accounting = spot.costAccounting;
+    const ceiling =
+      accounting && accounting.amountMaxJpy != null && accounting.maxInclusive
+        ? accounting.amountMaxJpy
+        : spot.costForTwoJpy.value?.max ?? null;
+    // 下限のみ・maxInclusive=false は予算上限に使わない。
+    if (ceiling == null) {
       costUnknown = true;
+      const note =
+        accounting?.note ??
+        (spot.placesPriceBand
+          ? `${spot.name} の Places 価格帯は単位不明のため二人料金にできません`
+          : `${spot.name} の二人料金は不明です。予算内とは断定しません`);
       issues.push(
-        issue(
-          "COST_UNKNOWN",
-          "UNKNOWN",
-          `${spot.name} の二人料金は不明です。予算内とは断定しません`,
-          [item.id],
-          spot.costForTwoJpy.evidenceIds,
-        ),
+        issue("COST_UNKNOWN", "UNKNOWN", note, [item.id], spot.costForTwoJpy.evidenceIds),
       );
+      if (accounting?.knownSubtotalJpy != null) {
+        knownSubtotal += accounting.knownSubtotalJpy;
+        hasKnownPartial = true;
+      }
     } else {
-      costMaxes.push(spot.costForTwoJpy.value.max);
+      costMaxes.push(ceiling);
+      if (accounting?.status === "ESTIMATED") {
+        issues.push(
+          issue(
+            "COST_ESTIMATED",
+            "WARNING",
+            `${spot.name} は概算（${accounting.assumptionLabel ?? "仮定あり"}）。上限保証ではありません`,
+            [item.id],
+            spot.costForTwoJpy.evidenceIds,
+          ),
+        );
+      }
     }
   }
   const budgetTotal =
@@ -243,17 +265,37 @@ export function validatePlan(plan: Plan, ctx: PlanContext): ValidationResult {
     input.budget.mealsJpy != null ||
     input.budget.facilitiesJpy != null ||
     input.budget.transitJpy != null;
-  if (hasBudget && !costUnknown && costMaxes.length > 0) {
+  if (hasBudget && budgetTotal > 0) {
     const sumMax = costMaxes.reduce((a, b) => a + b, 0);
-    if (sumMax > budgetTotal && budgetTotal > 0) {
+    // 判明分だけで超過していれば、不明があっても見逃さない。
+    const partialOver = hasKnownPartial && knownSubtotal > budgetTotal;
+    if ((!costUnknown && costMaxes.length > 0 && sumMax > budgetTotal) || partialOver) {
       issues.push(
         issue(
           "OVER_BUDGET",
           "ERROR",
-          `料金上限の合計 ¥${sumMax} が予算 ¥${budgetTotal} を超えます`,
+          partialOver && costUnknown
+            ? `判明分の小計 ¥${knownSubtotal} がすでに予算 ¥${budgetTotal} を超えます（未確認項目あり）`
+            : `料金上限の合計 ¥${sumMax} が予算 ¥${budgetTotal} を超えます`,
         ),
       );
+    } else if (!costUnknown && costMaxes.length > 0 && sumMax <= budgetTotal) {
+      const anyEstimated = items.some((it) => spots[it.spotId]?.costAccounting?.status === "ESTIMATED");
+      if (anyEstimated) {
+        issues.push(
+          issue(
+            "BUDGET_OK_ESTIMATED",
+            "WARNING",
+            `概算では予算内（合計上限 ¥${sumMax} ≤ ¥${budgetTotal}）。必ず予算内とは限りません`,
+          ),
+        );
+      }
     }
+  }
+  if (input.budget.transitJpy == null && hasBudget) {
+    issues.push(
+      issue("TRANSIT_COST_EXCLUDED", "WARNING", "交通費が未設定のため、総額には交通費が含まれていません"),
+    );
   }
 
   for (const appt of input.fixedAppointments) {

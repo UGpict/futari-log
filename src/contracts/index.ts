@@ -10,3 +10,4 @@ export * from "./calendar";
 export * from "./places";
 export * from "./spotKinds";
 export * from "./serviceArea";
+export * from "./price";

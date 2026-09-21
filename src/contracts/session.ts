@@ -1,7 +1,13 @@
 import { z } from "zod";
 import { planningInputSchema } from "./planning";
 
-export const runKindSchema = z.enum(["INITIAL_PLAN", "REPLAN", "REFLECTION", "NEXT_PLAN"]);
+export const runKindSchema = z.enum([
+  "INITIAL_PLAN",
+  "REPLAN",
+  "REFLECTION",
+  "NEXT_PLAN",
+  "PRICE_ENRICH",
+]);
 export type RunKind = z.infer<typeof runKindSchema>;
 
 export const runStatusSchema = z.enum([
@@ -214,6 +220,38 @@ export const spotDtoSchema = z.object({
     value: z.object({ min: z.number(), max: z.number() }).nullable(),
     evidenceIds: z.array(z.string()),
   }),
+  placesPriceBand: z
+    .object({
+      minJpy: z.number().nullable(),
+      maxJpy: z.number().nullable(),
+      maxInclusive: z.boolean(),
+      unitUnknown: z.literal(true),
+      source: z.literal("places.priceRange"),
+    })
+    .nullable()
+    .optional(),
+  costAccounting: z
+    .object({
+      status: z.enum(["CALCULATED", "ESTIMATED", "UNKNOWN"]),
+      assumptionLabel: z.string().nullable(),
+      amountMinJpy: z.number().nullable(),
+      amountMaxJpy: z.number().nullable(),
+      maxInclusive: z.boolean(),
+      breakdown: z.array(
+        z.object({
+          label: z.string(),
+          amountJpy: z.number().nullable(),
+          factId: z.string().nullable(),
+        }),
+      ),
+      sourceUrl: z.string().nullable(),
+      confirmedAt: z.string().nullable(),
+      note: z.string().nullable(),
+      knownSubtotalJpy: z.number().nullable(),
+      unknownLabels: z.array(z.string()),
+    })
+    .nullable()
+    .optional(),
   restEase: z.object({ value: z.string().nullable(), evidenceIds: z.array(z.string()) }).optional(),
   standingBurden: z.object({ value: z.string().nullable(), evidenceIds: z.array(z.string()) }).optional(),
   officialUrl: z.string().nullable(),
