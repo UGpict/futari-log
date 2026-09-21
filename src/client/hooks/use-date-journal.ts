@@ -20,7 +20,10 @@ export type DateMemory = {
   analysisStatus?: string;
   /** 旧1枚形式。読み込み時に stickerDataUrls へ移行する。 */
   stickerDataUrl?: string;
-  /** 端末内で生成した透過ステッカー（最大4枚）。サーバーへは送信しない。 */
+  /**
+   * 写真シール（最大4枚）。実記録は data:image/…（端末切抜き）。
+   * デモ用は /images/demo-stickers/… 。サーバーへは送信しない。
+   */
   stickerDataUrls?: string[];
 };
 

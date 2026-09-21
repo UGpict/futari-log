@@ -4,12 +4,41 @@ import type { DateMemory } from "@/client/hooks/use-date-journal";
 /** Offsets (days before anchor) matching the historical fixture calendar look. */
 const DEMO_OFFSETS_BEFORE_ANCHOR = [18, 13, 7, 3, 2] as const;
 
-const DEMO_TEMPLATES: { title: string; note: string; mood: Mood }[] = [
-  { title: "ゆっくり、公園さんぽ", note: "たくさん笑って、寄り道して。何でもない時間がいちばん。", mood: "happy" },
-  { title: "美術館と、ちょっと歩きすぎた日", note: "展示は楽しかったけど、次は休憩も多めに。", mood: "tired" },
-  { title: "気になっていたカフェへ", note: "ケーキを食べて「また来たい」と言っていた。", mood: "happy" },
-  { title: "いつもの街で、のんびり", note: "予定を詰めずに過ごした、ふたりの休日。", mood: "relaxed" },
-  { title: "雨の日のおでかけ", note: "行きたかったお店はお休み。また一緒に行こうね。", mood: "sad" },
+/**
+ * Pre-baked photo stickers (U2NetP cutouts) under public/images/demo-stickers/.
+ * Regenerated with `npx tsx scripts/bake-demo-photo-stickers.ts`.
+ */
+const DEMO_TEMPLATES: { title: string; note: string; mood: Mood; stickerDataUrls: string[] }[] = [
+  {
+    title: "ゆっくり、公園さんぽ",
+    note: "たくさん笑って、寄り道して。何でもない時間がいちばん。",
+    mood: "happy",
+    stickerDataUrls: ["/images/demo-stickers/park.webp", "/images/demo-stickers/street.webp"],
+  },
+  {
+    title: "美術館と、ちょっと歩きすぎた日",
+    note: "展示は楽しかったけど、次は休憩も多めに。",
+    mood: "tired",
+    stickerDataUrls: ["/images/demo-stickers/museum.webp"],
+  },
+  {
+    title: "気になっていたカフェへ",
+    note: "ケーキを食べて「また来たい」と言っていた。",
+    mood: "happy",
+    stickerDataUrls: ["/images/demo-stickers/cafe.webp", "/images/demo-stickers/street.webp"],
+  },
+  {
+    title: "いつもの街で、のんびり",
+    note: "予定を詰めずに過ごした、ふたりの休日。",
+    mood: "relaxed",
+    stickerDataUrls: ["/images/demo-stickers/street.webp", "/images/demo-stickers/cafe.webp"],
+  },
+  {
+    title: "雨の日のおでかけ",
+    note: "行きたかったお店はお休み。また一緒に行こうね。",
+    mood: "sad",
+    stickerDataUrls: ["/images/demo-stickers/rain.webp"],
+  },
 ];
 
 export type DemoCalendarConfig = {
@@ -46,6 +75,7 @@ export function buildDemoCalendarRecords(anchorDate: string): DateMemory[] {
       title: template.title,
       note: template.note,
       mood: template.mood,
+      stickerDataUrls: template.stickerDataUrls,
       demo: true as const,
     };
   });
