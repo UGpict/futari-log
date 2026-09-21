@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Noto_Sans_JP } from "next/font/google";
+import { AuthGate } from "@/components/auth-gate";
 import "./globals.css";
 
 const notoSansJp = Noto_Sans_JP({
@@ -27,7 +28,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja" className={`${notoSansJp.variable} h-full antialiased`}>
-      <body className="min-h-full font-sans">{children}</body>
+      <body className="min-h-full font-sans"><AuthGate>{children}</AuthGate></body>
     </html>
   );
 }

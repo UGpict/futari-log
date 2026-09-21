@@ -7,10 +7,11 @@
 .menu { position: absolute; z-index: 30; top: calc(100% + 9px); right: 0; width: 220px; padding: 10px; border: 1px solid #eadde5; border-radius: 17px; background: #fff; box-shadow: 0 14px 38px #50344226; }
 .menu::before { content: ''; position: absolute; top: -6px; right: 17px; width: 11px; height: 11px; border-top: 1px solid #eadde5; border-left: 1px solid #eadde5; background: #fff; transform: rotate(45deg); }
 .menu > strong { display: block; padding: 3px 7px 8px; color: #75616e; font-size: 10px; }
-.resetButton,.menuLink { display: flex; width: 100%; min-height: 47px; align-items: center; gap: 9px; padding: 8px 9px; border: 0; border-radius: 11px; background: transparent; color: #6f5b68; font: inherit; text-align: left; text-decoration: none; }
+.resetButton,.menuLink,.logoutLink { display: flex; width: 100%; min-height: 47px; align-items: center; gap: 9px; padding: 8px 9px; border: 0; border-radius: 11px; background: transparent; color: #6f5b68; font: inherit; text-align: left; text-decoration: none; }
 .resetButton { color: #a34f6c; }
-.resetButton:hover,.menuLink:hover { background: #fbf1f5; }
-.resetButton svg,.menuLink svg { flex: 0 0 auto; width: 16px; height: 16px; }
-.resetButton > span,.menuLink > span { display: flex; flex-direction: column; font-size: 11px; font-weight: 700; }
+.logoutLink { margin-top: 4px; border-top: 1px solid #f0e5eb; border-radius: 0 0 11px 11px; color: var(--text-danger); }
+.resetButton:hover,.menuLink:hover,.logoutLink:hover { background: #fbf1f5; }
+.resetButton svg,.menuLink svg,.logoutLink svg { flex: 0 0 auto; width: 16px; height: 16px; }
+.resetButton > span,.menuLink > span,.logoutLink > span { display: flex; flex-direction: column; font-size: 11px; font-weight: 700; }
 .resetButton small { margin-top: 2px; color: #a7929e; font-size: 8px; font-weight: 500; }
 @media (prefers-reduced-motion: reduce) { .button { transition: none; } }

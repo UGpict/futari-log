@@ -7,7 +7,7 @@ import { Button, IconButton } from "@/components/button";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, ChevronLeft, ChevronRight, NotebookPen, CalendarHeart, MapPin } from "lucide-react";
+import { ArrowRight, Check, ChevronLeft, ChevronRight, NotebookPen, CalendarHeart, LogOut, MapPin } from "lucide-react";
 import { useCalendarPlans } from "@/client/hooks/use-calendar-plans";
 import { useMe } from "@/client/hooks/use-me";
 import { useDateJournal, type DateMemory } from "@/client/hooks/use-date-journal";
@@ -250,6 +250,7 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
             <div className={styles.headerActions}>
               <DevelopmentLink onResetToday={() => { remove(today); setSelectedDate(null); setReflecting(false); setNotice("今日の記録を削除しました"); }} />
               <IconButton type="button" label="ふたりの記憶を開く" onClick={() => setPanel("memory")}><NotebookPen size={23} /></IconButton>
+              <IconButton type="button" label="ログアウト" onClick={() => router.push("/auth/logout")}><LogOut size={21} /></IconButton>
             </div>
           </div>
         </header>
