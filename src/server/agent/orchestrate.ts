@@ -1,5 +1,10 @@
 import { LIMITS } from "@/config/settings";
 import { getEnv } from "@/config/env";
+import {
+  AI_HACK_VENUE,
+  isAiHackCompanionSpotId,
+  sessionUsesAiHackVenue,
+} from "@/config/demo-ai-hack";
 import { loadSelectedEventSpots } from "@/server/catalog/planAttach";
 import { suggestCatalogEventsForPlan } from "@/server/catalog/suggest";
 import type { Memory, Plan, Run, Session, Spot } from "@/domain/schemas";
@@ -307,6 +312,14 @@ export async function orchestratePlanning(input: {
       : undefined;
 
   const scoutPoolSpots = [...scout.walk, ...exhibit, ...scout.sweets, ...scout.other];
+  if (sessionUsesAiHackVenue(input.session.input)) {
+    for (const id of AI_HACK_VENUE.companionSpotIds) {
+      const spot = getCatalogSpot(id);
+      if (!spot) continue;
+      if (!scout.other.some((row) => row.id === id)) scout.other.push(spot);
+      if (!scoutPoolSpots.some((row) => row.id === id)) scoutPoolSpots.push(spot);
+    }
+  }
   const lockedSpots = lockedIds
     .map(
       (id) =>
@@ -337,9 +350,12 @@ export async function orchestratePlanning(input: {
     endTime: input.session.input.endTime,
     avoidIds,
     instruction: input.run.instruction,
+    allowDemoCatalogOnLive: sessionUsesAiHackVenue(input.session.input),
   });
   if (env.runtime === "LIVE") {
-    planned.selected = planned.selected.filter((id) => !id.startsWith("mock:"));
+    planned.selected = planned.selected.filter(
+      (id) => !id.startsWith("mock:") || isAiHackCompanionSpotId(id),
+    );
   }
   if (planned.overflowMust.length) {
     const labels = planned.overflowMust.map((pref) => pref.content).join("、");
@@ -422,7 +438,7 @@ export async function orchestratePlanning(input: {
         startTime: input.session.input.startTime,
         endTime: input.session.input.endTime,
       });
-      if (!replacement || (env.runtime === "LIVE" && replacement.startsWith("mock:"))) {
+      if (!replacement || (env.runtime === "LIVE" && replacement.startsWith("mock:") && !isAiHackCompanionSpotId(replacement))) {
         return {
           waitingQuestion: replanNoChangeQuestion(),
           built: null,

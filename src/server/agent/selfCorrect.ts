@@ -8,6 +8,7 @@ import {
   type ProviderCtx,
   type SpotOpeningHours,
 } from "@/server/providers";
+import { isAiHackCompanionSpotId } from "@/config/demo-ai-hack";
 import { getCatalogSpot } from "@/server/providers/catalog";
 
 export type VisitWindow = { startAt: string; endAt: string };
@@ -82,7 +83,8 @@ export async function refillOpenSpotIds(input: {
   const ids = input.orderedSpotIds.filter(
     (id) =>
       input.protectedSpotIds.has(id) ||
-      (!input.closedSpotIds.has(id) && !(input.liveOnly && id.startsWith("mock:"))),
+      (!input.closedSpotIds.has(id) &&
+        !(input.liveOnly && id.startsWith("mock:") && !isAiHackCompanionSpotId(id))),
   );
   let lookups = 0;
   let closedWindows = [...(input.closedItemWindows ?? [])];
@@ -93,7 +95,7 @@ export async function refillOpenSpotIds(input: {
     if (ids.includes(spot.id) || input.closedSpotIds.has(spot.id) || input.protectedSpotIds.has(spot.id)) {
       continue;
     }
-    if (input.liveOnly && spot.id.startsWith("mock:")) continue;
+    if (input.liveOnly && spot.id.startsWith("mock:") && !isAiHackCompanionSpotId(spot.id)) continue;
     if (input.rain && spot.environment.value === "OUTDOOR") continue;
 
     const window = estimateVisitWindow({
@@ -134,14 +136,15 @@ export function refillWithoutOpenCheck(input: {
   const ids = input.orderedSpotIds.filter(
     (id) =>
       input.protectedSpotIds.has(id) ||
-      (!input.closedSpotIds.has(id) && !(input.liveOnly && id.startsWith("mock:"))),
+      (!input.closedSpotIds.has(id) &&
+        !(input.liveOnly && id.startsWith("mock:") && !isAiHackCompanionSpotId(id))),
   );
   for (const spot of input.pool) {
     if (ids.length >= input.targetCount) break;
     if (ids.includes(spot.id) || input.closedSpotIds.has(spot.id) || input.protectedSpotIds.has(spot.id)) {
       continue;
     }
-    if (input.liveOnly && spot.id.startsWith("mock:")) continue;
+    if (input.liveOnly && spot.id.startsWith("mock:") && !isAiHackCompanionSpotId(spot.id)) continue;
     if (input.rain && spot.environment.value === "OUTDOOR") continue;
     ids.push(spot.id);
   }
