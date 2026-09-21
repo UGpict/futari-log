@@ -395,17 +395,59 @@ export function HomeScreen({ demoCalendar }: { demoCalendar?: DemoCalendarConfig
             event.preventDefault();
             carousel.scrollLeft += event.deltaY;
           }}>
-            {nearbySampleEvents.map((event) => <button type="button" key={event.id} className={styles.eventBanner} data-theme={event.theme} data-demo="true" onClick={() => openPlan(today, { seed: event.id })} aria-label={`サンプル。${event.title}、${event.dateLabel}、${event.area}。この雰囲気でプランをつくる`}>
-              <span className={styles.eventArtwork} aria-hidden="true"><span className={styles.eventShade} /></span>
-              <span className={styles.eventDetails}>
-                <span className={styles.eventMeta}><span className={styles.eventDemoBadge}>サンプル</span><span>{event.dateLabel}</span><span><MapPin size={10} />{event.area}</span>{event.sponsored && <span>PR</span>}</span>
-                <span className={styles.eventCopy}><strong>{event.title}</strong><span>{event.kicker}</span></span>
-                <span className={styles.eventAction}>この雰囲気でプランをつくる <ArrowRight size={14} /></span>
-              </span>
-            </button>)}
+            {nearbySampleEvents.map((event) => {
+              const meta = (
+                <span className={styles.eventMeta}>
+                  <span className={styles.eventDemoBadge}>サンプル</span>
+                  <span>{event.dateLabel}</span>
+                  <span><MapPin size={10} />{event.area}</span>
+                  {event.sponsored && <span>PR</span>}
+                </span>
+              );
+              const body = (
+                <>
+                  <span className={styles.eventArtwork} aria-hidden="true"><span className={styles.eventShade} /></span>
+                  <span className={styles.eventDetails}>
+                    {meta}
+                    <span className={styles.eventCopy}><strong>{event.title}</strong><span>{event.kicker}</span></span>
+                    {event.opensPlan ? (
+                      <span className={styles.eventAction}>この雰囲気でプランをつくる <ArrowRight size={14} /></span>
+                    ) : (
+                      <span className={styles.eventActionMuted}>イメージ展示（プランには進めません）</span>
+                    )}
+                  </span>
+                </>
+              );
+              if (event.opensPlan) {
+                return (
+                  <button
+                    type="button"
+                    key={event.id}
+                    className={styles.eventBanner}
+                    data-theme={event.theme}
+                    data-demo="true"
+                    onClick={() => openPlan(today, { seed: event.id })}
+                    aria-label={`サンプル。${event.title}、${event.dateLabel}、${event.area}。この雰囲気でプランをつくる`}
+                  >
+                    {body}
+                  </button>
+                );
+              }
+              return (
+                <article
+                  key={event.id}
+                  className={`${styles.eventBanner} ${styles.eventBannerStatic}`}
+                  data-theme={event.theme}
+                  data-demo="true"
+                  aria-label={`サンプル（表示のみ）。${event.title}、${event.dateLabel}、${event.area}`}
+                >
+                  {body}
+                </article>
+              );
+            })}
           </div>
           <button type="button" className={`${styles.carouselButton} ${styles.carouselNext}`} aria-label="次のイベントを見る" disabled={!eventScroll.right} onClick={() => scrollEvents(1)}><ChevronRight aria-hidden="true" /></button>
-          <p className={styles.eventDisclosure}>大会用のサンプル表示です。イベント名・開催期間はプランの実データには使いません。行程は実在スポットから作ります。</p>
+          <p className={styles.eventDisclosure}>大会用のサンプル表示です。AI HACK 以外はイメージ展示のみで、プランには進めません。イベント名・開催期間はプランの実データには使いません。</p>
         </section>
       </main>
       <div className={styles.createDateFab} data-over-events={eventsBehindCreateButton}><DateCreateButton onClick={() => openPlan()} /></div>

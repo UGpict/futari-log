@@ -110,6 +110,12 @@ describe("Routes parsing", () => {
     });
   });
 
+  it("does not use demo catalog ids as Place ID", () => {
+    assert.deepEqual(waypointFromPoint({ lat: 35.7, lng: 139.76, spotId: "demo:tomoshibi-surugadai" }), {
+      location: { latLng: { latitude: 35.7, longitude: 139.76 } },
+    });
+  });
+
   it("bumps a present-or-past timestamp at least 60s into the future", () => {
     const now = Date.parse("2026-09-20T08:55:49.308Z");
     assert.equal(futureDepartureIso("2026-09-20T08:55:49.308Z", now), "2026-09-20T08:56:49.308Z");

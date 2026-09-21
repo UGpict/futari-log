@@ -208,7 +208,7 @@ export async function getSpotDetails(
     cacheSet(ctx, key, result);
     return result;
   }
-  if (env.runtime === "LIVE" && env.googleMapsApiKey && !args.spotId.startsWith("mock:")) {
+  if (env.runtime === "LIVE" && env.googleMapsApiKey && !args.spotId.startsWith("mock:") && !args.spotId.startsWith("demo:")) {
     const result = await counted(ctx, "places", () => liveDetails(ctx, env.googleMapsApiKey!, args.spotId));
     cacheSet(ctx, key, result);
     return result;

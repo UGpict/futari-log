@@ -23,12 +23,14 @@ import { jobsMissingCoverage, mergeScoutBuckets, runScout, scoutPool } from "./s
 import { scoutJobsForPreferences } from "./scoutJobs";
 import { refillOpenSpotIds, SELF_CORRECT_REFILL_LOOKUPS } from "./selfCorrect";
 import {
+  areaPointFromFixedNameHint,
   assessTokyoPlan,
   companionScoutJobs,
   outsideTokyoQuestion,
   searchRadiiFor,
   searchRangeQuestion,
   tokyoUnconfirmedQuestion,
+  type AreaPoint,
 } from "@/contracts/serviceArea";
 import { noteTravelPass } from "./travel";
 import type { AgentLog, AgentMemories } from "./types";
@@ -86,6 +88,20 @@ export async function orchestratePlanning(input: {
     name: input.session.input.areaName,
   };
   if (!input.session.input.tokyoAreaAcknowledged) {
+    const fixedAreaPoints: AreaPoint[] = [];
+    for (const item of input.session.input.fixedAppointments) {
+      // Prefer catalog / demo spot coords so event labels like "AI HACK 2026" are not geo-unknown.
+      if (item.spotId) {
+        const spot = getCatalogSpot(item.spotId);
+        if (spot) {
+          fixedAreaPoints.push({ name: spot.name, lat: spot.lat, lng: spot.lng });
+          continue;
+        }
+      }
+      const hint = item.spotNameHint ?? item.label;
+      const named = hint ? areaPointFromFixedNameHint(hint) : null;
+      if (named) fixedAreaPoints.push(named);
+    }
     const areaCheck = assessTokyoPlan([
       {
         name: input.session.input.meet.name,
@@ -99,13 +115,7 @@ export async function orchestratePlanning(input: {
         lng: input.session.input.end.lng,
         address: input.session.input.end.address,
       },
-      ...input.session.input.fixedAppointments
-        .filter((item) => item.spotNameHint)
-        .map((item) => ({
-          name: item.spotNameHint ?? item.label,
-          lat: Number.NaN,
-          lng: Number.NaN,
-        })),
+      ...fixedAreaPoints,
     ]);
     if (areaCheck.verdict === "outside") {
       return {

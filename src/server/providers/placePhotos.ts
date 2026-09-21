@@ -271,7 +271,7 @@ export async function hydratePlacePhotos(
   if (!apiKey) return { spots: next, evidence };
 
   const targets = Object.values(next)
-    .filter((s) => !s.imageUrl && !s.id.startsWith("mock:"))
+    .filter((s) => !s.imageUrl && !s.id.startsWith("mock:") && !s.id.startsWith("demo:"))
     .slice(0, 6);
 
   for (const spot of targets) {

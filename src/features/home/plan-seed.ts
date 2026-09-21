@@ -6,7 +6,7 @@ import { AI_HACK_VENUE } from "@/config/demo-ai-hack";
  * URL の `seed=` を PlanForm 初期値へ。未知のキーは無視（undefined）。
  * - home-suggestion: 清澄白河駅 + 15:00–21:00
  * - sample:ai-hack: 燈オフィス + 10:00–16:00 固定 + 21:00 まで飲み屋
- * - sample:*: sample-events の集合場所と希望文（日付は渡さない）
+ * - その他 sample:*: opensPlan=false の表示専用はシードしない
  */
 export function resolvePlanFormSeed(seedKey: string | null | undefined): PlanFormSeed | undefined {
   if (!seedKey) return undefined;
@@ -33,7 +33,7 @@ export function resolvePlanFormSeed(seedKey: string | null | undefined): PlanFor
     };
   }
   const sample = nearbySampleEvents.find((event) => event.id === seedKey);
-  if (!sample) return undefined;
+  if (!sample?.opensPlan) return undefined;
   return {
     wish: sample.planWish,
     meet: sample.meet,
