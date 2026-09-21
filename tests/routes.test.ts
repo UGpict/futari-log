@@ -63,16 +63,19 @@ describe("Routes request shape", () => {
     assert.equal(departure?.adjusted, false);
   });
 
-  it("keeps a past departureTime for TRANSIT", () => {
-    const { body } = buildComputeRoutesBody({
+  it("bumps a past departureTime for TRANSIT like DRIVE", () => {
+    const now = Date.parse("2026-09-20T08:00:00.000Z");
+    const { body, departure } = buildComputeRoutesBody({
       from: { lat: 35.68, lng: 139.76 },
       to: { lat: 35.69, lng: 139.70 },
       mode: "TRANSIT",
       departureAt: "2026-09-20T04:00:00.000Z",
-      nowMs: Date.parse("2026-09-20T08:00:00.000Z"),
+      nowMs: now,
     });
     assert.equal(body.travelMode, "TRANSIT");
-    assert.equal(body.departureTime, "2026-09-20T04:00:00.000Z");
+    assert.equal(body.departureTime, "2026-09-20T08:01:00.000Z");
+    assert.equal(departure?.adjusted, true);
+    assert.equal(departure?.reason, "PAST");
     assert.equal("routingPreference" in body, false);
   });
 });
@@ -93,7 +96,12 @@ describe("Routes parsing", () => {
     );
     assert.equal(classifyRoutesFailure(403, { error: { status: "PERMISSION_DENIED", message: "API key not allowed" } }).failure, "PERMISSION");
     assert.equal(classifyRoutesFailure(429, { error: { status: "RESOURCE_EXHAUSTED", message: "quota" } }).failure, "QUOTA");
-    assert.equal(classifyRoutesFailure(400, { error: { status: "INVALID_ARGUMENT", message: "Timestamp must be set to a future time." } }).failure, "INVALID");
+    const invalid = classifyRoutesFailure(400, { error: { status: "INVALID_ARGUMENT", message: "Timestamp must be set to a future time." } });
+    assert.equal(invalid.failure, "INVALID");
+    assert.match(invalid.note, /不正リクエスト/);
+    assert.match(invalid.note, /Timestamp must be set/);
+    const server = classifyRoutesFailure(502, { error: { status: "UNAVAILABLE", message: "backend" } });
+    assert.match(server.note, /不正レスポンス/);
   });
 
   it("does not use mock ids as Place ID", () => {

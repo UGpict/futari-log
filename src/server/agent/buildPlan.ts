@@ -8,7 +8,9 @@ import type {
   PlanningInput,
   Spot,
   TravelLeg,
+  TravelMode,
 } from "@/domain/schemas";
+import { WALK_LIMITS } from "@/config/settings";
 import { explainWishMatches } from "@/contracts/spotKinds";
 import { preferenceMatchIds, validatePlan } from "@/domain/plan/validatePlan";
 import { newId } from "@/lib/ids";
@@ -21,6 +23,7 @@ import {
 } from "@/server/providers";
 import { getCatalogSpot } from "@/server/providers/catalog";
 import { hydratePlacePhotos } from "@/server/providers/placePhotos";
+import type { RouteEstimate } from "@/server/providers/routes";
 
 function fact<T>(value: T | null, evidenceIds: string[] = []) {
   return { value, evidenceIds };
@@ -226,22 +229,73 @@ export async function buildPlan(input: {
     to: { lat: number; lng: number; spotId: string | null; kind: TravelLeg["to"] },
     departureAt: string,
   ): Promise<TravelLeg> {
-    const t = await estimateTravel(input.ctx, {
-      from,
-      to,
-      mode,
-      departureAt,
-    });
-    evidence.push(t.evidence);
     const label =
       from.kind === "MEET"
         ? `集合→${to.spotId ? spots[to.spotId]?.name ?? "最初" : "最初"}`
         : to.kind === "END"
           ? `${from.spotId ? spots[from.spotId]?.name ?? "最後" : "最後"}→解散`
           : `${from.spotId ? spots[from.spotId]?.name ?? "区間" : "区間"}→${to.spotId ? spots[to.spotId]?.name ?? "次" : "次"}`;
-    if (t.durationMinutes == null) {
-      travelNotes.push(`${label}: 未検証（${t.evidence.note ?? "Routes 失敗"}）`);
+
+    const pointFrom = { lat: from.lat, lng: from.lng, spotId: from.spotId };
+    const pointTo = { lat: to.lat, lng: to.lng, spotId: to.spotId };
+
+    let adoptedMode: TravelMode = mode;
+    let t: RouteEstimate & { delayMinutes: number };
+
+    if (mode === "TRANSIT") {
+      // 「公共交通を使う」= 徒歩＋公共交通。近距離は実WALK、長距離はTRANSIT。
+      // 直線距離や固定分では代用しない。TRANSIT失敗時に長距離徒歩を無断採用しない。
+      const walk = await estimateTravel(input.ctx, {
+        from: pointFrom,
+        to: pointTo,
+        mode: "WALK",
+        departureAt,
+      });
+      if (walk.durationMinutes != null && walk.durationMinutes <= WALK_LIMITS.legMinutes) {
+        adoptedMode = "WALK";
+        t = walk;
+        travelNotes.push(`${label}: 徒歩 ${walk.durationMinutes}分（近距離のため徒歩を採用）`);
+      } else {
+        const transit = await estimateTravel(input.ctx, {
+          from: pointFrom,
+          to: pointTo,
+          mode: "TRANSIT",
+          departureAt,
+        });
+        adoptedMode = "TRANSIT";
+        if (transit.durationMinutes != null) {
+          t = transit;
+          const walkHint =
+            walk.durationMinutes != null
+              ? `（徒歩なら ${walk.durationMinutes}分で上限超過のため公共交通）`
+              : "";
+          travelNotes.push(`${label}: 公共交通 ${transit.durationMinutes}分${walkHint}`);
+        } else {
+          t = transit;
+          const walkHint =
+            walk.durationMinutes != null
+              ? `徒歩なら ${walk.durationMinutes}分だが上限超過のため公共交通を試した。長距離徒歩は採用しない。`
+              : "徒歩経路も未取得。";
+          travelNotes.push(`${label}: 未検証（${walkHint}${transit.evidence.note ?? "Routes 失敗"}）`);
+          if (walk.durationMinutes != null) {
+            // Keep walk evidence for diagnostics; transit is the authoritative failure.
+            evidence.push(walk.evidence);
+          }
+        }
+      }
+    } else {
+      t = await estimateTravel(input.ctx, {
+        from: pointFrom,
+        to: pointTo,
+        mode,
+        departureAt,
+      });
+      if (t.durationMinutes == null) {
+        travelNotes.push(`${label}: 未検証（${t.evidence.note ?? "Routes 失敗"}）`);
+      }
     }
+
+    evidence.push(t.evidence);
     if (t.departureAdjusted && t.requestedDepartureAt && t.effectiveDepartureAt) {
       travelNotes.push(
         `${label}: 予定出発 ${t.requestedDepartureAt} → 実リクエスト ${t.effectiveDepartureAt}（過去・直近のみ補正。未来の予定は置き換えていない）`,
@@ -253,7 +307,7 @@ export async function buildPlan(input: {
       fromSpotId: from.spotId,
       to: to.kind,
       toSpotId: to.spotId,
-      mode,
+      mode: adoptedMode,
       departureAt,
       durationMinutes: fact(t.durationMinutes, [t.evidence.id]),
       distanceMeters: fact(t.distanceMeters, [t.evidence.id]),

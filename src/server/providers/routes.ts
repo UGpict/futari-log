@@ -22,6 +22,18 @@ export type DepartureAdjustment = {
   reason: "PAST" | "TOO_SOON" | "INVALID" | null;
 };
 
+export type RouteAttempt = {
+  via: "placeId" | "latLng";
+  mode: TravelMode;
+  departureAt: string | null;
+  httpStatus: number | null;
+  googleStatus: string | null;
+  googleMessage: string | null;
+  routeCount: number;
+  failure: RouteFailure | null;
+  durationMinutes: number | null;
+};
+
 export type RouteEstimate = {
   durationMinutes: number | null;
   distanceMeters: number | null;
@@ -33,6 +45,7 @@ export type RouteEstimate = {
   requestedDepartureAt: string | null;
   effectiveDepartureAt: string | null;
   departureAdjusted: boolean;
+  attempts: RouteAttempt[];
 };
 
 export type ComputeRoutesBody = {
@@ -49,7 +62,7 @@ export function travelBufferMinutes(mode: TravelMode): number {
   return TRAVEL_BUFFER_MINUTES[mode];
 }
 
-/** 車のみ。予定出発が未来ならそのまま。過去・直近だけ実リクエストを現在+60秒へ補正する */
+/** 車・公共交通。予定出発が未来ならそのまま。過去・直近だけ実リクエストを現在+60秒へ補正する */
 export function scheduleDriveDeparture(requested: string, nowMs = Date.now()): DepartureAdjustment {
   const minFuture = nowMs + 60_000;
   const at = new Date(requested).getTime();
@@ -123,18 +136,10 @@ export function buildComputeRoutesBody(args: {
     body.departureTime = departure.effectiveDepartureAt;
     return { body, departure };
   }
-  const at = new Date(args.departureAt).getTime();
-  const requested = Number.isFinite(at) ? new Date(at).toISOString() : args.departureAt;
-  body.departureTime = Number.isFinite(at) ? requested : futureDepartureIso(args.departureAt, args.nowMs);
-  return {
-    body,
-    departure: {
-      requestedDepartureAt: requested,
-      effectiveDepartureAt: body.departureTime,
-      adjusted: body.departureTime !== requested,
-      reason: body.departureTime !== requested ? "INVALID" : null,
-    },
-  };
+  // TRANSIT: past/too-soon departure often yields empty routes; bump like DRIVE.
+  const departure = scheduleDriveDeparture(args.departureAt, args.nowMs);
+  body.departureTime = departure.effectiveDepartureAt;
+  return { body, departure };
 }
 
 export function parseDurationSeconds(raw: unknown): number | null {
@@ -151,6 +156,12 @@ export function parseDurationSeconds(raw: unknown): number | null {
   return null;
 }
 
+function clipMessage(msg: string, max = 160): string {
+  const cleaned = msg.replace(/\s+/g, " ").trim();
+  if (cleaned.length <= max) return cleaned;
+  return `${cleaned.slice(0, max)}…`;
+}
+
 export function classifyRoutesFailure(
   httpStatus: number,
   body: { error?: { status?: string; message?: string } },
@@ -158,22 +169,44 @@ export function classifyRoutesFailure(
   const gStatus = body.error?.status ?? "";
   const msg = body.error?.message ?? "";
   const combined = `${gStatus} ${msg}`;
+  const detail = [gStatus || null, msg ? clipMessage(msg) : null].filter(Boolean).join(": ");
   if (httpStatus === 429 || gStatus === "RESOURCE_EXHAUSTED" || /quota/i.test(combined)) {
-    return { failure: "QUOTA", note: `Routes 利用上限 (${httpStatus})。直線距離では代用しない` };
+    return {
+      failure: "QUOTA",
+      note: `Routes 利用上限 (HTTP ${httpStatus}${detail ? `, ${detail}` : ""})。直線距離では代用しない`,
+    };
   }
   if (httpStatus === 403 || gStatus === "PERMISSION_DENIED") {
     if (/has not been used|is disabled|SERVICE_DISABLED/i.test(msg)) {
       return { failure: "API_DISABLED", note: "Routes API が未有効。直線距離では代用しない" };
     }
-    return { failure: "PERMISSION", note: `Routes 権限不足 (${httpStatus})。直線距離では代用しない` };
+    return {
+      failure: "PERMISSION",
+      note: `Routes 権限不足 (HTTP ${httpStatus}${detail ? `, ${detail}` : ""})。直線距離では代用しない`,
+    };
   }
   if (httpStatus === 404 || gStatus === "NOT_FOUND") {
-    return { failure: "NO_ROUTE", note: "Routes 経路なし（地点が見つからない）。直線距離では代用しない" };
+    return {
+      failure: "NO_ROUTE",
+      note: `Routes 経路なし（地点が見つからない。HTTP ${httpStatus}${detail ? `, ${detail}` : ""}）。直線距離では代用しない`,
+    };
   }
   if (httpStatus === 400 || gStatus === "INVALID_ARGUMENT") {
-    return { failure: "INVALID", note: `Routes 不正レスポンス (${httpStatus})。直線距離では代用しない` };
+    return {
+      failure: "INVALID",
+      note: `Routes 不正リクエスト (HTTP ${httpStatus}${detail ? `, ${detail}` : ""})。直線距離では代用しない`,
+    };
   }
-  return { failure: "INVALID", note: `Routes 失敗 (${httpStatus})。直線距離では代用しない` };
+  if (httpStatus >= 500) {
+    return {
+      failure: "INVALID",
+      note: `Routes 不正レスポンス (HTTP ${httpStatus}${detail ? `, ${detail}` : ""})。直線距離では代用しない`,
+    };
+  }
+  return {
+    failure: "INVALID",
+    note: `Routes 失敗 (HTTP ${httpStatus}${detail ? `, ${detail}` : ""})。直線距離では代用しない`,
+  };
 }
 
 function evidenceOf(partial: Omit<Evidence, "id">): Evidence {
@@ -191,12 +224,34 @@ function departureFields(departure: DepartureAdjustment | null): Pick<
   };
 }
 
+function formatAttempts(attempts: RouteAttempt[]): string {
+  if (!attempts.length) return "";
+  return attempts
+    .map((a, i) => {
+      const parts = [
+        `#${i + 1}`,
+        a.via,
+        `mode=${a.mode}`,
+        a.httpStatus != null ? `HTTP ${a.httpStatus}` : "HTTP —",
+        a.googleStatus ? `status=${a.googleStatus}` : null,
+        a.googleMessage ? `msg=${clipMessage(a.googleMessage, 80)}` : null,
+        `routes=${a.routeCount}`,
+        a.failure ? `fail=${a.failure}` : "ok",
+        a.durationMinutes != null ? `${a.durationMinutes}分` : null,
+      ].filter(Boolean);
+      return parts.join(" ");
+    })
+    .join(" / ");
+}
+
 function unknownEstimate(args: {
   failure: RouteFailure;
   note: string;
   bufferMinutes: number;
   departure: DepartureAdjustment | null;
+  attempts: RouteAttempt[];
 }): RouteEstimate {
+  const attemptNote = formatAttempts(args.attempts);
   return {
     durationMinutes: null,
     distanceMeters: null,
@@ -204,6 +259,7 @@ function unknownEstimate(args: {
     kind: "UNKNOWN",
     failure: args.failure,
     cached: false,
+    attempts: args.attempts,
     ...departureFields(args.departure),
     evidence: evidenceOf({
       kind: "UNKNOWN",
@@ -212,15 +268,27 @@ function unknownEstimate(args: {
       sourceField: "duration",
       fetchedAt: realNowIso(),
       validFor: null,
-      note: args.note,
+      note: attemptNote ? `${args.note}［試行: ${attemptNote}］` : args.note,
     }),
   };
 }
 
 function departureNote(departure: DepartureAdjustment | null): string {
   if (!departure?.adjusted) return "";
-  const why = departure.reason === "PAST" ? "過去のため" : departure.reason === "TOO_SOON" ? "直近のため" : "不正な時刻のため";
+  const why =
+    departure.reason === "PAST"
+      ? "過去のため"
+      : departure.reason === "TOO_SOON"
+        ? "直近のため"
+        : "不正な時刻のため";
   return ` 出発 ${departure.requestedDepartureAt} → 実リクエスト ${departure.effectiveDepartureAt}（${why}補正）`;
+}
+
+function attemptVia(from: RoutePoint, to: RoutePoint): "placeId" | "latLng" {
+  const usedPlace =
+    Boolean(from.spotId && !from.spotId.startsWith("mock:")) ||
+    Boolean(to.spotId && !to.spotId.startsWith("mock:"));
+  return usedPlace ? "placeId" : "latLng";
 }
 
 export async function computeLiveRoute(args: {
@@ -231,7 +299,10 @@ export async function computeLiveRoute(args: {
   departureAt: string;
 }): Promise<RouteEstimate> {
   const bufferMinutes = travelBufferMinutes(args.mode);
+  const attempts: RouteAttempt[] = [];
+
   const attempt = async (from: RoutePoint, to: RoutePoint): Promise<RouteEstimate> => {
+    const via = attemptVia(from, to);
     const built = buildComputeRoutesBody({ from, to, mode: args.mode, departureAt: args.departureAt });
     let res: Response;
     try {
@@ -247,11 +318,26 @@ export async function computeLiveRoute(args: {
       });
     } catch (error) {
       const timeout = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+      const failure: RouteFailure = timeout ? "TIMEOUT" : "NETWORK";
+      attempts.push({
+        via,
+        mode: args.mode,
+        departureAt: built.departure?.effectiveDepartureAt ?? null,
+        httpStatus: null,
+        googleStatus: null,
+        googleMessage: null,
+        routeCount: 0,
+        failure,
+        durationMinutes: null,
+      });
       return unknownEstimate({
-        failure: timeout ? "TIMEOUT" : "NETWORK",
-        note: timeout ? "Routes タイムアウト。直線距離では代用しない" : "Routes に届かない。直線距離では代用しない",
+        failure,
+        note: timeout
+          ? "Routes タイムアウト。直線距離では代用しない"
+          : "Routes に届かない。直線距離では代用しない",
         bufferMinutes,
         departure: built.departure,
+        attempts,
       });
     }
     const text = await res.text().catch(() => "");
@@ -264,22 +350,64 @@ export async function computeLiveRoute(args: {
     } catch {
       json = {};
     }
+    const googleStatus = json.error?.status ?? null;
+    const googleMessage = json.error?.message ?? null;
+    const routeCount = Array.isArray(json.routes) ? json.routes.length : 0;
+
     if (!res.ok) {
       const classified = classifyRoutesFailure(res.status, json);
-      return unknownEstimate({ ...classified, bufferMinutes, departure: built.departure });
+      attempts.push({
+        via,
+        mode: args.mode,
+        departureAt: built.departure?.effectiveDepartureAt ?? null,
+        httpStatus: res.status,
+        googleStatus,
+        googleMessage,
+        routeCount,
+        failure: classified.failure,
+        durationMinutes: null,
+      });
+      return unknownEstimate({ ...classified, bufferMinutes, departure: built.departure, attempts });
     }
+
     const route = json.routes?.[0];
     const seconds = parseDurationSeconds(route?.duration);
     const distanceMeters = route?.distanceMeters ?? null;
     if (seconds == null || !Number.isFinite(seconds) || seconds < 0) {
+      attempts.push({
+        via,
+        mode: args.mode,
+        departureAt: built.departure?.effectiveDepartureAt ?? null,
+        httpStatus: res.status,
+        googleStatus,
+        googleMessage,
+        routeCount,
+        failure: "NO_ROUTE",
+        durationMinutes: null,
+      });
       return unknownEstimate({
         failure: "NO_ROUTE",
-        note: "経路なし（HTTP 200、duration なし）。直線距離では代用しない",
+        note:
+          routeCount === 0
+            ? `Routes 経路なし（HTTP ${res.status}、routes 空、mode=${args.mode}）。直線距離では代用しない`
+            : `Routes 経路なし（HTTP ${res.status}、routes=${routeCount} だが duration なし、mode=${args.mode}）。直線距離では代用しない`,
         bufferMinutes,
         departure: built.departure,
+        attempts,
       });
     }
     const minutes = Math.max(1, Math.round(seconds / 60));
+    attempts.push({
+      via,
+      mode: args.mode,
+      departureAt: built.departure?.effectiveDepartureAt ?? null,
+      httpStatus: res.status,
+      googleStatus,
+      googleMessage,
+      routeCount,
+      failure: null,
+      durationMinutes: minutes,
+    });
     return {
       durationMinutes: minutes,
       distanceMeters,
@@ -287,6 +415,7 @@ export async function computeLiveRoute(args: {
       kind: "API",
       failure: null,
       cached: false,
+      attempts,
       ...departureFields(built.departure),
       evidence: evidenceOf({
         kind: "API",
@@ -295,7 +424,7 @@ export async function computeLiveRoute(args: {
         sourceField: "duration",
         fetchedAt: realNowIso(),
         validFor: null,
-        note: `Routes API ${args.mode} 予測 ${minutes}分。余裕 ${bufferMinutes}分はアプリ加算${departureNote(built.departure)}`,
+        note: `Routes API ${args.mode} 予測 ${minutes}分。余裕 ${bufferMinutes}分はアプリ加算${departureNote(built.departure)}［試行: ${formatAttempts(attempts)}］`,
       }),
     };
   };
@@ -304,7 +433,7 @@ export async function computeLiveRoute(args: {
   const usedPlace =
     Boolean(args.from.spotId && !args.from.spotId.startsWith("mock:")) ||
     Boolean(args.to.spotId && !args.to.spotId.startsWith("mock:"));
-  if (first.failure === "NO_ROUTE" && usedPlace) {
+  if ((first.failure === "NO_ROUTE" || first.failure === "INVALID") && usedPlace) {
     const retry = await attempt(
       { lat: args.from.lat, lng: args.from.lng },
       { lat: args.to.lat, lng: args.to.lng },
@@ -318,6 +447,7 @@ export async function computeLiveRoute(args: {
         },
       };
     }
+    return retry;
   }
   return first;
 }

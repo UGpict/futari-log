@@ -139,6 +139,42 @@ export async function executeRun(
     });
     if (planned.waitingQuestion) {
       const waitingQuestion = planned.waitingQuestion;
+      if (planned.built) {
+        const { built, llm } = planned;
+        const display = overlays.length ? "LIVE_SCENARIO" : planned.mode;
+        await appendEvent(runId, "MODEL_SELECTED", `${llm.pool} / ${llm.actualModel}`, {
+          pool: llm.pool,
+          model: llm.actualModel,
+          requestedModel: llm.requestedModel,
+          actualModel: llm.actualModel,
+          usage: {
+            promptTokens: llm.promptTokens,
+            completionTokens: llm.completionTokens,
+            costUsd: llm.costUsd,
+            costJpy: llm.costJpy,
+            latencyMs: llm.latencyMs,
+            ok: llm.ok,
+          },
+          payload: { agent: "planner", provisional: true },
+        });
+        await withRun(runId, (found) => {
+          if (!found) return;
+          found.run.displayRuntime = env.runtime === "MOCK" ? "MOCK" : display;
+          found.run.mode = overlays.length ? "LIVE_SCENARIO" : found.run.mode;
+          for (const ev of Object.values(built.evidence)) {
+            found.bundle.evidence[ev.id] = ev;
+          }
+          Object.assign(found.bundle.spots, built.spots);
+          found.bundle.planHistory[String(built.plan.version)] = built.plan;
+          found.run.resultPlanVersion = built.plan.version;
+          found.bundle.session.currentPlanVersion = built.plan.version;
+        });
+        await appendEvent(
+          runId,
+          "PLAN_APPLIED",
+          `暫定行程 v${built.plan.version}（移動未検証・確定不可）`,
+        );
+      }
       await appendEvent(runId, "INPUT_REQUIRED", waitingQuestion.prompt, {
         payload: { agent: "planner" },
       });

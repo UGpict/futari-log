@@ -6,7 +6,7 @@ import { emptyCoupleBundle, emptyDb, emptySessionBundle } from "../src/server/re
 import { createCouple, createSession, decideApproval, getSessionSnapshot, startRun } from "../src/server/api/actions";
 import { getSession, withRun, withSession } from "../src/server/repositories/store";
 import { realNowIso } from "../src/lib/time";
-import { evaluateWalkLimits, walkAckFingerprint, walkLongAckMatches, walkLongAcknowledged } from "../src/domain/plan/walkLimits";
+import { evaluateWalkLimits, walkAckFingerprint, walkLongAckMatches, walkLongAcknowledged, longWalkQuestion, describeWalkOverages } from "../src/domain/plan/walkLimits";
 import { WALK_LIMITS } from "../src/config/settings";
 
 const planInput = {
@@ -47,6 +47,36 @@ describe("walk ack scope", () => {
     assert.equal(result.longestLegMinutes, 103);
     assert.ok(result.longestLegMinutes > WALK_LIMITS.legMinutes);
     assert.equal(evaluateWalkLimits("TRANSIT", [leg(103)]).exceeds, false);
+  });
+
+  it("distinguishes long-walk overage copy from no-candidates", () => {
+    const legs = [
+      {
+        id: "l1",
+        mode: "WALK" as const,
+        from: "MEET" as const,
+        fromSpotId: null,
+        to: "SPOT" as const,
+        toSpotId: "cafe",
+        durationMinutes: { value: 10, evidenceIds: [] as string[] },
+      },
+      {
+        id: "l2",
+        mode: "WALK" as const,
+        from: "SPOT" as const,
+        fromSpotId: "cafe",
+        to: "END" as const,
+        toSpotId: null,
+        durationMinutes: { value: 103, evidenceIds: [] as string[] },
+      },
+    ];
+    const result = evaluateWalkLimits("WALK", legs);
+    const details = describeWalkOverages(result, legs, { cafe: { name: "Cafe" } });
+    const q = longWalkQuestion(result, details);
+    assert.match(q.prompt, /解散までの徒歩|徒歩が上限を超え/);
+    assert.match(q.prompt, /徒歩で行ける場所がない/);
+    assert.match(q.prompt, /Cafe→解散/);
+    assert.match(q.prompt, /103分/);
   });
 
   it("scopes long-walk consent to session date, mode, and endpoints", () => {

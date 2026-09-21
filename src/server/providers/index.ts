@@ -332,7 +332,7 @@ function driveDepartureFields(mode: TravelMode, departureAt: string): Pick<
   RouteEstimate,
   "requestedDepartureAt" | "effectiveDepartureAt" | "departureAdjusted"
 > {
-  if (mode !== "DRIVE") {
+  if (mode !== "DRIVE" && mode !== "TRANSIT") {
     return { requestedDepartureAt: null, effectiveDepartureAt: null, departureAdjusted: false };
   }
   const scheduled = scheduleDriveDeparture(departureAt);
@@ -375,6 +375,7 @@ export async function estimateTravel(
           kind: "UNKNOWN",
           failure: "MISSING_KEY",
           cached: false,
+          attempts: [],
           ...driveDepartureFields(args.mode, args.departureAt),
           evidence: evidence({
             kind: "UNKNOWN",
@@ -410,6 +411,7 @@ export async function estimateTravel(
           kind: "API" as const,
           failure: null,
           cached: false,
+          attempts: [],
           ...driveDepartureFields(args.mode, args.departureAt),
           evidence: evidence({
             kind: "API",
@@ -423,7 +425,10 @@ export async function estimateTravel(
         };
       });
     }
-    cacheSet(ctx, key, base);
+    // Do not cache null-duration failures — retry / remeasure must hit Routes again.
+    if (base.durationMinutes != null) {
+      cacheSet(ctx, key, base);
+    }
   } else {
     await ctx.onHttp({ provider: "routes", cacheHit: true, attempt: ctx.httpAttempts });
     const fetchedAt = base.evidence.fetchedAt ?? realNowIso();
@@ -431,6 +436,7 @@ export async function estimateTravel(
       ...base,
       cached: true,
       kind: "CACHE",
+      attempts: base.attempts ?? [],
       evidence: evidence({
         kind: "CACHE",
         provider: base.evidence.provider,

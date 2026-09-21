@@ -2,7 +2,7 @@ import { LIMITS } from "@/config/settings";
 import { getEnv } from "@/config/env";
 import { loadSelectedEventSpots } from "@/server/catalog/planAttach";
 import type { Memory, Plan, Run, Session, Spot } from "@/domain/schemas";
-import { evaluateWalkLimits, longWalkQuestion, walkAckFingerprintFromPlan, walkLongAckMatches } from "@/domain/plan/walkLimits";
+import { evaluateWalkLimits, describeWalkOverages, longWalkQuestion, travelUnverifiedQuestion, hasUnverifiedTravel, walkAckFingerprintFromPlan, walkLongAckMatches } from "@/domain/plan/walkLimits";
 import { composeReplanOrder, isProtectedPlanItem } from "@/domain/plan/replanOrder";
 import {
   classifyReplanIntent,
@@ -507,10 +507,32 @@ export async function orchestratePlanning(input: {
       persistTravelCache(input.ctx, memories);
       writeMemories(found.couple, memories);
     });
+    const details = describeWalkOverages(walkCheck, built.plan.legs, built.spots);
     return {
-      waitingQuestion: longWalkQuestion(walkCheck),
+      waitingQuestion: longWalkQuestion(walkCheck, details),
       walkAckFingerprint: fingerprint,
       built: null,
+      llm: planned.llm,
+      mode,
+    };
+  }
+
+  if (hasUnverifiedTravel(built.plan.validation.issues)) {
+    const unknownCount = built.plan.validation.issues.filter((i) =>
+      ["TRAVEL_UNKNOWN", "END_TRAVEL_UNKNOWN"].includes(i.code),
+    ).length;
+    built.plan.assumptions = [
+      "移動を確認できていない暫定案です。必須区間の経路が取れるまで通常の確定はできません。",
+      ...built.plan.assumptions,
+    ];
+    await withRun(input.runId, (found) => {
+      if (!found) return;
+      persistTravelCache(input.ctx, memories);
+      writeMemories(found.couple, memories);
+    });
+    return {
+      waitingQuestion: travelUnverifiedQuestion(unknownCount),
+      built,
       llm: planned.llm,
       mode,
     };

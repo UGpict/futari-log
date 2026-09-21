@@ -6,7 +6,8 @@ import {
   type ScenarioKind,
 } from "@/domain/schemas";
 import { candidateToMemory } from "@/domain/memory";
-import { parseWalkAckScope } from "@/domain/plan/walkLimits";
+import { parseWalkAckScope, hasUnverifiedTravel } from "@/domain/plan/walkLimits";
+import { readMemories, writeMemories } from "@/server/agent/memory";
 import { maskPii } from "@/server/privacy/mask";
 import { draftShareMessage } from "@/server/privacy/dto";
 import { demoAllowed } from "@/server/auth";
@@ -391,6 +392,30 @@ export async function answerQuestion(uid: string, runId: string, questionId: str
       found.run.error = answer;
       return { ok: true as const, restart: false };
     }
+    if (questionId === "q_travel_unverified") {
+      if (answer === "経路を再取得する" || answer === "近場の候補で組み直す") {
+        const memories = readMemories(found.couple);
+        if (memories.travel) memories.travel.facts = {};
+        writeMemories(found.couple, memories);
+        if (answer === "近場の候補で組み直す") {
+          const current = found.bundle.session.input.radiusMeters;
+          found.bundle.session.input = {
+            ...found.bundle.session.input,
+            radiusMeters: Math.max(800, Math.min(current, Math.floor(current * 0.6))),
+          };
+        }
+        found.run.status = "PENDING";
+        found.run.waitingQuestion = null;
+        found.run.leaseOwner = null;
+        return { ok: true as const, restart: true, sessionId: found.bundle.session.id };
+      }
+      found.run.status = "CANCELLED";
+      found.run.finishedAt = realNowIso();
+      found.run.waitingQuestion = null;
+      found.run.leaseOwner = null;
+      found.run.error = answer;
+      return { ok: true as const, restart: false };
+    }
     const reflectionId = newId("ref");
     const masked = maskPii(answer);
     found.couple.reflections[reflectionId] = {
@@ -524,6 +549,13 @@ export async function updateProgress(
       if (!plan) return { ok: false as const, status: 409, error: "確定できる行程がありません" };
       if (plan.validation.state === "FAIL") {
         return { ok: false as const, status: 409, error: "検証 FAIL の行程は確定できません" };
+      }
+      if (hasUnverifiedTravel(plan.validation.issues)) {
+        return {
+          ok: false as const,
+          status: 409,
+          error: "移動が未検証の暫定案は確定できません。経路を再取得するか条件を変えてください",
+        };
       }
       found.bundle.session.status = "CONFIRMED";
     }
