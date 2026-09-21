@@ -38,25 +38,63 @@ UI だけ触る場合は [`docs/ui-handoff.md`](docs/ui-handoff.md) と `npm run
 
 ## アーキテクチャ
 
+審査・説明用の全体像。詳細な実行経路は [`docs/workflows.md`](docs/workflows.md) / [`docs/cloud-run.md`](docs/cloud-run.md)。
+
+![ふたりログ アーキテクチャ](docs/architecture-futari-log.png)
+
 ```mermaid
-flowchart LR
-  UI[Web UI] --> API[Next.js API]
-  API --> FS[(Firestore)]
-  API -->|"insertPendingRun"| Run[Run PENDING]
-  Run --> Disp{orchestrator}
-  Disp -->|local| Worker[Worker lease]
-  Disp -->|Cloud Run| WF[Cloud Workflows gather→propose]
-  Worker --> Exec[executeRun]
-  WF --> Exec
-  Exec --> Scout[scout Places / Routes]
-  Exec --> Plan[deterministic planner + buildPlan]
-  Exec --> Refl[reflection LLM 非同期]
-  Scout --> FS
-  Plan --> FS
-  Refl --> FS
+flowchart TB
+  CS["Cloud Scheduler<br/>毎朝の収集トリガー"]
+  EXT["外部データ<br/>Places • Routes • 天気 • 公式ページ"]
+
+  subgraph CR["Cloud Run | ふたりログ"]
+    ASYNC["非同期実行基盤<br/>実行管理 • 重複防止 • 承認待ち"]
+
+    subgraph BG["バックグラウンドの AI 処理"]
+      EV["イベント収集<br/>検索 — 構造化 — 出典照合"]
+      PR["料金の追加調査<br/>公式情報の検索 — 本文照合"]
+      RA["振り返りエージェント<br/>記録を分析 → 次の行動を選択"]
+    end
+
+    UI["Next.js UI • API<br/>Firebase Auth で本人確認"]
+    VAL["行程検証<br/>違反時は候補を差し替え • 再検証"]
+    PLAN["決定論的プランニング<br/>希望 • 記憶 • 営業時間 • 移動を照合"]
+    CONF["ユーザー確認 • 承認<br/>質問への回答 / 記憶の保存"]
+  end
+
+  ORCA["OrcaRouter<br/>Gemini 検索 • LLM 分析"]
+  USER["ユーザー<br/>希望 • 予定 • 振り返り"]
+
+  subgraph FS["Firestore | 用途別に保存"]
+    EXEC[("実行記録<br/>行程版 • 判断 • モデル • 費用")]
+    CAT[("共有カタログ<br/>イベント • 会場 • 料金の根拠")]
+    MEM[("ふたりの承認済み記憶<br/>対象 • 適用範囲 • 根拠")]
+  end
+
+  CS -->|"OIDC 認証"| ASYNC
+  EXT --> EV
+  EXT --> PR
+  ASYNC --> EV
+  ASYNC --> PR
+  ASYNC --> RA
+  EV --> ORCA
+  PR --> ORCA
+  RA --> ORCA
+  ORCA -->|"承認した内容だけ"| CONF
+  RA -->|"確認質問・記憶候補"| CONF
+  CONF -->|"回答後に再分析"| RA
+  USER --> UI
+  UI --> CONF
+  UI -->|"行程・確認事項"| PLAN
+  PLAN <-->|"修正して再検証 • 最大〇回"| VAL
+  MEM -->|"既存記憶との照合"| PLAN
+  EV --> CAT
+  PR --> CAT
+  ASYNC --> EXEC
+  CONF --> MEM
 ```
 
-Cloud Run では `PLAN_ORCHESTRATOR=workflows`（[`docs/workflows.md`](docs/workflows.md)、[`docs/cloud-run.md`](docs/cloud-run.md)）。ローカルは worker。
+Cloud Run では `PLAN_ORCHESTRATOR=workflows`。ローカルは worker。
 
 ## 堅牢性のための仕組み
 
