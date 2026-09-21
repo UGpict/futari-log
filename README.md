@@ -29,7 +29,7 @@
 ## 画面の流れ（現状）
 
 1. **`/auth`** — ゲスト（匿名）／ログイン／新規作成
-2. **ホーム** — カレンダー、提案カード、近くのイベント（表示用サンプル）
+2. **ホーム** — カレンダー、提案カード、近くのイベント（表示用サンプル）。日付を選んで気分シールを貼り、端末の写真を切り抜いて思い出シールとして並べる（クリックでその日の振り返りをすぐ見られる）
 3. **`/plans/new`** — 3ステップ（過ごし方 → 日時・場所 → 予算・確認）でセッション作成し、初回プラン run を起動
 4. **セッション** — 行程・確認質問・再計画・振り返り保存
 5. **記憶** — 候補の明示承認後にだけ次プランへ効く
@@ -96,6 +96,8 @@ flowchart TB
 
 Cloud Run では `PLAN_ORCHESTRATOR=workflows`。ローカルは worker。
 
+**写真シール**は上図のサーバ経路の外で動く。ブラウザ内で U2NetP（ONNX）により切り抜き、最大4枚を `localStorage` にだけ残す（振り返り本文のサーバ保存や Firestore の承認済み記憶には載せない）。実装は [`src/features/home/photo-sticker.tsx`](src/features/home/photo-sticker.tsx) / [`src/client/hooks/use-date-journal.ts`](src/client/hooks/use-date-journal.ts)。
+
 ## 堅牢性のための仕組み
 
 | 仕組み | 場所 |
@@ -111,6 +113,7 @@ Cloud Run では `PLAN_ORCHESTRATOR=workflows`。ローカルは worker。
 - **directive で表せない好み**（特定の食べ物など）は、型付き `planDirectives` が無い限りプラン選定に載らない
 - **ホームの提案カード**は UI 定数（LLM 生成ではない）。[`src/features/home/home-suggestion.ts`](src/features/home/home-suggestion.ts)
 - **ホームの「近くのイベント」**は大会用サンプル表示。カタログ ID には載せない。[`src/features/home/sample-events.ts`](src/features/home/sample-events.ts)
+- **写真シール**は端末内のみ（最大4枚・サーバ未送信）。機種変更や別ブラウザでは消える
 - **会場・日付**: LIVE / Cloud Run の検索バイアス既定は東京駅周辺（`DEMO_LAT` / `DEMO_LNG`）。Cloud Run のイメージは `DEMO_DATE` を載せず、未設定時は実行当日（Asia/Tokyo）に読み替える（[`src/config/env.ts`](src/config/env.ts) `resolveDemoDate`、[`cloudbuild.yaml`](cloudbuild.yaml)）。MOCK カタログは名古屋駅周辺と丸の内・東京駅周辺の両方を持つ（[`src/server/providers/catalog.ts`](src/server/providers/catalog.ts)）。UI fixture のスナップショットは名古屋駅集合が多い（[`src/fixtures/snapshots.ts`](src/fixtures/snapshots.ts)）
 - **既存のブラウザ保存データ**の扱い合意までは削除しない方針（[`docs/backend-handoff.md`](docs/backend-handoff.md)）。旧 Cookie のみの匿名セッションを機械移行しない方針は [PR #9](https://github.com/UGpict/futari-log/pull/9) 側（未マージ）
 - 本番 `sys/root` 容量など未解決事項は [`docs/blockers.md`](docs/blockers.md)
