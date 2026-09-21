@@ -45,11 +45,9 @@ export function PlanStickerIcon({ kind }: { kind: "time" | "budget" | "spots" | 
         <path d="M23 27Q26 20 32 19" stroke="#f5bbca" strokeWidth="4" strokeLinecap="round" />
       </>}
       {kind === "goal" && <>
-        <path d="M20 69V14" stroke="#fffdfb" strokeWidth="12" strokeLinecap="round" />
-        <path d="M20 69V14" stroke="#8d7795" strokeWidth="6" strokeLinecap="round" />
-        <path d="M24 17H63L53 31L63 45H24Z" fill="#ed789d" stroke="#fffdfb" strokeWidth="9" />
-        <path d="M26 19H59L50 31L59 43H26Z" fill="#ed789d" />
-        <path d="M54 20L46 31L54 42" stroke="#f394ad" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M20 10Q24 10 24 14V17H63V44H24V69Q24 73 20 73Q16 73 16 69V14Q16 10 20 10Z" fill="#8d7795" stroke="#fffdfb" strokeWidth="9" />
+        <path d="M22 18H61V42H22Z" fill="#ed789d" />
+        <path d="M57 20V40" stroke="#f49ab2" strokeWidth="5" strokeLinecap="round" />
       </>}
     </g>
   </svg>;

@@ -569,7 +569,7 @@
 .scheduleSectionBody { display: grid; gap: 9px; padding: 9px; border: 1px solid #eadfe6; border-radius: 22px; background: linear-gradient(145deg, #fff 0%, #fff9fb 100%); box-shadow: 0 7px 24px #7653650a; }
 .scheduleDatePicker { position: relative; }
 .scheduleDate { display: flex; width: 100%; min-height: 54px; align-items: center; gap: 11px; border: 1px solid #f0e5eb; border-radius: 15px; padding: 8px 12px; background: white; color: #bd7798; text-align: left; }
-.dateSticker { display: grid; width: 35px; height: 37px; flex: 0 0 35px; place-items: center; transform: rotate(-4deg); }
+.scheduleDate > .dateSticker { display: grid; width: 35px; height: 37px; flex: 0 0 35px; place-items: center; transform: rotate(-4deg); }
 .dateSticker > svg { display: block; width: 35px; height: 37px; }
 .scheduleDate > span { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }
 .scheduleDate strong { color: #695362; font-size: 15px; font-weight: 650; }
