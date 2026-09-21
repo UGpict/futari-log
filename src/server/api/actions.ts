@@ -542,6 +542,18 @@ export async function decideApproval(uid: string, approvalId: string, decision: 
       return { ok: true as const, approval };
     }
     if (approval.kind === "MEMORY_SAVE" || approval.kind === "MEMORY_EDIT") {
+      if (approval.kind === "MEMORY_SAVE") {
+        const bundle = found.couple.sessions[approval.sessionId];
+        if (!bundle) return { ok: false as const, status: 404, error: "session" };
+        const currentPlan = bundle.session.currentPlanVersion ?? 0;
+        if (currentPlan !== approval.planVersionFrom) {
+          return {
+            ok: false as const,
+            status: 409,
+            error: "stale plan version; reload and re-present approval",
+          };
+        }
+      }
       if (decision === "APPROVE") {
         const candidate = approval.targetCandidateId
           ? found.couple.memoryCandidates[approval.targetCandidateId]
