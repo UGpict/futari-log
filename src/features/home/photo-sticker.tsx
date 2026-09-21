@@ -172,7 +172,7 @@ export function PhotoSticker({ value, onChange }: { value: string[]; onChange: (
     try {
       const next = [...value];
       next[targetIndex] = await makeSticker(file);
-      onChange(next.filter(Boolean).slice(0, 3));
+      onChange(next.filter(Boolean).slice(0, 4));
       setArrivingIndex(targetIndex);
     } catch {
       setError("被写体を読み込めませんでした");
@@ -186,11 +186,11 @@ export function PhotoSticker({ value, onChange }: { value: string[]; onChange: (
       <div className={styles.photoStickerHeading}>
         <Camera size={17} aria-hidden="true" />
         <strong id="photo-sticker-title">思い出を記録する</strong>
-        <small>{value.length}/3</small>
+        <small>{value.length}/4</small>
       </div>
       <input ref={inputRef} className="sr-only" type="file" accept="image/*" onChange={(event) => void selectPhoto(event)} />
-      <div className={styles.photoStickerSlots} aria-label="思い出シール、3枚まで">
-        {Array.from({ length: 3 }, (_, index) => {
+      <div className={styles.photoStickerSlots} aria-label="思い出シール、4枚まで">
+        {Array.from({ length: 4 }, (_, index) => {
           const sticker = value[index];
           const processing = busy && targetIndex === index;
           return <div key={index} className={styles.photoStickerSlot} data-filled={Boolean(sticker)} data-arriving={arrivingIndex === index} data-removing={removingIndex === index} data-shifted={compactingFrom !== null && index >= compactingFrom && Boolean(sticker)} onAnimationEnd={() => { if (arrivingIndex === index) setArrivingIndex(null); }}>

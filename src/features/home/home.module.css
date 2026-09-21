@@ -195,14 +195,15 @@
 .photoStickerHeading > svg { color: #9a7b6a; }
 .photoStickerHeading strong { color: #735e53; font-size: 12px; font-weight: 650; }
 .photoStickerHeading small { margin-left: auto; color: #aa958a; font-size: 9px; }
-.photoStickerSlots { display: grid; grid-template-columns: repeat(3, 84px); justify-content: center; gap: 15px; }
-.photoStickerSlot { position: relative; width: 84px; height: 84px; min-width: 0; }
+.photoStickerSlots { display: grid; grid-template-columns: repeat(4, 68px); justify-content: center; gap: 11px; }
+.photoStickerSlot { position: relative; width: 68px; height: 68px; min-width: 0; }
 .photoStickerSlot > button:first-child { position: relative; display: grid; width: 100%; height: 100%; place-items: center; overflow: hidden; border: 1px dashed #b79b8b; border-radius: 50%; color: #a68776; background: #f8f5f2; }
 .photoStickerSlot > button:first-child:disabled { cursor: wait; }
 .photoStickerSlot[data-filled="true"] > button:first-child { overflow: visible; border-color: transparent; background: transparent; }
 .photoStickerSlot img { position: absolute; inset: 0; display: block; width: 100% !important; height: 100% !important; object-fit: contain; filter: drop-shadow(0 3px 3px #4f3d461f); transform: rotate(-3deg) scale(1.08); }
 .photoStickerSlot:nth-child(2) img { transform: rotate(2deg) scale(1.06); }
 .photoStickerSlot:nth-child(3) img { transform: rotate(-1deg) scale(1.07); }
+.photoStickerSlot:nth-child(4) img { transform: rotate(4deg) scale(1.05); }
 .photoStickerSlot[data-arriving="true"] { z-index: 3; animation: photoStickerLand .52s cubic-bezier(.2, .9, .25, 1.2) both; }
 .photoStickerSlot[data-arriving="true"]::after { position: absolute; z-index: -1; inset: 8%; border: 2px solid #a7826e80; border-radius: 50%; content: ''; pointer-events: none; animation: photoStickerImpact .52s ease-out both; }
 .photoStickerSlot[data-removing="true"] { z-index: 3; pointer-events: none; animation: photoStickerPopAway .28s cubic-bezier(.55, 0, .8, .2) both; }
@@ -216,7 +217,7 @@
 @keyframes photoStickerImpact { 0%, 45% { opacity: 0; transform: scale(.45); } 58% { opacity: .75; } 100% { opacity: 0; transform: scale(1.55); } }
 @keyframes photoStickerPopAway { 0% { opacity: 1; transform: scale(1); } 38% { opacity: 1; transform: scale(1.14) rotate(4deg); } 100% { opacity: 0; transform: scale(.18) rotate(-10deg); } }
 @keyframes photoStickerRemoveRing { from { opacity: .65; transform: scale(.7); } to { opacity: 0; transform: scale(1.45); } }
-@keyframes photoStickerCompact { from { transform: translateX(99px); } to { transform: translateX(0); } }
+@keyframes photoStickerCompact { from { transform: translateX(79px); } to { transform: translateX(0); } }
 @media (prefers-reduced-motion: reduce) { .photoStickerWorking, .photoStickerSlot[data-arriving="true"], .photoStickerSlot[data-arriving="true"]::after, .photoStickerSlot[data-removing="true"], .photoStickerSlot[data-removing="true"]::after, .photoStickerSlot[data-shifted="true"] { animation: none; } }
 .reflectionFieldCard { padding: 13px; border: 0; border-radius: 20px; background: linear-gradient(145deg, #fff 0%, #fff9fb 100%); box-shadow: 0 7px 22px #7653650d; }
 .reflectionFieldCard input, .reflectionFieldCard textarea { background: #fffdfd; }
@@ -833,14 +834,18 @@
 .recordHero { display: grid; padding: 0 3px; text-align: left; }
 .recordHero .eyebrow { margin-top: 5px; font-size: 10px; }
 .recordStickerScene { position: relative; isolation: isolate; width: 100%; height: 190px; margin-bottom: 5px; }
-.recordSummarySticker { position: absolute; z-index: 2; left: 50%; top: 50%; display: block; width: 106px; height: 96px; transform: translate(-50%, -50%); }
-.recordPhotoSticker { position: absolute; z-index: 1; display: block; width: 88px; height: 82px; object-fit: contain; filter: drop-shadow(0 4px 4px #4f3d4624); }
+.recordSummarySticker { position: absolute; z-index: 2; left: 50%; top: 50%; display: block; width: 126px; height: 114px; transform: translate(-50%, -50%); animation: recordStickerHoyon .58s cubic-bezier(.2, .9, .3, 1.15) both; }
+.recordPhotoSticker { position: absolute; z-index: 1; display: block; width: 88px; height: 82px; object-fit: contain; filter: drop-shadow(0 4px 4px #4f3d4624); animation: recordStickerHoyon .58s cubic-bezier(.2, .9, .3, 1.15) both; }
 .recordPhotoSticker:nth-of-type(1) { left: 3%; top: 5%; transform: rotate(-10deg); }
-.recordPhotoSticker:nth-of-type(2) { right: 3%; top: 2%; transform: rotate(9deg); }
-.recordPhotoSticker:nth-of-type(3) { right: 8%; bottom: 0; transform: rotate(-5deg); }
+.recordPhotoSticker:nth-of-type(1) { animation-delay: .08s; }
+.recordPhotoSticker:nth-of-type(2) { right: 3%; top: 2%; transform: rotate(9deg); animation-delay: .16s; }
+.recordPhotoSticker:nth-of-type(3) { right: 8%; bottom: 0; transform: rotate(-5deg); animation-delay: .24s; }
+.recordPhotoSticker:nth-of-type(4) { left: 7%; bottom: 1%; transform: rotate(7deg); animation-delay: .32s; }
 .recordStickerScene[data-count="1"] .recordPhotoSticker:nth-of-type(1) { left: auto; right: 7%; top: 30%; }
 .recordStickerScene[data-count="2"] .recordPhotoSticker:nth-of-type(1) { left: 4%; top: 27%; }
 .recordStickerScene[data-count="2"] .recordPhotoSticker:nth-of-type(2) { right: 4%; top: 22%; }
+@keyframes recordStickerHoyon { 0% { opacity: 0; scale: .62; } 58% { opacity: 1; scale: 1.13; } 78% { scale: .94; } 100% { opacity: 1; scale: 1; } }
+@media (prefers-reduced-motion: reduce) { .recordSummarySticker, .recordPhotoSticker { animation: none; } }
 .calendarPhotoSticker { position: relative; z-index: 1; display: block; width: 48px; height: 46px; object-fit: contain; transform: rotate(-7deg); pointer-events: none; }
 .recordSummary h3 { margin: 2px 0 0; color: #66505f; font-size: 16px; font-weight: 650; line-height: 1.45; }
 .recordReflectionCard, .recordPlanSection { padding: 12px 13px; border: 1px solid #eee3e9; border-radius: 22px; background: #fff; box-shadow: 0 6px 20px #7653650c; }

@@ -20,7 +20,7 @@ export type DateMemory = {
   analysisStatus?: string;
   /** 旧1枚形式。読み込み時に stickerDataUrls へ移行する。 */
   stickerDataUrl?: string;
-  /** 端末内で生成した透過ステッカー（最大3枚）。サーバーへは送信しない。 */
+  /** 端末内で生成した透過ステッカー（最大4枚）。サーバーへは送信しない。 */
   stickerDataUrls?: string[];
 };
 
@@ -89,7 +89,7 @@ function isMemory(value: unknown): value is DateMemory {
     typeof item.note === "string" &&
     moods.some((mood) => mood.id === item.mood) &&
     (item.stickerDataUrl === undefined || (typeof item.stickerDataUrl === "string" && item.stickerDataUrl.startsWith("data:image/"))) &&
-    (item.stickerDataUrls === undefined || (Array.isArray(item.stickerDataUrls) && item.stickerDataUrls.length <= 3 && item.stickerDataUrls.every((url) => typeof url === "string" && url.startsWith("data:image/")))) &&
+    (item.stickerDataUrls === undefined || (Array.isArray(item.stickerDataUrls) && item.stickerDataUrls.length <= 4 && item.stickerDataUrls.every((url) => typeof url === "string" && url.startsWith("data:image/")))) &&
     (item.demo === undefined || item.demo === true || item.demo === false)
   );
 }
