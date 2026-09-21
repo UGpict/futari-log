@@ -38,6 +38,10 @@ describe("home suggestion plan seed", () => {
 
   it("keeps MOCK search center on Kiyosumi station when seeding area from DTO", () => {
     const seed = planningSeedFromHomeSuggestion(HOME_SUGGESTION);
+    assert.ok(
+      HOME_SUGGESTION.meetPlace.id.startsWith("ChIJ"),
+      "meetPlace.id must be a real Places ID, not seed:",
+    );
     const jobs = scoutJobsFromWishes(seed.wish);
     assert.ok(jobs.jobs.some((job) => job.kind === "museum"));
     assert.ok(jobs.jobs.some((job) => job.kind === "cafe"));
@@ -50,14 +54,12 @@ describe("home suggestion plan seed", () => {
       searchCatalog("展示", center, 1200, ["museum", "art_gallery"]),
     );
 
-    // Document MOCK coverage: do not invent fixture spots to force a hit.
-    assert.equal(within1200.length, 0);
-    assert.equal(cafeOrMuseumNear.length, 0);
-
-    const nearest = [...MOCK_CATALOG]
-      .map((spot) => ({ id: spot.id, name: spot.name, meters: Math.round(haversineMeters(center, spot)) }))
-      .sort((a, b) => a.meters - b.meters)[0];
-    assert.ok(nearest);
-    assert.ok(nearest.meters > 1200, `nearest MOCK spot ${nearest.id} is ${nearest.meters}m away`);
+    // Opening-hours / self-correct fixtures live near Kiyosumi (not Tokyo Station).
+    assert.ok(within1200.some((s) => s.id.startsWith("mock:kiyosumi-")));
+    assert.ok(cafeOrMuseumNear.some((s) => s.id.startsWith("mock:kiyosumi-")));
+    assert.ok(
+      within1200.every((s) => haversineMeters(TOKYO_STATION, s) > 2000),
+      "Kiyosumi fixtures must stay far from Tokyo Station",
+    );
   });
 });

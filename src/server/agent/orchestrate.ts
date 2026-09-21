@@ -12,6 +12,7 @@ import {
 } from "@/domain/plan/replanIntent";
 import type { LlmCallResult } from "@/server/llm";
 import type { ProviderCtx } from "@/server/providers";
+import { asSpotOpeningHours } from "@/server/providers";
 import { withRun, type CoupleBundle } from "@/server/repositories/store";
 import { dailyFresh, pruneTravelFacts, readMemories, remember, writeMemories } from "./memory";
 import { buildPlan, type BuiltPlan } from "./buildPlan";
@@ -19,6 +20,7 @@ import { runPlace } from "./place";
 import { pickReplacementCandidate, runPlanner } from "./planner";
 import { jobsMissingCoverage, mergeScoutBuckets, runScout, scoutPool } from "./scout";
 import { scoutJobsForPreferences } from "./scoutJobs";
+import { refillOpenSpotIds, SELF_CORRECT_REFILL_LOOKUPS } from "./selfCorrect";
 import {
   assessTokyoPlan,
   companionScoutJobs,
@@ -231,7 +233,7 @@ export async function orchestratePlanning(input: {
       ? scout.exhibit
       : [];
   for (const [id, rules] of Object.entries({ ...catalog.hours, ...autoCatalog.hours })) {
-    input.ctx.placeHours = { ...(input.ctx.placeHours ?? {}), [id]: rules };
+    input.ctx.placeHours = { ...(input.ctx.placeHours ?? {}), [id]: asSpotOpeningHours(rules) };
   }
   const weather = await runWeather({
     ctx: input.ctx,
@@ -465,17 +467,27 @@ export async function orchestratePlanning(input: {
         .map((item) => item.spotId),
     );
     const protectedSpotIds = new Set(protectedItems.map((item) => item.spotId));
-    const retryIds = orderedSpotIds.filter(
-      (id) => protectedSpotIds.has(id) || (!closedSpotIds.has(id) && !(env.runtime === "LIVE" && id.startsWith("mock:"))),
-    );
     const pool = [...scout.walk, ...exhibit, ...scout.sweets, ...scout.other];
-    for (const spot of pool) {
-      if (retryIds.length >= Math.max(3, orderedSpotIds.length)) break;
-      if (retryIds.includes(spot.id) || closedSpotIds.has(spot.id) || protectedSpotIds.has(spot.id)) continue;
-      if (env.runtime === "LIVE" && spot.id.startsWith("mock:")) continue;
-      if (rain && spot.environment.value === "OUTDOOR") continue;
-      retryIds.push(spot.id);
-    }
+    const refill = await refillOpenSpotIds({
+      orderedSpotIds,
+      closedSpotIds,
+      protectedSpotIds,
+      pool,
+      rain,
+      liveOnly: env.runtime === "LIVE",
+      targetCount: Math.max(3, orderedSpotIds.length),
+      maxLookups: SELF_CORRECT_REFILL_LOOKUPS,
+      dateTokyo: input.session.input.dateTokyo,
+      startTime: input.session.input.startTime,
+      endTime: input.session.input.endTime,
+      ctx: input.ctx,
+    });
+    const retryIds = refill.ids;
+    await input.log(
+      "planner",
+      "NOTICE",
+      `差し替え補充: OPEN確認 ${retryIds.length}件 / 照会 ${refill.lookups}件（上限 ${SELF_CORRECT_REFILL_LOOKUPS}）`,
+    );
     const retryPlace = await runPlace({
       ctx: input.ctx,
       log: input.log,

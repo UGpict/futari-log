@@ -1,5 +1,5 @@
 import type { ScenarioOverlay } from "@/domain/schemas";
-import type { PlaceHoursRule } from "./placeFacts";
+import type { PlaceHoursRule, SpotOpeningHours } from "./placeFacts";
 
 export type ProviderCtx = {
   runId: string;
@@ -7,5 +7,6 @@ export type ProviderCtx = {
   cache: Map<string, { at: string; value: unknown; stale: boolean }>;
   httpAttempts: number;
   onHttp: (info: { provider: string; cacheHit: boolean; attempt: number }) => void | Promise<void>;
-  placeHours?: Record<string, PlaceHoursRule[]>;
+  /** spotId → regular + dated。配列のみの旧形も asSpotOpeningHours で受ける。 */
+  placeHours?: Record<string, SpotOpeningHours | PlaceHoursRule[]>;
 };

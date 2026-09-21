@@ -11,7 +11,7 @@
     "dev:ui": "NEXT_PUBLIC_USE_API_FIXTURES=true next dev",
     "typecheck": "tsc --noEmit",
     "lint": "eslint",
-    "test": "tsx --test tests/plan.test.ts tests/privacy.test.ts tests/security.test.ts tests/contracts.test.ts tests/gemini-grounding.test.ts tests/agents.test.ts tests/workflows.test.ts tests/catalog.test.ts tests/store-split.test.ts tests/place-photos.test.ts tests/routes.test.ts tests/calendar-place.test.ts tests/spot-kinds.test.ts tests/tokyo-area.test.ts tests/llm-parse.test.ts tests/reflect-prompt.test.ts tests/abort-timeout.test.ts tests/buildPlan-determinism.test.ts tests/home-suggestion.test.ts && tsx scripts/check-boundaries.ts",
+    "test": "tsx --test tests/plan.test.ts tests/privacy.test.ts tests/security.test.ts tests/contracts.test.ts tests/gemini-grounding.test.ts tests/agents.test.ts tests/workflows.test.ts tests/catalog.test.ts tests/store-split.test.ts tests/place-photos.test.ts tests/routes.test.ts tests/calendar-place.test.ts tests/spot-kinds.test.ts tests/tokyo-area.test.ts tests/llm-parse.test.ts tests/reflect-prompt.test.ts tests/abort-timeout.test.ts tests/buildPlan-determinism.test.ts tests/home-suggestion.test.ts tests/opening-hours.test.ts tests/self-correct-refill.test.ts && tsx scripts/check-boundaries.ts",
     "check:boundaries": "tsx scripts/check-boundaries.ts",
     "ownership": "tsx scripts/ownership.ts",
     "test:emulator": "USE_FIREBASE_EMULATOR=true firebase emulators:exec --only auth,firestore --project demo-futari-log \"tsx --test tests/firebase.test.ts\"",

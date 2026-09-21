@@ -25,7 +25,7 @@ export const HOME_SUGGESTION: HomeSuggestion = {
   area: "清澄白河",
   wish: "清澄白河で美術館や展示を楽しんだあと、夜カフェでゆっくり話すデートにしたい",
   meetPlace: {
-    id: "seed:kiyosumi-shirakawa-station",
+    id: "ChIJaX6cwT2JGGARKz3KrG7DRWU",
     name: "清澄白河駅",
     lat: 35.682163,
     lng: 139.798997,
