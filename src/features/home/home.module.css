@@ -135,6 +135,8 @@
   .carouselNext { right: 5px; }
 }
 .eventBanner { position: relative; display: flex; min-width: min(282px, calc(100vw - 76px)); flex: 0 0 min(282px, calc(100vw - 76px)); overflow: hidden; flex-direction: column; padding: 0; border: 0; border-radius: 20px; background: #fffdfc; color: #695866; text-align: left; scroll-snap-align: start; box-shadow: 0 8px 24px #6045561c; }
+.eventBannerStatic { cursor: default; }
+.eventBannerStatic:focus { outline: none; }
 .eventArtwork { position: relative; display: block; width: 100%; height: 248px; flex: 0 0 248px; background-position: center top; background-size: cover; }
 .eventBanner[data-theme="garden"] .eventArtwork { background-image: url('/images/events/night-garden-poster.webp'); }
 .eventBanner[data-theme="mystery"] .eventArtwork { background-image: url('/images/events/mystery-walk-poster.webp'); }
@@ -147,11 +149,12 @@
 .eventMeta > span:nth-child(2) { flex: 0 1 auto; }
 .eventMeta > span:last-child:not(:nth-child(2)) { flex: 0 0 auto; border-color: #d66f91; background: #d66f91; color: white; }
 .eventDemoBadge { border-color: #c4b5be !important; background: #efe8ec !important; color: #6f5b68 !important; }
-.eventCopy, .eventAction { position: relative; z-index: 1; }
+.eventCopy, .eventAction, .eventActionMuted { position: relative; z-index: 1; }
 .eventCopy { display: flex; flex-direction: column; gap: 3px; }
 .eventCopy strong { color: #665361; font-size: 15px; font-weight: 700; line-height: 1.35; }
 .eventCopy > span { color: #9a8794; font-size: 9px; line-height: 1.45; }
 .eventAction { display: flex; align-items: center; gap: 4px; margin-top: auto; padding-top: 10px; color: #b65e82; font-size: 10px; font-weight: 700; }
+.eventActionMuted { display: flex; align-items: center; gap: 4px; margin-top: auto; padding-top: 10px; color: #aaa0a7; font-size: 10px; font-weight: 600; }
 .eventDisclosure { margin-top: 6px; color: #aaa0a7; font-size: 8px; text-align: center; }
 
 .sheet { width: 100%; max-width: 430px; max-height: min(91dvh, 100%); margin: 0 auto; padding: 0; border: none; border-radius: 28px 28px 0 0; background: #fffcf9; color: var(--text-primary); overscroll-behavior: contain; box-shadow: 0 -10px 80px #30243215; }

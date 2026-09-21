@@ -106,7 +106,8 @@ export function futureDepartureIso(iso: string, nowMs = Date.now()): string {
 }
 
 export function waypointFromPoint(point: RoutePoint): Record<string, unknown> {
-  if (point.spotId && !point.spotId.startsWith("mock:")) {
+  // Catalog-only ids (mock:/demo:) are not Google placeIds — use coordinates.
+  if (point.spotId && !point.spotId.startsWith("mock:") && !point.spotId.startsWith("demo:")) {
     return { placeId: point.spotId };
   }
   return {
@@ -289,8 +290,8 @@ function departureNote(departure: DepartureAdjustment | null): string {
 
 function attemptVia(from: RoutePoint, to: RoutePoint): "placeId" | "latLng" {
   const usedPlace =
-    Boolean(from.spotId && !from.spotId.startsWith("mock:")) ||
-    Boolean(to.spotId && !to.spotId.startsWith("mock:"));
+    Boolean(from.spotId && !from.spotId.startsWith("mock:") && !from.spotId.startsWith("demo:")) ||
+    Boolean(to.spotId && !to.spotId.startsWith("mock:") && !to.spotId.startsWith("demo:"));
   return usedPlace ? "placeId" : "latLng";
 }
 
@@ -470,8 +471,8 @@ export async function computeLiveRoute(args: {
 
   const first = await attempt(args.from, args.to);
   const usedPlace =
-    Boolean(args.from.spotId && !args.from.spotId.startsWith("mock:")) ||
-    Boolean(args.to.spotId && !args.to.spotId.startsWith("mock:"));
+    Boolean(args.from.spotId && !args.from.spotId.startsWith("mock:") && !args.from.spotId.startsWith("demo:")) ||
+    Boolean(args.to.spotId && !args.to.spotId.startsWith("mock:") && !args.to.spotId.startsWith("demo:"));
   if ((first.failure === "NO_ROUTE" || first.failure === "INVALID") && usedPlace) {
     const retry = await attempt(
       { lat: args.from.lat, lng: args.from.lng },

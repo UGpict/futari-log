@@ -35,9 +35,13 @@ export const placePhotosResponseSchema = z.object({
 });
 export type PlacePhotosResponse = z.infer<typeof placePhotosResponseSchema>;
 
+export function isCatalogBackedSpotId(id: string): boolean {
+  return id.startsWith("mock:") || id.startsWith("demo:");
+}
+
 export function isVenuePlaceId(id: string): boolean {
   if (!id || id.length > 128 || id.includes("/") || id.includes("\\") || /\s/.test(id)) return false;
-  return !id.startsWith("mock:") && !id.startsWith("ven_") && !id.startsWith("evt_");
+  return !isCatalogBackedSpotId(id) && !id.startsWith("ven_") && !id.startsWith("evt_");
 }
 
 export const placeSearchStateSchema = z.enum(["ok", "empty", "failed"]);

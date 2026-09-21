@@ -46,6 +46,7 @@ describe("place photo contract", () => {
     assert.equal(parsed.photos[1]?.state, "none");
     assert.equal("displayVerified" in parsed.photos[0]!, false);
     assert.equal(isVenuePlaceId("mock:cafe-kitte"), false);
+    assert.equal(isVenuePlaceId("demo:tomoshibi-surugadai"), false);
     assert.equal(isVenuePlaceId(PLACE_A), true);
   });
 });

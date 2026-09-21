@@ -65,6 +65,18 @@ export function assessTokyoPlan(points: AreaPoint[]): {
   return { verdict: "inside", outside, unknown };
 }
 
+/**
+ * Fixed-appointment labels without coordinates (e.g. "AI HACK 2026") must not force
+ * q_tokyo_unconfirmed. Only clear outside / inside name hits are kept for the gate.
+ */
+export function areaPointFromFixedNameHint(name: string): AreaPoint | null {
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  const point: AreaPoint = { name: trimmed, lat: Number.NaN, lng: Number.NaN };
+  if (assessTokyoPoint(point) === "unknown") return null;
+  return point;
+}
+
 export function searchRadiiFor(mode: TravelMode, opts?: { expand?: boolean }): number[] {
   const cfg = SEARCH_EXPAND[mode];
   if (opts?.expand === false) return [cfg.initialMeters];

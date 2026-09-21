@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   SEARCH_EXPAND,
+  areaPointFromFixedNameHint,
   assessTokyoPoint,
   assessTokyoPlan,
   companionScoutJobs,
@@ -52,6 +53,26 @@ describe("tokyo service area", () => {
 
   it("asks when the location cannot be judged", () => {
     assert.equal(assessTokyoPoint({ name: "集合場所", lat: Number.NaN, lng: Number.NaN }), "unknown");
+  });
+
+  it("does not treat event-style fixed labels without geo as tokyo-unknown", () => {
+    assert.equal(areaPointFromFixedNameHint("AI HACK 2026"), null);
+    assert.equal(areaPointFromFixedNameHint("集合場所"), null);
+    const aichi = areaPointFromFixedNameHint("愛知県美術館");
+    assert.ok(aichi);
+    assert.equal(assessTokyoPoint(aichi), "outside");
+  });
+
+  it("treats Tomoshibi demo venue coords as inside Tokyo", () => {
+    assert.equal(
+      assessTokyoPoint({
+        name: "燈株式会社オフィス",
+        lat: 35.69955,
+        lng: 139.76405,
+        address: "〒101-0062 東京都千代田区神田駿河台4丁目6 21階",
+      }),
+      "inside",
+    );
   });
 
   it("expands walk radii from settings and stops when acknowledged", () => {

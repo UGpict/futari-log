@@ -115,6 +115,10 @@ export async function createSession(uid: string, coupleId: string, raw: unknown)
       if (point.spotId.startsWith("mock:")) {
         return { ok: false as const, status: 400, error: "LIVE ではモック地点を使えません" };
       }
+      // Tournament demo venues (demo:*) are catalog-backed and allowed on LIVE.
+      if (point.spotId.startsWith("demo:") && !getCatalogSpot(point.spotId)) {
+        return { ok: false as const, status: 400, error: "LIVE では未登録のデモ地点を使えません" };
+      }
     }
   }
   const input = env.runtime === "MOCK" ? resolveFixedSpot(parsed.data) : parsed.data;

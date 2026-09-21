@@ -66,12 +66,10 @@ describe("plan seed resolution", () => {
     assert.equal(resolvePlanFormSeed(null), undefined);
   });
 
-  it("loads sample seeds without a plan date", () => {
-    const seed = resolvePlanFormSeed("sample:odd-exhibition");
-    assert.ok(seed?.meet?.id.startsWith("ChIJ"));
-    assert.ok(seed?.wish?.includes("上野"));
-    assert.equal(seed?.startTime, undefined);
-    assert.equal(seed?.endTime, undefined);
+  it("ignores display-only sample seeds", () => {
+    assert.equal(resolvePlanFormSeed("sample:odd-exhibition"), undefined);
+    assert.equal(resolvePlanFormSeed("sample:night-garden"), undefined);
+    assert.equal(resolvePlanFormSeed("sample:mystery-walk"), undefined);
   });
 
   it("loads AI HACK seed with Tomoshibi venue and fixed afternoon block", () => {

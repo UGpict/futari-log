@@ -5,6 +5,8 @@ import { AI_HACK_VENUE } from "@/config/demo-ai-hack";
 export type HomeSampleEvent = {
   id: `sample:${string}`;
   demo: true;
+  /** When false, carousel card is display-only (no plan seed). */
+  opensPlan: boolean;
   dateLabel: string;
   area: string;
   title: string;
@@ -29,6 +31,7 @@ export const nearbySampleEvents: HomeSampleEvent[] = [
   {
     id: "sample:odd-exhibition",
     demo: true,
+    opensPlan: false,
     dateLabel: "10/4まで",
     area: "上野エリア",
     title: "ちょっと不思議なもの展",
@@ -48,6 +51,7 @@ export const nearbySampleEvents: HomeSampleEvent[] = [
   {
     id: "sample:night-garden",
     demo: true,
+    opensPlan: false,
     dateLabel: "9/23–10/4",
     area: "清澄白河エリア",
     title: "夜の庭園ライトアップ",
@@ -67,6 +71,7 @@ export const nearbySampleEvents: HomeSampleEvent[] = [
   {
     id: "sample:mystery-walk",
     demo: true,
+    opensPlan: false,
     dateLabel: "9/27まで",
     area: "下北沢・三軒茶屋",
     title: "ふたりで巡る、まち歩き謎解き",
@@ -86,6 +91,7 @@ export const nearbySampleEvents: HomeSampleEvent[] = [
   {
     id: "sample:ai-hack",
     demo: true,
+    opensPlan: true,
     dateLabel: "9/19–9/23",
     area: "神田駿河台・最終日",
     title: "AI HACK 2026",
