@@ -623,9 +623,9 @@
 .routeEnd { position: relative; margin-top: 10px; }
 .routeEnd summary { display: grid; grid-template-columns: 35px minmax(0, 1fr) 18px; align-items: center; gap: 9px; min-height: 37px; color: #9d8796; cursor: pointer; list-style: none; }
 .routeEnd summary::-webkit-details-marker { display: none; }
-.routeEnd summary > span:nth-child(2) { display: grid; min-width: 0; gap: 1px; }
+.routeEnd summary > span:nth-child(2) { display: flex; min-width: 0; align-items: center; gap: 8px; }
 .routeEnd summary strong { overflow: hidden; color: #715968; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.routeEnd[open] summary strong { visibility: hidden; }
+.routeEnd[open] summary strong { display: none; }
 .routeEnd summary > svg { transition: transform .2s ease; }
 .routeEnd[open] summary > svg { transform: rotate(180deg); }
 .routeEndEditor { max-height: 180px; margin: 0 0 0 44px; overflow: hidden; padding: 0; background: transparent; animation: routeEditorOpen .3s cubic-bezier(.22, 1, .36, 1) both; transform-origin: top; }
