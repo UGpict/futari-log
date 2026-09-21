@@ -295,6 +295,11 @@ export async function orchestratePlanning(input: {
         : current.items.filter((item) => !isProtectedPlanItem(item)).map((item) => item.spotId)
       : undefined;
 
+  const scoutPoolSpots = [...scout.walk, ...exhibit, ...scout.sweets, ...scout.other];
+  const lockedSpots = lockedIds
+    .map((id) => bundleSpots[id] ?? scoutPoolSpots.find((spot) => spot.id === id) ?? catalogSpots.find((spot) => spot.id === id))
+    .filter((spot): spot is NonNullable<typeof spot> => Boolean(spot));
+
   const planned = await runPlanner({
     log: input.log,
     memories,
@@ -303,6 +308,7 @@ export async function orchestratePlanning(input: {
     signal: input.signal,
     preferences: input.session.input.preferences,
     lockedIds,
+    lockedSpots,
     rain,
     memoriesForPrompt: input.memories,
     walk: scout.walk,
@@ -317,6 +323,32 @@ export async function orchestratePlanning(input: {
   });
   if (env.runtime === "LIVE") {
     planned.selected = planned.selected.filter((id) => !id.startsWith("mock:"));
+  }
+  if (planned.overflowMust.length) {
+    const labels = planned.overflowMust.map((pref) => pref.content).join("、");
+    return {
+      waitingQuestion: {
+        id: "q_must_overflow",
+        prompt: `必須の希望（${labels}）が今日の立ち寄り枠に収まりません。希望を減らすか、時間・固定予定を調整しますか？黙って必須希望は外しません。`,
+        options: ["希望を減らす", "中断する"],
+      },
+      built: null,
+      llm: planned.llm,
+      mode,
+    };
+  }
+  if (planned.unmetMust.length) {
+    const labels = planned.unmetMust.map((pref) => pref.content).join("、");
+    return {
+      waitingQuestion: {
+        id: "q_must_unmet",
+        prompt: `必須の希望「${labels}」を満たす実在候補を行程に載せられませんでした。希望か場所を変えますか？黙って必須希望は外しません。`,
+        options: ["条件を変える", "中断する"],
+      },
+      built: null,
+      llm: planned.llm,
+      mode,
+    };
   }
   if (!planned.selected.length && !(input.run.kind === "REPLAN" && current && intent === "adjust_same_place")) {
     return {

@@ -96,6 +96,14 @@ describe("wish to scout types", () => {
     assert.equal(spotMatchesWish({ name: "食堂", categories: ["restaurant"] }, "お肉"), false);
   });
 
+  it("does not treat market alone as 食べ歩き fulfillment", () => {
+    assert.equal(spotMatchesWish({ name: "市場", categories: ["market"] }, "食べ歩き"), false);
+    assert.equal(spotMatchesWish({ name: "テイクアウト", categories: ["meal_takeaway"] }, "食べ歩き"), true);
+    const jobs = scoutJobsFromWishes("食べ歩き");
+    assert.ok(jobs.jobs.some((job) => job.includedTypes.includes("market")));
+    assert.ok(jobs.jobs.some((job) => job.includedTypes.includes("meal_takeaway")));
+  });
+
   it("asks before searching when 温泉 cannot be type-fulfilled", () => {
     const mapped = scoutJobsFromWishes("のんびり温泉に入りたい");
     assert.deepEqual(mapped.unsupported, ["温泉"]);

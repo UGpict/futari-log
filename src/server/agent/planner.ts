@@ -1,5 +1,10 @@
 import { getEnv } from "@/config/env";
-import { classifySpotKind, planningFacetsFromWish, spotFulfillsFacet, wantsSameKindTour } from "@/contracts";
+import {
+  classifySpotKind,
+  planningFacetsFromWish,
+  spotMatchesWish,
+  wantsSameKindTour,
+} from "@/contracts";
 import type { Memory, Spot } from "@/domain/schemas";
 import type { LlmCallResult } from "@/server/llm";
 import { addMinutes, tokyoDateTime, toTokyoParts } from "@/lib/time";
@@ -7,6 +12,15 @@ import { getCatalogSpot } from "@/server/providers/catalog";
 import { assessHours } from "@/server/providers/placeFacts";
 import { remember } from "./memory";
 import type { AgentLog, AgentMemories } from "./types";
+
+/** Soft cap for itinerary stops (locked appointments count toward this). */
+export const PLANNER_MAX_STOPS = 6;
+
+export type PlannerPreference = {
+  id: string;
+  content: string;
+  priority: "MUST" | "PREFER";
+};
 
 function closedForSession(spot: Spot, dateTokyo?: string, startTime?: string, endTime?: string): boolean {
   if (!dateTokyo || !startTime || !endTime) return false;
@@ -19,12 +33,33 @@ function closedForSession(spot: Spot, dateTokyo?: string, startTime?: string, en
   return assessHours(hours, startAt, endAt, toTokyoParts) === "CLOSED";
 }
 
+function prefNeedsSpot(pref: PlannerPreference): boolean {
+  return planningFacetsFromWish(pref.content).length > 0;
+}
+
+function prefFulfilledBy(pref: PlannerPreference, spots: Spot[]): boolean {
+  if (!prefNeedsSpot(pref)) return true;
+  return spots.some((spot) => spotMatchesWish(spot, pref.content));
+}
+
+function resolvePrefs(args: {
+  preferences?: PlannerPreference[];
+  wishText?: string;
+}): PlannerPreference[] {
+  if (args.preferences?.length) return args.preferences;
+  const text = args.wishText?.trim();
+  if (!text) return [];
+  return [{ id: "wish", content: text, priority: "PREFER" }];
+}
+
 export function pickFromCandidates(args: {
   walk: Spot[];
   exhibit: Spot[];
   sweets: Spot[];
   other: Spot[];
   lockedIds: string[];
+  /** Spots for locked ids when they are not already in the scout pools. */
+  lockedSpots?: Spot[];
   rain: boolean;
   avoidIds: string[];
   dateTokyo?: string;
@@ -33,11 +68,26 @@ export function pickFromCandidates(args: {
   preferCheaper?: boolean;
   preferRest?: boolean;
   allowAvoidedFallback?: boolean;
+  /** Structured prefs (preferred). */
+  preferences?: PlannerPreference[];
+  /** Legacy single blob; treated as one PREFER when preferences omitted. */
   wishText?: string;
-}): { selected: string[]; rejected: { spotId: string; reason: string }[] } {
+  maxStops?: number;
+}): {
+  selected: string[];
+  rejected: { spotId: string; reason: string }[];
+  unmetMust: PlannerPreference[];
+  overflowMust: PlannerPreference[];
+} {
   const rejected: { spotId: string; reason: string }[] = [];
   const selected: string[] = [];
+  const unmetMust: PlannerPreference[] = [];
+  const overflowMust: PlannerPreference[] = [];
   const allowAvoidedFallback = args.allowAvoidedFallback !== false;
+  const maxStops = args.maxStops ?? PLANNER_MAX_STOPS;
+  const prefs = resolvePrefs(args);
+  const wishText = args.wishText ?? prefs.map((pref) => pref.content).join("。");
+
   const addId = (id?: string | null) => {
     if (id && !selected.includes(id)) selected.push(id);
   };
@@ -58,7 +108,35 @@ export function pickFromCandidates(args: {
       rejected.push({ spotId: s.id, reason: "雨のため屋外を見送り" });
     }
   }
-  for (const id of args.lockedIds) addId(id);
+
+  const allPool = [
+    ...(args.lockedSpots ?? []),
+    ...args.exhibit,
+    ...args.walk,
+    ...args.sweets,
+    ...args.other,
+  ];
+  const byId = new Map<string, Spot>();
+  for (const spot of allPool) byId.set(spot.id, spot);
+
+  const picked = new Map<string, Spot>();
+  const rememberSpot = (spot?: Spot) => {
+    if (!spot || picked.has(spot.id) || selected.includes(spot.id)) return false;
+    if (selected.length >= maxStops) return false;
+    picked.set(spot.id, spot);
+    addId(spot.id);
+    return true;
+  };
+
+  for (const id of args.lockedIds) {
+    addId(id);
+    const spot = byId.get(id);
+    if (spot) picked.set(id, spot);
+  }
+
+  const coveringSpots = () =>
+    selected.map((id) => byId.get(id)).filter((spot): spot is Spot => Boolean(spot));
+
   const rank = (list: Spot[]) => {
     const copy = [...list];
     if (args.preferCheaper) {
@@ -69,28 +147,44 @@ export function pickFromCandidates(args: {
     }
     return copy;
   };
+
+  const takeForPref = (pref: PlannerPreference): Spot | undefined => {
+    const matched = (allowAvoid: boolean) =>
+      rank(usable(allPool.filter((spot) => spotMatchesWish(spot, pref.content)), allowAvoid));
+    return matched(false)[0] ?? (allowAvoidedFallback ? matched(true)[0] : undefined);
+  };
+
+  const reserveFor = (pref: PlannerPreference, asMust: boolean) => {
+    if (prefFulfilledBy(pref, coveringSpots())) return;
+    if (selected.length >= maxStops) {
+      if (asMust) overflowMust.push(pref);
+      return;
+    }
+    const spot = takeForPref(pref);
+    if (!spot) {
+      if (asMust) unmetMust.push(pref);
+      return;
+    }
+    rememberSpot(spot);
+  };
+
+  for (const pref of prefs.filter((item) => item.priority === "MUST")) {
+    reserveFor(pref, true);
+  }
+  for (const pref of prefs.filter((item) => item.priority === "PREFER")) {
+    reserveFor(pref, false);
+  }
+
   const take = (list: Spot[]) =>
     rank(usable(list))[0] ?? (allowAvoidedFallback ? rank(usable(list, true))[0] : undefined);
-  const tour = wantsSameKindTour(args.wishText ?? "");
-  const picked = new Map<string, Spot>();
-  const rememberSpot = (spot?: Spot) => {
-    if (!spot || picked.has(spot.id) || selected.includes(spot.id)) return;
-    picked.set(spot.id, spot);
-    addId(spot.id);
-  };
-  const allPool = [...args.exhibit, ...args.walk, ...args.sweets, ...args.other];
-  const wishFacets = planningFacetsFromWish(args.wishText ?? "");
-  // Activity chips / concrete wishes: reserve one spot per fulfillable facet first.
-  for (const facetId of wishFacets) {
-    const matched = rank(usable(allPool.filter((spot) => spotFulfillsFacet(spot, facetId))));
-    rememberSpot(matched[0] ?? (allowAvoidedFallback ? rank(usable(allPool.filter((spot) => spotFulfillsFacet(spot, facetId)), true))[0] : undefined));
-  }
-  rememberSpot(take(args.exhibit));
-  rememberSpot(take(args.walk));
-  rememberSpot(take(args.sweets));
-  if (selected.length < 3) rememberSpot(take(args.other));
-  const targetCount = Math.min(6, Math.max(3, wishFacets.length || 3));
-  if (selected.length < targetCount) {
+  const tour = wantsSameKindTour(wishText);
+  // Soft diversity only fills leftover slots; never displaces MUST/PREFER reservations.
+  const softTarget = Math.min(maxStops, Math.max(selected.length, prefs.some((p) => p.priority === "MUST") ? selected.length : 3));
+  if (selected.length < softTarget) rememberSpot(take(args.exhibit));
+  if (selected.length < softTarget) rememberSpot(take(args.walk));
+  if (selected.length < softTarget) rememberSpot(take(args.sweets));
+  if (selected.length < softTarget) rememberSpot(take(args.other));
+  if (selected.length < softTarget) {
     const pool = rank(usable(allPool, allowAvoidedFallback));
     const kinds = new Set(
       [...picked.values()].map((spot) => classifySpotKind(spot.name, spot.categories)),
@@ -101,19 +195,13 @@ export function pickFromCandidates(args: {
         rejected.push({ spotId: spot.id, reason: `同じ過ごし方（${kind}）が続きすぎるので見送り` });
         continue;
       }
-      rememberSpot(spot);
+      if (!rememberSpot(spot)) break;
       kinds.add(kind);
-      if (selected.length >= targetCount) break;
+      if (selected.length >= softTarget) break;
     }
   }
-  if (selected.length < targetCount) {
-    for (const s of allPool) {
-      if (!allowAvoidedFallback && args.avoidIds.includes(s.id)) continue;
-      addId(s.id);
-      if (selected.length >= targetCount) break;
-    }
-  }
-  return { selected: selected.slice(0, targetCount), rejected };
+
+  return { selected, rejected, unmetMust, overflowMust };
 }
 
 export function pickReplacementCandidate(args: {
@@ -189,6 +277,7 @@ export async function runPlanner(input: {
   signal: AbortSignal;
   preferences: unknown;
   lockedIds: string[];
+  lockedSpots?: Spot[];
   rain: boolean;
   memoriesForPrompt: Memory[];
   walk: Spot[];
@@ -203,6 +292,8 @@ export async function runPlanner(input: {
 }): Promise<{
   selected: string[];
   rejected: { spotId: string; reason: string }[];
+  unmetMust: PlannerPreference[];
+  overflowMust: PlannerPreference[];
   llm: LlmCallResult<{
     think?: string;
     selectedSpotIds: string[];
@@ -221,16 +312,29 @@ export async function runPlanner(input: {
     ...(last?.selected ?? []),
   ];
   const instruction = input.instruction ?? "";
-  const wishText = [
-    instruction,
-    ...((input.preferences as { content?: string }[] | undefined) ?? []).map((item) => item.content ?? ""),
-  ].join("。");
+  const rawPrefs = (input.preferences as { id?: string; content?: string; priority?: string }[] | undefined) ?? [];
+  const preferences: PlannerPreference[] = rawPrefs
+    .filter((item) => item.content?.trim())
+    .map((item, index) => ({
+      id: item.id?.trim() || `pref_${index}`,
+      content: item.content!.trim(),
+      priority: item.priority === "MUST" ? "MUST" : "PREFER",
+    }));
+  if (instruction.trim()) {
+    preferences.push({
+      id: "pref_instruction",
+      content: instruction.trim(),
+      priority: "PREFER",
+    });
+  }
+  const wishText = preferences.map((item) => item.content).join("。");
   const fallback = pickFromCandidates({
     walk: input.walk,
     exhibit: input.exhibit,
     sweets: input.sweets,
     other: input.other,
     lockedIds: input.lockedIds,
+    lockedSpots: input.lockedSpots,
     rain: input.rain,
     avoidIds,
     dateTokyo: input.dateTokyo,
@@ -239,32 +343,47 @@ export async function runPlanner(input: {
     preferCheaper: /予算|安|抑え/.test(instruction),
     preferRest: /ゆっくり|休憩/.test(instruction),
     allowAvoidedFallback: input.task !== "replan",
+    preferences,
     wishText,
   });
   const liveOnly = getEnv().runtime === "LIVE";
   const known = new Set(
-    [...input.walk, ...input.exhibit, ...input.sweets, ...input.other].map((s) => s.id),
+    [
+      ...(input.lockedSpots ?? []),
+      ...input.walk,
+      ...input.exhibit,
+      ...input.sweets,
+      ...input.other,
+    ].map((s) => s.id),
   );
   const selected: string[] = [];
   for (const id of input.lockedIds) {
     if (!selected.includes(id)) selected.push(id);
   }
   for (const id of fallback.selected) {
+    if (input.lockedIds.includes(id)) continue;
     if (!known.has(id) || (liveOnly && id.startsWith("mock:"))) {
       await input.log("planner", "CANDIDATE_REJECTED", `未知ID ${id} は採用しない`);
       continue;
     }
     if (!selected.includes(id)) selected.push(id);
   }
-  if (selected.length < 3) {
-    for (const id of fallback.selected) {
-      if (!known.has(id) || (liveOnly && id.startsWith("mock:"))) continue;
-      if (!selected.includes(id)) selected.push(id);
-      if (selected.length >= 3) break;
-    }
-  }
   for (const r of fallback.rejected) {
     await input.log("planner", "CANDIDATE_REJECTED", `${r.spotId}: ${r.reason}`);
+  }
+  if (fallback.unmetMust.length) {
+    await input.log(
+      "planner",
+      "NOTICE",
+      `未達 MUST: ${fallback.unmetMust.map((pref) => pref.content).join("、")}`,
+    );
+  }
+  if (fallback.overflowMust.length) {
+    await input.log(
+      "planner",
+      "NOTICE",
+      `枠超過 MUST: ${fallback.overflowMust.map((pref) => pref.content).join("、")}`,
+    );
   }
 
   remember(input.memories, "planner", {
@@ -273,5 +392,11 @@ export async function runPlanner(input: {
     factValue: selected,
   });
   await input.log("planner", "TOOL_COMPLETED", `${selected.length}件を決定論で採用`);
-  return { selected, rejected: fallback.rejected, llm: deterministicLlm(selected, fallback.rejected) };
+  return {
+    selected,
+    rejected: fallback.rejected,
+    unmetMust: fallback.unmetMust,
+    overflowMust: fallback.overflowMust,
+    llm: deterministicLlm(selected, fallback.rejected),
+  };
 }

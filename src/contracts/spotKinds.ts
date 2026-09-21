@@ -379,9 +379,10 @@ export const WISH_FACETS: readonly WishFacet[] = [
     id: "street_food",
     kind: "dining",
     wish: /食べ歩き/,
+    // market は検索候補に含めうるが、食品提供の根拠が無いので達成には使わない（温泉≠spa と同型）。
     searchTypes: ["meal_takeaway", "market"],
-    fulfillTypes: ["meal_takeaway", "market", "food_court"],
-    name: /食べ歩き|屋台|フードコート|市場|market/i,
+    fulfillTypes: ["meal_takeaway", "food_court"],
+    name: /食べ歩き|屋台|フードコート|market/i,
     bucket: "other",
     rankPreference: "DISTANCE",
     scoutCategory: "食事-食べ歩き",
