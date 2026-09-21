@@ -4,6 +4,9 @@ import { buildPlan } from "../src/server/agent/buildPlan";
 import type { Memory, PlanningInput, Spot } from "../src/domain/schemas";
 import type { ProviderCtx } from "../src/server/providers";
 
+/** This suite must not follow the shell's APP_RUNTIME (e.g. LIVE). */
+process.env.APP_RUNTIME = "MOCK";
+
 function fact<T>(value: T | null) {
   return { value, evidenceIds: [] as string[] };
 }
@@ -117,7 +120,7 @@ function deterministicSlice(plan: Awaited<ReturnType<typeof buildPlan>>["plan"])
 
 describe("buildPlan determinism", () => {
   it("returns identical spot order, stays, and travel for the same input (MOCK)", async () => {
-    assert.equal(process.env.APP_RUNTIME ?? "MOCK", "MOCK");
+    process.env.APP_RUNTIME = "MOCK";
 
     const args = {
       version: 1 as const,
