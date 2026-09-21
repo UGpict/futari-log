@@ -4,7 +4,7 @@ import { TextInput, TextArea, SelectInput } from "@/components/text-input";
 
 import { Button } from "@/components/button";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useRouter } from "next/navigation";
 import { PlanLoading } from "@/features/session/plan-loading";
 import { api, fixturesEnabled } from "@/client/api";
@@ -96,6 +96,9 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
   const heading = useRef<HTMLHeadingElement>(null);
   const [showCategories, setShowCategories] = useState(true);
   const [selectingCategory, setSelectingCategory] = useState(false);
+  const optionCarouselRef = useRef<HTMLDivElement>(null);
+  const optionDragRef = useRef({ active: false, moved: false, startX: 0, scrollLeft: 0 });
+  const [draggingOptions, setDraggingOptions] = useState(false);
   const categoryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
     if (categoryTimer.current) clearTimeout(categoryTimer.current);
@@ -114,6 +117,28 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
       setShowCategories(false);
       setSelectingCategory(false);
     }, 120);
+  }
+  function startOptionDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.pointerType !== "mouse" || event.button !== 0) return;
+    optionDragRef.current = { active: true, moved: false, startX: event.clientX, scrollLeft: event.currentTarget.scrollLeft };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+  function moveOptionDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = optionDragRef.current;
+    if (!drag.active) return;
+    const distance = event.clientX - drag.startX;
+    if (Math.abs(distance) > 4) {
+      drag.moved = true;
+      setDraggingOptions(true);
+    }
+    if (drag.moved) event.currentTarget.scrollLeft = drag.scrollLeft - distance;
+  }
+  function endOptionDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!optionDragRef.current.active) return;
+    optionDragRef.current.active = false;
+    setDraggingOptions(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    if (optionDragRef.current.moved) window.setTimeout(() => { optionDragRef.current.moved = false; }, 0);
   }
   const [category, setCategory] = useState<string | null>(null);
   const categories = [
@@ -352,7 +377,21 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
             <div className={styles.selectedCategoryPhoto} style={{ backgroundPosition: currentCategory.position }}><strong>{currentCategory.label}</strong></div>
             <h4 className={styles.categoryQuestion}>{currentCategory.question}</h4>
             <p className={styles.planHint}>選ばずにおまかせでもOK・複数選択可</p>
-            <div className={styles.planChips} aria-label="気になること（任意）">{currentCategory.options.map((option) => <button type="button" key={option} aria-pressed={selected.includes(option)} onClick={() => setSelected(selected.includes(option) ? selected.filter((item) => item !== option) : [...selected, option])}>{selected.includes(option) && <Check size={13} />}{option}</button>)}</div>
+            <div ref={optionCarouselRef} className={`${styles.planChips} ${styles.optionCarousel}`} data-dragging={draggingOptions} aria-label="気になること（任意）" tabIndex={0}
+              onPointerDown={startOptionDrag} onPointerMove={moveOptionDrag} onPointerUp={endOptionDrag} onPointerCancel={endOptionDrag}
+              onClickCapture={(event) => {
+                if (!optionDragRef.current.moved) return;
+                event.preventDefault();
+                event.stopPropagation();
+                optionDragRef.current.moved = false;
+              }} onWheel={(event) => {
+                const carousel = event.currentTarget;
+                if (Math.abs(event.deltaY) <= Math.abs(event.deltaX) || carousel.scrollWidth <= carousel.clientWidth) return;
+                event.preventDefault();
+                carousel.scrollLeft += event.deltaY;
+              }}>
+              {currentCategory.options.map((option) => <button type="button" key={option} aria-pressed={selected.includes(option)} onClick={() => setSelected(selected.includes(option) ? selected.filter((item) => item !== option) : [...selected, option])}>{selected.includes(option) && <Check size={13} />}{option}</button>)}
+            </div>
           </div>}
           <div className={styles.aiWishArea}>
             <button className={styles.aiChoice} type="button" aria-pressed={selected.includes("おまかせ")} onClick={() => { setCategory(null); setShowCategories(true); setSelected(selected.includes("おまかせ") ? [] : ["おまかせ"]); }}>

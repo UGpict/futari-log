@@ -324,6 +324,27 @@
 .dateDetailHeading h4 { font-size: 13px; font-weight: 600; margin-top: 4px; }
 .dateDetails .planChips { margin-bottom: 0; gap: 7px; }
 .dateDetails .planChips button { min-height: 39px; font-size: 11px; padding: 8px 11px; }
+.dateDetails .optionCarousel {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  overflow-x: auto;
+  margin-inline: -14px;
+  padding: 2px 14px 8px;
+  scroll-padding-inline: 14px;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.dateDetails .optionCarousel::-webkit-scrollbar { display: none; }
+.dateDetails .optionCarousel button { flex: 0 0 auto; scroll-snap-align: start; }
+.dateDetails .optionCarousel:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+@media (hover: hover) and (pointer: fine) {
+  .dateDetails .optionCarousel { cursor: grab; user-select: none; }
+  .dateDetails .optionCarousel[data-dragging="true"] { cursor: grabbing; scroll-snap-type: none; }
+  .dateDetails .optionCarousel[data-dragging="true"] button { pointer-events: none; }
+}
 
 /* Compact planning sheet: progress, mascot, then one choice surface. */
 .sheet:has(.compactPlan) { height: min(760px, 91dvh); display: flex; flex-direction: column; overflow: hidden; }
