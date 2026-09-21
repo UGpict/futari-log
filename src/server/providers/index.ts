@@ -12,7 +12,7 @@ import type {
   TravelMode,
 } from "@/domain/schemas";
 import { newId } from "@/lib/ids";
-import { realNowIso, toTokyoParts } from "@/lib/time";
+import { realNowIso, toTokyoParts, tokyoToday } from "@/lib/time";
 import { includedTypesForCategory, placeTypeList } from "@/contracts/spotKinds";
 import { getCatalogSpot, MOCK_CATALOG, searchCatalog, searchCatalogByName, type CatalogSpot } from "./catalog";
 import { applyPhotoMeta, firstPhotoRef, resolvePhotoMedia } from "./placePhotos";
@@ -30,6 +30,7 @@ import {
   emptySpotOpeningHours,
   hasOpeningData,
   parseCurrentDatedHours,
+  parseCurrentOpeningHours,
   parsePlaceHours,
   parseYenRange,
   type PlaceHoursRule,
@@ -37,13 +38,14 @@ import {
 } from "./placeFacts";
 import type { ProviderCtx } from "./types";
 
-export type { PlaceHoursRule, SpotOpeningHours };
+export type { PlaceHoursRule, SpotOpeningHours, OpeningInterval, CurrentOpeningSnapshot } from "./placeFacts";
 export {
   assessSpotOpening,
   asSpotOpeningHours,
   emptySpotOpeningHours,
   hasOpeningData,
   parseCurrentDatedHours,
+  parseCurrentOpeningHours,
   parsePlaceHours,
 };
 
@@ -641,14 +643,17 @@ async function liveDetails(
           hour?: number;
           minute?: number;
           date?: { year?: number; month?: number; day?: number };
+          truncated?: boolean;
         };
         close?: {
           day?: number;
           hour?: number;
           minute?: number;
           date?: { year?: number; month?: number; day?: number };
+          truncated?: boolean;
         };
       }[];
+      specialDays?: { date?: { year?: number; month?: number; day?: number } }[];
     };
     priceRange?: {
       startPrice?: { currencyCode?: string; units?: string };
@@ -660,7 +665,7 @@ async function liveDetails(
   const envEst = estimateEnvironment(types);
   const hours: SpotOpeningHours = {
     regular: parsePlaceHours(p.regularOpeningHours),
-    dated: parseCurrentDatedHours(p.currentOpeningHours),
+    current: parseCurrentOpeningHours(p.currentOpeningHours, tokyoToday()),
   };
   const yen = parseYenRange(p.priceRange);
   const photo = firstPhotoRef(p.photos);

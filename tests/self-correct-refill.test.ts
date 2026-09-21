@@ -154,6 +154,58 @@ describe("self-correct refill around Kiyosumi Monday", () => {
     );
   });
 
+  it("uses visit window so 17:00 open is accepted for an 18:00 slot (not meet 15:00)", async () => {
+    const lateOpenId = "mock:kiyosumi-cafe-open"; // fixture opens 11–22 including 18:00
+    const earlyClosed = "mock:kiyosumi-museum-closed";
+    const pool = [earlyClosed, lateOpenId].map(catalogAsSpot);
+    const provider = ctx();
+    const refill = await refillOpenSpotIds({
+      orderedSpotIds: [earlyClosed],
+      closedSpotIds: new Set([earlyClosed]),
+      protectedSpotIds: new Set(),
+      pool,
+      rain: false,
+      liveOnly: false,
+      targetCount: 1,
+      maxLookups: 6,
+      dateTokyo: DATE,
+      startTime: "15:00",
+      endTime: "21:00",
+      closedItemWindows: [
+        {
+          startAt: tokyoDateTime(DATE, "18:00"),
+          endAt: tokyoDateTime(DATE, "18:50"),
+        },
+      ],
+      ctx: provider,
+    });
+    assert.ok(refill.ids.includes(lateOpenId));
+
+    // Same cafe would be CLOSED if wrongly probed at 15:00–15:50 against a 17:00-only shop.
+    const eveningOnly = {
+      regular: [{ days: [1], open: "17:00", close: "22:00" }],
+      dated: {},
+    };
+    assert.equal(
+      assessSpotOpening(
+        eveningOnly,
+        tokyoDateTime(DATE, "15:00"),
+        addMinutes(tokyoDateTime(DATE, "15:00"), 50),
+        toTokyoParts,
+      ),
+      "CLOSED",
+    );
+    assert.equal(
+      assessSpotOpening(
+        eveningOnly,
+        tokyoDateTime(DATE, "18:00"),
+        tokyoDateTime(DATE, "18:50"),
+        toTokyoParts,
+      ),
+      "OPEN",
+    );
+  });
+
   it("fixture hours match assessSpotOpening expectations at Kiyosumi center", () => {
     const startAt = tokyoDateTime(DATE, "15:00");
     const endAt = addMinutes(startAt, 50);

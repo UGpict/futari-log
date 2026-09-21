@@ -466,6 +466,9 @@ export async function orchestratePlanning(input: {
         )
         .map((item) => item.spotId),
     );
+    const closedItemWindows = built.plan.items
+      .filter((item) => closedSpotIds.has(item.spotId))
+      .map((item) => ({ startAt: item.startAt, endAt: item.endAt }));
     const protectedSpotIds = new Set(protectedItems.map((item) => item.spotId));
     const pool = [...scout.walk, ...exhibit, ...scout.sweets, ...scout.other];
     const refill = await refillOpenSpotIds({
@@ -480,6 +483,12 @@ export async function orchestratePlanning(input: {
       dateTokyo: input.session.input.dateTokyo,
       startTime: input.session.input.startTime,
       endTime: input.session.input.endTime,
+      previousItems: built.plan.items.map((item) => ({
+        spotId: item.spotId,
+        startAt: item.startAt,
+        endAt: item.endAt,
+      })),
+      closedItemWindows,
       ctx: input.ctx,
     });
     const retryIds = refill.ids;
