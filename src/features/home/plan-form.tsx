@@ -42,6 +42,19 @@ function dateValue(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+function fitWishArea(area: HTMLTextAreaElement | null) {
+  if (!area) return;
+  area.style.height = "auto";
+  const computed = window.getComputedStyle(area);
+  const lineHeight = Number.parseFloat(computed.lineHeight) || 20;
+  const chrome = Number.parseFloat(computed.paddingTop) + Number.parseFloat(computed.paddingBottom) + Number.parseFloat(computed.borderTopWidth) + Number.parseFloat(computed.borderBottomWidth);
+  const minHeight = Number.parseFloat(computed.minHeight) || 0;
+  const maxHeight = lineHeight * 5 + chrome;
+  const contentHeight = area.scrollHeight + Number.parseFloat(computed.borderTopWidth) + Number.parseFloat(computed.borderBottomWidth);
+  area.style.height = `${Math.max(minHeight, Math.min(contentHeight, maxHeight))}px`;
+  area.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
+}
+
 function PlaceSuggest({
   query,
   selected,
@@ -485,7 +498,7 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
                 })}
               </div>
             </div>
-            <label className={`${styles.formLabel} ${styles.wishField}`}><span>追加の希望 <small>選んだ内容に加えて伝えたいこと · 任意</small></span><TextArea rows={1} maxLength={1500} placeholder="海が見えるところで、ゆっくりしたい" value={form.self} onChange={(e) => setForm({ ...form, self: e.target.value })} /></label>
+            <label className={`${styles.formLabel} ${styles.wishField}`}><span>追加の希望 <small>選んだ内容に加えて伝えたいこと · 任意</small></span><TextArea ref={fitWishArea} rows={1} maxLength={1500} placeholder="海が見えるところで、ゆっくりしたい" value={form.self} onInput={(e) => fitWishArea(e.currentTarget)} onChange={(e) => setForm({ ...form, self: e.target.value })} /></label>
           </div>}
           {(showCategories || !currentCategory) && <div className={styles.aiWishArea}>
             <div className={styles.choiceDivider}><span>または</span></div>
@@ -494,7 +507,7 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
               <span><strong>全部おまかせ</strong><small>AIがふたりに合う過ごし方を提案</small></span>
               {selected.includes("おまかせ") && <Check size={16} />}
             </button>
-            <label className={`${styles.formLabel} ${styles.wishField}`}><span>追加の希望 <small>選んだ内容に加えて伝えたいこと · 任意</small></span><TextArea rows={1} maxLength={1500} placeholder="海が見えるところで、ゆっくりしたい" value={form.self} onChange={(e) => setForm({ ...form, self: e.target.value })} /></label>
+            <label className={`${styles.formLabel} ${styles.wishField}`}><span>追加の希望 <small>選んだ内容に加えて伝えたいこと · 任意</small></span><TextArea ref={fitWishArea} rows={1} maxLength={1500} placeholder="海が見えるところで、ゆっくりしたい" value={form.self} onInput={(e) => fitWishArea(e.currentTarget)} onChange={(e) => setForm({ ...form, self: e.target.value })} /></label>
           </div>}
         </>}
         {step === 1 && <div className={styles.schedulePanel}>

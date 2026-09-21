@@ -526,7 +526,7 @@
 .aiChoice[aria-pressed="true"] { background: linear-gradient(#fff2f7, #fff2f7) padding-box, linear-gradient(125deg, #ea7096, #f09ab1 50%, #aa95da) border-box; box-shadow: 0 5px 18px #bd78962c; }
 .wishField > span { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 10px; color: #745f6c; font-size: 12px; }
 .wishField > span small { overflow: hidden; color: #a997a3; font-size: 9px; font-weight: 400; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
-.wishField textarea { min-height: 48px; margin-top: 7px; padding: 10px 12px; border-color: #eadfe5; border-radius: 14px; background: #fffdfd; box-shadow: 0 3px 12px #7653650a; resize: vertical; }
+.wishField textarea { min-height: 48px; margin-top: 7px; padding: 10px 12px; border-color: #eadfe5; border-radius: 14px; background: #fffdfd; box-shadow: 0 3px 12px #7653650a; font-size: 13px !important; line-height: 1.55; resize: none; overflow-y: hidden; }
 .planPageForm .planFooter {
   position: sticky;
   z-index: 6;
