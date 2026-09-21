@@ -416,8 +416,8 @@
   background: #fffdfd;
   color: #65505e;
   text-align: left;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 550;
   line-height: 1.5;
 }
 .planPageForm .planGuideSpeech::before {
@@ -447,7 +447,7 @@
   .planGuide { gap: 7px; margin: -2px 2px 1px; }
   .planGuideMascot { width: 42px; height: 43px; flex-basis: 42px; }
   .planGuideMascot > span { transform: translateX(-50%) scale(.3); }
-  .planPageForm .planGuideSpeech { padding-block: 6px; font-size: 14px; }
+  .planPageForm .planGuideSpeech { padding-block: 6px; font-size: 12px; }
   .planPageForm .dateMoodGrid { gap: 6px 8px; margin: 4px 0 5px; }
   .planPageForm .dateMoodPhoto { height: 48px; }
   .planPageForm .dateMoodCaption { padding-block: 5px; }
