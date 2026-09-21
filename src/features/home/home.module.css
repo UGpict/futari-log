@@ -394,7 +394,7 @@
 .planPageForm .planProgress {
   position: absolute;
   z-index: 4;
-  top: calc(12px + env(safe-area-inset-top));
+  top: calc(16px + env(safe-area-inset-top));
   right: 20px;
   width: min(215px, calc(100% - 145px));
 }
@@ -402,7 +402,36 @@
 .planPageForm .planProgress button:not(:last-child)::after { top: 12px; }
 .planPageForm .planProgress button > span { width: 23px; height: 23px; border-width: 2px; }
 .planPageForm .planStage { flex: none; overflow: visible; padding-bottom: 20px; }
-.planPageForm .planCompanion { height: 88px; }
+.planGuide { display: flex; align-items: center; gap: 10px; margin: 0 4px 8px; }
+.planGuideMascot { position: relative; width: 52px; height: 60px; flex: 0 0 52px; overflow: hidden; }
+.planGuideMascot > span { position: absolute; top: 0; left: 50%; transform: translateX(-50%) scale(.42); transform-origin: top center; }
+.planPageForm .planGuideSpeech {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid #eadfe5;
+  border-radius: 18px;
+  background: #fffdfd;
+  color: #65505e;
+  text-align: left;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.planPageForm .planGuideSpeech::before {
+  content: '';
+  position: absolute;
+  top: calc(50% - 5px);
+  left: -6px;
+  width: 10px;
+  height: 10px;
+  border-bottom: 1px solid #eadfe5;
+  border-left: 1px solid #eadfe5;
+  background: #fffdfd;
+  transform: rotate(45deg);
+}
 .planPageForm .planFooter {
   position: sticky;
   z-index: 6;
@@ -415,10 +444,14 @@
 }
 .planPageForm .planFooter .primaryButton { margin-top: 0; }
 @media (max-height: 620px) {
-  .planPageForm .planCompanion { display: none; }
-  .planPageForm .planStage h3 { font-size: 18px; }
-  .planPageForm .dateMoodGrid { margin-top: 7px; }
-  .planPageForm .dateMoodPhoto { height: 56px; }
+  .planGuide { gap: 7px; margin: -2px 2px 1px; }
+  .planGuideMascot { width: 42px; height: 43px; flex-basis: 42px; }
+  .planGuideMascot > span { transform: translateX(-50%) scale(.3); }
+  .planPageForm .planGuideSpeech { padding-block: 6px; font-size: 14px; }
+  .planPageForm .dateMoodGrid { gap: 6px 8px; margin: 4px 0 5px; }
+  .planPageForm .dateMoodPhoto { height: 48px; }
+  .planPageForm .dateMoodCaption { padding-block: 5px; }
+  .planPageForm .planChips { margin-top: 4px; }
 }
 @media (max-width: 350px) {
   .planPageForm .planProgress { right: 14px; width: min(190px, calc(100% - 124px)); }

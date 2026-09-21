@@ -332,10 +332,13 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
       <nav className={styles.planProgress} aria-label="プラン作成の進捗">
         {["過ごし方", "日時・場所", "予算・希望"].map((label, index) => <button type="button" key={label} disabled={index > reached || busy || advancing || selectingCategory} data-complete={index < reached} aria-current={step === index ? "step" : undefined} onClick={() => move(index)}><span>{index < reached ? <Check size={12} /> : index + 1}</span>{label}</button>)}
       </nav>
-      <div className={styles.planCompanion}><MemoMascot nextCue={nextCue} /></div>
+      {!fullPage && <div className={styles.planCompanion}><MemoMascot nextCue={nextCue} /></div>}
       <section key={step} className={`${styles.planStage} ${advancing ? styles.stageLeaving : styles.stageEntering}`} inert={advancing || selectingCategory}>
         {step > 0 && <button type="button" className={styles.stepBack} onClick={() => move(step - 1)}><ChevronLeft size={18} />{step === 1 ? "過ごし方に戻る" : "日時と場所に戻る"}</button>}
-        <h3 ref={heading} tabIndex={-1} className={step === 1 && !fullPage ? "sr-only" : undefined}>{["どんな一日にしよう？", "いつ・どこで過ごそう？", "予算を決めよう"][step]}</h3>
+        {fullPage ? <div className={styles.planGuide}>
+          <div className={styles.planGuideMascot}><MemoMascot nextCue={nextCue} /></div>
+          <h3 ref={heading} tabIndex={-1} className={styles.planGuideSpeech}>{["どんな一日にしよう？", "いつ・どこで過ごそう？", "予算を決めよう"][step]}</h3>
+        </div> : <h3 ref={heading} tabIndex={-1} className={step === 1 ? "sr-only" : undefined}>{["どんな一日にしよう？", "いつ・どこで過ごそう？", "予算を決めよう"][step]}</h3>}
         {step === 2 && <p className={styles.budgetLead}>食事・施設・交通費を含む、ふたり分の目安です</p>}
 
         {step === 0 && <>
