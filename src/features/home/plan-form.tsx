@@ -10,11 +10,11 @@ import { PlanLoading } from "@/features/session/plan-loading";
 import { api, fixturesEnabled } from "@/client/api";
 import { useMe } from "@/client/hooks/use-me";
 import { usePlaceSearch } from "@/client/hooks/use-place-search";
-import { tokyoToday } from "@/config/public";
+import { SERVICE_AREA_NOTICE, tokyoToday } from "@/config/public";
 import type { PlaceCandidate } from "@/contracts";
 import { MemoMascot } from "@/components/memo-mascot";
 import { AiSparkIcon } from "@/components/ai-spark-icon";
-import { Plus, ChevronLeft, ChevronRight, ArrowRight, Check, ChevronDown, Sparkles, CalendarHeart, Clock3, MapPinned, Beef, Fish, Pizza, CakeSlice, Utensils, Coffee, TreePine, Waves, Sandwich, Flame, Film, PawPrint, Gamepad2, Palette, ShoppingBag, Store, Landmark, BookOpen, Camera, Sunrise, Sun, Sunset, Moon, type LucideIcon } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, ArrowRight, Check, ChevronDown, Sparkles, CalendarHeart, Clock3, MapPinned, MapPin, Flag, Beef, Fish, Pizza, CakeSlice, Utensils, Coffee, TreePine, Waves, Sandwich, Flame, Film, PawPrint, Gamepad2, Palette, ShoppingBag, Store, Landmark, BookOpen, Camera, Sunrise, Sun, Sunset, Moon, type LucideIcon } from "lucide-react";
 import styles from "./home.module.css";
 
 const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
@@ -479,6 +479,13 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
           </div>}
         </>}
         {step === 1 && <div className={styles.schedulePanel}>
+          <section className={styles.scheduleSection} aria-labelledby="schedule-when-title">
+            <div className={styles.scheduleSectionHeading}>
+              <span className={styles.scheduleSectionIcon}><CalendarHeart size={16} /></span>
+              <div><small>WHEN</small><h4 id="schedule-when-title">いつ</h4></div>
+              <p>{form.startTime}〜{form.endTime}</p>
+            </div>
+            <div className={styles.scheduleSectionBody}>
           <div className={styles.scheduleDatePicker}>
             <button type="button" className={styles.scheduleDate} aria-expanded={calendarOpen} aria-controls="plan-calendar" onClick={() => { if (calendarTimer.current) return; setCalendarMonth(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1)); setCalendarOpen(!calendarOpen); }}>
               <CalendarHeart size={20} /><span><small>日にち</small><strong>{dateLabel}</strong></span><ChevronDown size={17} />
@@ -504,13 +511,28 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
             </div>
             <div className={styles.inlineTimes}><Clock3 size={17} aria-hidden="true" /><label><span>開始</span><SelectInput aria-label="開始時刻" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</SelectInput><ChevronDown size={16} aria-hidden="true" /></label><span>〜</span><label><span>終了</span><SelectInput aria-label="終了時刻" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</SelectInput><ChevronDown size={16} aria-hidden="true" /></label></div>
           </fieldset>
+            </div>
+          </section>
           {!timingValid && <p className={styles.error} role="alert">終了は開始よりあとの時刻にしてね。</p>}
-          <div className={styles.meetingCard}><label><MapPinned size={18} /><span>待ち合わせ</span><TextInput aria-label="集合場所" value={form.meetName} onChange={(e) => { setMeetPlace(null); setForm({ ...form, meetName: e.target.value }); }} placeholder="駅や目印になる場所" autoComplete="off" /></label>
-            <PlaceSuggest query={form.meetName} selected={meetPlace} search={meetSearch} label="集合場所の候補" onPick={(place) => { setMeetPlace(place); setForm((current) => ({ ...current, meetName: place.name })); }} />
-            <details><summary>{form.endName ? `解散：${form.endName}` : "解散も同じ場所"}<ChevronDown size={13} /></summary><TextInput aria-label="解散場所" value={form.endName} onChange={(e) => { setEndPlace(null); setForm({ ...form, endName: e.target.value }); }} placeholder={meetPlace?.name ?? "解散場所"} autoComplete="off" />
-              {form.endName.trim().length >= 2 || endPlace ? <PlaceSuggest query={form.endName} selected={endPlace} search={endSearch} label="解散場所の候補" onPick={(place) => { setEndPlace(place); setForm((current) => ({ ...current, endName: place.name })); }} /> : <p className={styles.placeHint}>候補から選ぶと、その場所の座標で探します。</p>}
-            </details>
-          </div>
+          <section className={styles.scheduleSection} aria-labelledby="schedule-where-title">
+            <div className={styles.scheduleSectionHeading}>
+              <span className={styles.scheduleSectionIcon}><MapPinned size={16} /></span>
+              <div><small>WHERE</small><h4 id="schedule-where-title">どこ</h4></div>
+              <p>東京エリア</p>
+            </div>
+            <div className={styles.meetingCard}>
+              <div className={styles.routeStart}>
+                <span className={styles.routeMarker}><MapPin size={14} /></span>
+                <div className={styles.routeContent}><label><span>待ち合わせ</span><TextInput aria-label="集合場所" value={form.meetName} onChange={(e) => { setMeetPlace(null); setForm({ ...form, meetName: e.target.value }); }} placeholder="駅や目印になる場所" autoComplete="off" /></label>
+                  <PlaceSuggest query={form.meetName} selected={meetPlace} search={meetSearch} label="集合場所の候補" onPick={(place) => { setMeetPlace(place); setForm((current) => ({ ...current, meetName: place.name })); }} />
+                </div>
+              </div>
+              <details className={styles.routeEnd}><summary><span className={styles.routeMarker}><Flag size={13} /></span><span><small>解散</small><strong>{form.endName || "待ち合わせと同じ"}</strong></span><ChevronDown size={14} /></summary><div className={styles.routeEndEditor}><TextInput aria-label="解散場所" value={form.endName} onChange={(e) => { setEndPlace(null); setForm({ ...form, endName: e.target.value }); }} placeholder={meetPlace?.name ?? "解散場所"} autoComplete="off" />
+                {form.endName.trim().length >= 2 || endPlace ? <PlaceSuggest query={form.endName} selected={endPlace} search={endSearch} label="解散場所の候補" onPick={(place) => { setEndPlace(place); setForm((current) => ({ ...current, endName: place.name })); }} /> : <p className={styles.placeHint}>別の場所で解散するときだけ入力できます。</p>}
+              </div></details>
+            </div>
+            <p className={styles.areaNotice}>{SERVICE_AREA_NOTICE}。都外の場所は確認します。</p>
+          </section>
         </div>}
         {step === 2 && <div className={styles.finishPanel}>
           <fieldset className={styles.planFieldset}><legend className="sr-only">ふたり分の予算</legend><div className={styles.budgetChoices}>{[5000, 10000, 15000].map((amount) => <button type="button" key={amount} aria-pressed={total === amount} onClick={() => setForm({ ...form, meals: String(amount * .6), facilities: String(amount * .3), transit: String(amount * .1) })}>{total === amount && <Check size={14} />}{amount.toLocaleString()}円{amount === 10000 && <small>おすすめ</small>}</button>)}</div><details className={styles.planDetails}><summary>予算を自分で入力する <ChevronDown size={16} /></summary><label className={`${styles.formLabel} ${styles.totalBudgetInput}`}>ふたり分の合計金額<TextInput aria-label="ふたり分の合計予算" type="number" inputMode="numeric" min="0" step="500" value={budgetTotalValue} onChange={(e) => setTotalBudget(e.target.value)} /></label><p className={styles.planHint}>内訳はAIにおまかせできます</p><details className={styles.budgetBreakdown}><summary>食事・施設・交通の内訳も決める <ChevronDown size={14} /></summary>{([ ["meals", "食事"], ["facilities", "施設"], ["transit", "交通"] ] as const).map(([key, label]) => <label key={key} className={styles.formLabel}>{label}（円）<TextInput type="number" inputMode="numeric" min="0" step="100" value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} /></label>)}</details></details></fieldset>
