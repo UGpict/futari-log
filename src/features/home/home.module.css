@@ -738,14 +738,15 @@
 @media (prefers-reduced-motion: reduce) { .stampArrival { animation: none; } }
 
 .page .day:disabled { opacity: 1; cursor: default; transform: none; background: transparent; box-shadow: none; }
-.recordSummary { display: grid; gap: 12px; text-align: center; }
-.recordHero { padding-bottom: 2px; }
-.recordSummarySticker { display: block; width: 88px; height: 76px; margin: 8px auto 3px; }
-.recordMoodLabel { font-size: 11px; color: #a58a9f; }
-.recordSummary h3 { margin: 8px 0 0; color: #66505f; font-size: 17px; font-weight: 650; }
-.recordReflectionCard, .recordPlanSection { padding: 13px; border: 1px solid #ebdfe6; border-radius: 20px; background: #fff; box-shadow: 0 7px 24px #7653650a; }
+.recordSummary { display: grid; gap: 9px; text-align: center; }
+.recordHero { display: grid; grid-template-columns: 72px minmax(0, 1fr); grid-template-rows: auto auto auto; align-items: center; column-gap: 10px; padding: 2px 3px 5px; text-align: left; }
+.recordHero .eyebrow { grid-column: 2; align-self: end; font-size: 10px; }
+.recordSummarySticker { grid-column: 1; grid-row: 1 / 4; display: block; width: 72px; height: 64px; }
+.recordMoodLabel { grid-column: 2; color: #a58a9f; font-size: 10px; }
+.recordSummary h3 { grid-column: 2; align-self: start; margin: 1px 0 0; color: #66505f; font-size: 16px; font-weight: 650; line-height: 1.45; }
+.recordReflectionCard, .recordPlanSection { padding: 11px 12px; border: 1px solid #ebdfe6; border-radius: 20px; background: #fff; box-shadow: 0 7px 24px #7653650a; }
 .recordReflectionCard { background: linear-gradient(145deg, #fff 0%, #fffaf7 100%); }
-.recordNote { margin: 12px 2px 1px; color: #705e69; font-size: 13px; line-height: 1.85; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
+.recordNote { margin: 8px 2px 1px; color: #705e69; font-size: 13px; line-height: 1.7; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
 .recordPlanSection .planOpenLink { margin: 10px 0 0; border-radius: 14px; text-align: left; box-shadow: 0 3px 12px #7653650a; }
 .recordPlanSection .planOpenLink span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recordEditButton { margin-top: 2px; }
