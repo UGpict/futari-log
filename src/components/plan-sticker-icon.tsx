@@ -33,12 +33,11 @@ export function PlanStickerIcon({ kind }: { kind: "time" | "budget" | "spots" | 
         <path d="M23 27Q26 20 32 19" stroke="#bdd1c4" strokeWidth="4" strokeLinecap="round" />
       </>}
       {kind === "calendar" && <>
-        <path d="M16 23Q16 16 23 16H58Q65 16 65 23V63Q65 70 58 70H23Q16 70 16 63Z" fill="#f28eae" stroke="#fffdfb" strokeWidth="9" />
-        <path d="M16 23Q16 16 23 16H58Q65 16 65 23V63Q65 70 58 70H23Q16 70 16 63Z" stroke="#423442" strokeWidth="3.5" />
-        <path d="M17 33H64" stroke="#423442" strokeWidth="4" />
-        <path d="M28 11V24M53 11V24" stroke="#fffdfb" strokeWidth="10" strokeLinecap="round" />
-        <path d="M28 11V24M53 11V24" stroke="#423442" strokeWidth="5" strokeLinecap="round" />
-        <path d="M28 45H35M46 45H53M28 57H35M46 57H53" stroke="#fff8f1" strokeWidth="5.5" strokeLinecap="round" />
+        <path d="M20 25H63V67Q63 73 56 73H25Q20 73 20 67Z" fill="#dccfe2" stroke="#fffdfb" strokeWidth="7" />
+        <path d="M15 22Q15 16 22 16H57Q64 16 64 22V60Q64 67 57 67H22Q15 67 15 60Z" fill="#fff8f2" stroke="#fffdfb" strokeWidth="7" />
+        <path d="M15 22Q15 16 22 16H57Q64 16 64 22V33H15Z" fill="#ea86a8" />
+        <path d="M27 11V23M52 11V23" stroke="#a985bd" strokeWidth="7" strokeLinecap="round" />
+        <path d="M29 49L37 56L52 41" stroke="#cf6f99" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
       </>}
       {kind === "start" && <>
         <path d="M40 10C25 10 14 21 14 36C14 49 29 64 36 71Q40 75 44 71C51 64 66 49 66 36C66 21 55 10 40 10Z" fill="#e883a5" stroke="#fffdfb" strokeWidth="6" />
@@ -47,11 +46,10 @@ export function PlanStickerIcon({ kind }: { kind: "time" | "budget" | "spots" | 
       </>}
       {kind === "goal" && <>
         <path d="M20 69V14" stroke="#fffdfb" strokeWidth="12" strokeLinecap="round" />
-        <path d="M20 69V14" stroke="#423442" strokeWidth="5" strokeLinecap="round" />
-        <path d="M25 17Q43 10 63 20L53 31L63 42Q43 34 25 42Z" fill="#a663e8" stroke="#fffdfb" strokeWidth="9" />
-        <path d="M25 17Q43 10 63 20L53 31L63 42Q43 34 25 42Z" stroke="#423442" strokeWidth="3.5" />
-        <path d="M27 19Q37 16 45 17V35Q36 35 27 39Z" fill="#f28eae" />
-        <path d="M20 14V69" stroke="#423442" strokeWidth="5" strokeLinecap="round" />
+        <path d="M20 69V14" stroke="#8d7795" strokeWidth="6" strokeLinecap="round" />
+        <path d="M24 17H63L53 31L63 45H24Z" fill="#ed789d" stroke="#fffdfb" strokeWidth="9" />
+        <path d="M26 19H59L50 31L59 43H26Z" fill="#ed789d" />
+        <path d="M54 20L46 31L54 42" stroke="#f394ad" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
       </>}
     </g>
   </svg>;

@@ -513,6 +513,9 @@ export function PlanForm({ initialDate, initialWish, initialStep = 0, fullPage =
           <section className={styles.scheduleSection} aria-label="集合と解散">
             <div className={styles.meetingCard}>
               <div className={styles.routeStart}>
+                <svg className={styles.routePath} viewBox="0 0 36 100" preserveAspectRatio="none" aria-hidden="true">
+                  <path d="M18 0C3 15 31 27 17 43C4 57 29 72 18 100" />
+                </svg>
                 <span className={styles.routeMarker}><PlanStickerIcon kind="start" /></span>
                 <div className={styles.routeContent}><label><span>待ち合わせ</span><TextInput aria-label="集合場所" value={form.meetName} onChange={(e) => { setMeetPlace(null); setForm({ ...form, meetName: e.target.value }); }} placeholder="駅や目印になる場所" autoComplete="off" /></label>
                   <PlaceSuggest query={form.meetName} selected={meetPlace} search={meetSearch} label="集合場所の候補" onPick={(place) => { setMeetPlace(place); setForm((current) => ({ ...current, meetName: place.name })); }} />
