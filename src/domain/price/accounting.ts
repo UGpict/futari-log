@@ -66,7 +66,14 @@ export type ComputeCostInput = {
   partySize: number;
   preferUsage: OfficialPriceFact["usageKind"];
   isDining: boolean;
+  /** 検証メッセージ用。カード表示は spotCostLabel 側で店名なしにする。 */
+  spotName?: string;
 };
+
+function unknownCostNote(spotName: string | undefined, fallback: string): string {
+  if (spotName?.trim()) return `${spotName.trim()}の${fallback}`;
+  return fallback;
+}
 
 function factApplies(fact: OfficialPriceFact, input: ComputeCostInput): boolean {
   if (fact.confirmation === "UNKNOWN") return false;
@@ -293,7 +300,7 @@ export function computeCostAccounting(input: ComputeCostInput): CostAccounting {
       breakdown: [],
       sourceUrl: drink?.sourceUrl ?? sweet?.sourceUrl ?? menuItems[0]?.sourceUrl ?? null,
       confirmedAt: null,
-      note: "料金情報を確認できませんでした",
+      note: unknownCostNote(input.spotName, "料金情報を確認できませんでした"),
       knownSubtotalJpy: null,
       unknownLabels,
     };
@@ -325,7 +332,7 @@ export function computeCostAccounting(input: ComputeCostInput): CostAccounting {
       breakdown: [],
       sourceUrl: null,
       confirmedAt: null,
-      note: "料金情報を確認できませんでした",
+      note: unknownCostNote(input.spotName, "料金情報を確認できませんでした"),
       knownSubtotalJpy: null,
       unknownLabels: ["適用可能な公式単価"],
     };
@@ -341,7 +348,7 @@ export function computeCostAccounting(input: ComputeCostInput): CostAccounting {
       breakdown: [],
       sourceUrl: usage.sourceUrl,
       confirmedAt: usage.fetchedAt,
-      note: "単位が不明な価格帯のため二人料金にはしません",
+      note: unknownCostNote(input.spotName, "単位が不明な価格帯のため二人料金にはしません"),
       knownSubtotalJpy: null,
       unknownLabels: ["人数単位"],
     };
@@ -359,7 +366,7 @@ export function computeCostAccounting(input: ComputeCostInput): CostAccounting {
       breakdown: [],
       sourceUrl: usage.sourceUrl,
       confirmedAt: usage.fetchedAt,
-      note: "料金情報を確認できませんでした",
+      note: unknownCostNote(input.spotName, "料金情報を確認できませんでした"),
       knownSubtotalJpy: null,
       unknownLabels: ["金額"],
     };

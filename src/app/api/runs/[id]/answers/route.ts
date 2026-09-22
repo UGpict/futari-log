@@ -11,7 +11,18 @@ export async function POST(
   const { id } = await ctx.params;
   const body = await readJson(request, answerRequestSchema);
   if ("error" in body) return body.error;
-  const result = await answerQuestion(auth.uid, id, body.data.questionId, body.data.answer);
+  const result = await answerQuestion(
+    auth.uid,
+    id,
+    body.data.questionId,
+    body.data.answer,
+    body.data.answerId,
+  );
   if (!result.ok) return json({ error: result.error }, result.status);
-  return json({ ok: true });
+  return json({
+    ok: true as const,
+    next: "next" in result ? result.next : undefined,
+    runId: "runId" in result ? result.runId : id,
+    sessionId: "sessionId" in result ? result.sessionId : undefined,
+  });
 }

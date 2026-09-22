@@ -1,4 +1,5 @@
 import type { Plan, PlanDiff } from "@/domain/schemas";
+import { ANSWER, choice, type WaitingOption } from "@/contracts/waitingChoice";
 import { isProtectedPlanItem } from "./replanOrder";
 
 export type ReplanIntent = "replace_place" | "adjust_same_place";
@@ -49,11 +50,11 @@ export function replanRequestSatisfied(input: {
 export function replanNoChangeQuestion(prompt?: string): {
   id: "q_replan_no_change";
   prompt: string;
-  options: string[];
+  options: WaitingOption[];
 } {
   return {
     id: "q_replan_no_change",
     prompt: prompt ?? "条件に合う別の候補が見つかりませんでした。条件を変えて探しますか？",
-    options: ["条件を変える", "中断する"],
+    options: [choice(ANSWER.change_conditions, "条件を変える"), choice(ANSWER.abort, "中断する")],
   };
 }

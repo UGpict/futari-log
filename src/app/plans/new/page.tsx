@@ -12,13 +12,14 @@ export const metadata: Metadata = {
 const steps = ["activity", "schedule", "details"] as const;
 
 export default async function NewPlanPage({ searchParams }: {
-  searchParams: Promise<{ date?: string; wish?: string; step?: string; seed?: string }>;
+  searchParams: Promise<{ date?: string; wish?: string; step?: string; seed?: string; from?: string }>;
 }) {
   const query = await searchParams;
   const initialDate = /^\d{4}-\d{2}-\d{2}$/.test(query.date ?? "") ? query.date! : tokyoToday();
   const initialStep = Math.max(0, steps.indexOf(query.step as (typeof steps)[number]));
   const seed = resolvePlanFormSeed(query.seed);
   const initialWish = seed?.wish ?? query.wish;
+  const fromRunId = query.from?.trim() || undefined;
 
   return (
     <main className={styles.page}>
@@ -29,6 +30,7 @@ export default async function NewPlanPage({ searchParams }: {
           initialWish={initialWish}
           seed={seed}
           seedParam={query.seed}
+          fromRunId={fromRunId}
           initialStep={initialStep}
           fullPage
         />

@@ -1,5 +1,6 @@
 import type { TravelMode } from "./planning";
 import { SPOT_KIND_DEFS, type SpotKindId, type SpotScoutJob } from "./spotKinds";
+import { ANSWER, choice } from "./waitingChoice";
 
 export const SERVICE_AREA_LABEL = "東京都内";
 export const SERVICE_AREA_NOTICE = "現在は東京都内に対応しています";
@@ -130,24 +131,28 @@ export function companionScoutJobs(jobs: SpotScoutJob[], text: string): SpotScou
 
 export function outsideTokyoQuestion(names: string[]) {
   return {
-    id: "q_outside_tokyo",
+    id: "q_outside_tokyo" as const,
     prompt: `${SERVICE_AREA_NOTICE}。いま選ばれている「${names.join("、")}」は都外と判断しました。集合・解散・固定予定を都内に変えてください。場所は置き換えていません。`,
-    options: ["場所を選び直す", "中断する"],
+    options: [choice(ANSWER.change_conditions, "場所を選び直す"), choice(ANSWER.abort, "中断する")],
   };
 }
 
 export function tokyoUnconfirmedQuestion(names: string[]) {
   return {
-    id: "q_tokyo_unconfirmed",
+    id: "q_tokyo_unconfirmed" as const,
     prompt: `${SERVICE_AREA_NOTICE}。「${names.join("、")}」が都内かどうか確認できませんでした。都内の場所なら続けます。黙って別の地点にはしません。`,
-    options: ["都内の場所です", "場所を選び直す"],
+    options: [choice(ANSWER.continue_tokyo, "都内の場所です"), choice(ANSWER.change_conditions, "場所を選び直す")],
   };
 }
 
 export function searchRangeQuestion(radiusMeters: number) {
   return {
-    id: "q_search_range",
+    id: "q_search_range" as const,
     prompt: `近い範囲では希望に合う実在候補が足りませんでした（最大 ${Math.round(radiusMeters / 1000)}km まで探しました）。条件を変えますか？検証は緩めていません。`,
-    options: ["この範囲で続ける", "条件を変える", "中断する"],
+    options: [
+      choice(ANSWER.continue_range, "この範囲で続ける"),
+      choice(ANSWER.change_conditions, "条件を変える"),
+      choice(ANSWER.abort, "中断する"),
+    ],
   };
 }

@@ -79,7 +79,15 @@ export function isSameTravelPoint(
   from: { lat: number; lng: number; spotId?: string | null },
   to: { lat: number; lng: number; spotId?: string | null },
 ): boolean {
-  if (from.spotId && to.spotId && from.spotId === to.spotId) return true;
+  return Boolean(from.spotId && to.spotId && from.spotId === to.spotId);
+}
+
+/** 別 Place ID でも 40m 以内なら近接。同一 Place は含まない。 */
+export function isNearDistinctTravelPoint(
+  from: { lat: number; lng: number; spotId?: string | null },
+  to: { lat: number; lng: number; spotId?: string | null },
+): boolean {
+  if (isSameTravelPoint(from, to)) return false;
   if (!Number.isFinite(from.lat) || !Number.isFinite(to.lat)) return false;
   return haversineMeters(from, to) <= 40;
 }
@@ -401,6 +409,30 @@ export async function estimateTravel(
         fetchedAt: realNowIso(),
         validFor: null,
         note: "同一地点のため移動なし（余裕分も加算しない）",
+      }),
+    };
+  }
+  if (isNearDistinctTravelPoint(args.from, args.to)) {
+    const meters = Math.round(haversineMeters(args.from, args.to));
+    return {
+      durationMinutes: 0,
+      distanceMeters: meters,
+      walkMinutesWithin: args.mode === "WALK" ? 0 : null,
+      bufferMinutes: 0,
+      kind: "ESTIMATED",
+      failure: null,
+      cached: false,
+      attempts: [],
+      ...driveDepartureFields(args.mode, args.departureAt),
+      delayMinutes: 0,
+      evidence: evidence({
+        kind: "ESTIMATED",
+        provider: "routes",
+        sourceRef: `${args.from.spotId ?? "latlng"}->${args.to.spotId ?? "latlng"}`,
+        sourceField: "duration",
+        fetchedAt: realNowIso(),
+        validFor: null,
+        note: "別 Place ID の近接地点（40m以内）。徒歩1分未満の見積もり",
       }),
     };
   }
@@ -771,7 +803,7 @@ async function liveDetails(
               breakdown: [],
               sourceUrl: p.websiteUri ?? null,
               confirmedAt: null,
-              note: "Places の価格帯は単位不明のため二人料金にできません",
+              note: `${p.displayName?.text ?? p.id}のPlaces価格帯は単位不明のため二人料金にできません`,
               knownSubtotalJpy: null,
               unknownLabels: ["人数単位"],
             }
@@ -784,7 +816,7 @@ async function liveDetails(
               breakdown: [],
               sourceUrl: p.websiteUri ?? null,
               confirmedAt: null,
-              note: "料金情報を確認できませんでした",
+              note: `${p.displayName?.text ?? p.id}の料金情報を確認できませんでした`,
               knownSubtotalJpy: null,
               unknownLabels: ["公式単価"],
             },

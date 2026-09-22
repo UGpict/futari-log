@@ -5,39 +5,39 @@ import type { DateMemory } from "@/client/hooks/use-date-journal";
 const DEMO_OFFSETS_BEFORE_ANCHOR = [18, 13, 7, 3, 2] as const;
 
 /**
- * Pre-baked photo stickers (U2NetP cutouts) under public/images/demo-stickers/.
- * Regenerated with `npx tsx scripts/bake-demo-photo-stickers.ts`.
+ * Pre-baked photo stickers under public/images/demo-stickers/.
+ * Tournament demo calendar samples (`DEMO_CALENDAR_STICKERS`).
  */
 const DEMO_TEMPLATES: { title: string; note: string; mood: Mood; stickerDataUrls: string[] }[] = [
   {
-    title: "ゆっくり、公園さんぽ",
-    note: "たくさん笑って、寄り道して。何でもない時間がいちばん。",
+    title: "カフェでひと息",
+    note: "アイスラテを分け合って、ゆっくり話した。",
     mood: "happy",
-    stickerDataUrls: ["/images/demo-stickers/park.webp", "/images/demo-stickers/street.webp"],
+    stickerDataUrls: ["/images/demo-stickers/drink.webp"],
   },
   {
-    title: "美術館と、ちょっと歩きすぎた日",
-    note: "展示は楽しかったけど、次は休憩も多めに。",
+    title: "ラーメンで締めの日",
+    note: "お腹いっぱい。次はもう少し歩かない作戦。",
     mood: "tired",
-    stickerDataUrls: ["/images/demo-stickers/museum.webp"],
+    stickerDataUrls: ["/images/demo-stickers/ramen.webp"],
   },
   {
-    title: "気になっていたカフェへ",
-    note: "ケーキを食べて「また来たい」と言っていた。",
+    title: "気になっていたケーキ屋へ",
+    note: "ショートケーキを食べて「また来たい」と言っていた。",
     mood: "happy",
-    stickerDataUrls: ["/images/demo-stickers/cafe.webp", "/images/demo-stickers/street.webp"],
+    stickerDataUrls: ["/images/demo-stickers/cake.webp"],
   },
   {
-    title: "いつもの街で、のんびり",
+    title: "甘いものとカフェで、のんびり",
     note: "予定を詰めずに過ごした、ふたりの休日。",
     mood: "relaxed",
-    stickerDataUrls: ["/images/demo-stickers/street.webp", "/images/demo-stickers/cafe.webp"],
+    stickerDataUrls: ["/images/demo-stickers/drink.webp", "/images/demo-stickers/cake.webp"],
   },
   {
-    title: "雨の日のおでかけ",
-    note: "行きたかったお店はお休み。また一緒に行こうね。",
+    title: "温泉の看板を見つけた日",
+    note: "また一緒に行きたいね、と話した帰り道。",
     mood: "sad",
-    stickerDataUrls: ["/images/demo-stickers/rain.webp"],
+    stickerDataUrls: ["/images/demo-stickers/onsen.webp"],
   },
 ];
 
