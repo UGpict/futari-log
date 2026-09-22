@@ -121,6 +121,14 @@ describe("mergePartialPlan", () => {
     assert.equal(merged.version, 3);
   });
 
+  it("emits legs with bufferMinutes so session DTO parse succeeds", () => {
+    const selection = selectionForChange({ kind: "replace", fromItemId: "i1", toItemId: "j1" });
+    const merged = mergePartialPlan({ from, to, diff, selection, nextVersion: 3 });
+    for (const leg of merged.legs) {
+      assert.equal(typeof leg.bufferMinutes, "number");
+    }
+  });
+
   it("strips and detects remaining diff changes", () => {
     assert.equal(changeExistsInDiff(diff, { kind: "replace", fromItemId: "i1", toItemId: "j1" }), true);
     const next = stripChangeFromDiff(diff, { kind: "replace", fromItemId: "i1", toItemId: "j1" });
