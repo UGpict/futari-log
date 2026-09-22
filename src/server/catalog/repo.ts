@@ -83,6 +83,8 @@ export type CatalogIngestRunRecord = {
     grounded: boolean;
     orcaRequestId: string | null;
     costSource: "settled" | "inline" | "missing" | null;
+    retries: number;
+    lastStatus: number | null;
   } | null;
   structure: {
     requestedModel: string;
@@ -93,6 +95,8 @@ export type CatalogIngestRunRecord = {
     costUsd: number | null;
     costJpy: number | null;
     ok: boolean;
+    retries: number;
+    lastStatus: number | null;
   } | null;
 };
 

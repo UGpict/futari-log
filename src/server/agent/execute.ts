@@ -163,6 +163,8 @@ export async function executeRun(
             costJpy: llm.costJpy,
             latencyMs: llm.latencyMs,
             ok: llm.ok,
+            retries: llm.retries,
+            lastStatus: llm.lastStatus,
           },
           payload: { agent: "planner", provisional: true },
         });
@@ -229,6 +231,8 @@ export async function executeRun(
         costJpy: llm.costJpy,
         latencyMs: llm.latencyMs,
         ok: llm.ok,
+        retries: llm.retries,
+        lastStatus: llm.lastStatus,
       },
       payload: llm.error ? { error: llm.error, agent: "planner" } : { agent: "planner" },
     });
@@ -572,6 +576,8 @@ async function runReflection(runId: string, signal: AbortSignal) {
       costJpy: llm.costJpy,
       latencyMs: llm.latencyMs,
       ok: llm.ok,
+      retries: llm.retries,
+      lastStatus: llm.lastStatus,
     },
     payload: { agent: "reflect", action: action?.action ?? null },
   });
@@ -580,7 +586,8 @@ async function runReflection(runId: string, signal: AbortSignal) {
     if (!found) return;
     if (llm.ok && llm.costJpy != null) {
       found.run.cost.llmJpy = (found.run.cost.llmJpy ?? 0) + llm.costJpy;
-      found.run.cost.mundaneCalls += 1;
+      found.run.cost.mundaneCalls += llm.pool === "mundane" ? 1 : 0;
+      found.run.cost.hardCalls += llm.pool === "hard" ? 1 : 0;
     } else if (llm.ok) {
       found.run.cost.unaccountedCalls += 1;
     }

@@ -91,6 +91,8 @@ export async function structureEvents(input: {
     requestedModel: string;
     ok: boolean;
     error: string | null;
+    retries: number;
+    lastStatus: number | null;
   };
 }> {
   const docs = input.documents
@@ -150,6 +152,8 @@ export async function structureEvents(input: {
       requestedModel: result.requestedModel,
       ok: result.ok && usable.length > 0,
       error: result.error ?? (usable.length ? null : "structure produced no titles"),
+      retries: result.retries,
+      lastStatus: result.lastStatus,
     },
   };
 }

@@ -1,5 +1,5 @@
 import { getEnv } from "@/config/env";
-import { LLM_PRICE_TABLE, MODEL_PARAMS } from "@/config/settings";
+import { MODEL_PARAMS } from "@/config/settings";
 import type { AppEvent } from "@/domain/schemas";
 import { withTimeout } from "@/lib/abort";
 import { newId } from "@/lib/ids";
@@ -7,7 +7,8 @@ import { realNowIso } from "@/lib/time";
 import { maskPii } from "@/server/privacy/mask";
 import { appendRunEvent, nextEventSeq } from "@/server/repositories/store";
 import { z, type ZodType } from "zod";
-import { orcaBase, orcaHeaders, usdToJpy, usageFromOrca } from "./usage";
+import { fetchOrcaWithRetry } from "./fetchOrcaWithRetry";
+import { orcaBase, orcaHeaders, usageFromOrca } from "./usage";
 
 export type Pool = "mundane" | "hard";
 export type LlmTask =
@@ -22,7 +23,7 @@ export type LlmTask =
 export const TASK_POOL: Record<LlmTask, Pool> = {
   structure: "mundane",
   candidates: "mundane",
-  reflect: "mundane",
+  reflect: "hard",
   share: "mundane",
   final_plan: "hard",
   replan: "hard",
@@ -85,6 +86,8 @@ export type LlmCallResult<T> = {
   latencyMs: number;
   repaired: boolean;
   error: string | null;
+  retries: number;
+  lastStatus: number | null;
 };
 
 function modelFor(pool: Pool): string {
@@ -214,6 +217,8 @@ export async function callLLM<T>(input: {
       latencyMs: Date.now() - started,
       repaired: false,
       error: parsed.success ? null : "mock schema mismatch",
+      retries: 0,
+      lastStatus: null,
     };
   }
 
@@ -243,7 +248,7 @@ export async function callLLM<T>(input: {
         type: "json_object" as const,
       },
     };
-    const res = await fetch(`${orcaBase()}/chat/completions`, {
+    const { response: res, retries, lastStatus } = await fetchOrcaWithRetry(`${orcaBase()}/chat/completions`, {
       method: "POST",
       headers: orcaHeaders(),
       body: JSON.stringify(body),
@@ -272,6 +277,8 @@ export async function callLLM<T>(input: {
           latencyMs,
           repaired: false,
           error: `orcarouter ${res.status}`,
+          retries,
+          lastStatus,
         },
       };
     }
@@ -332,6 +339,8 @@ export async function callLLM<T>(input: {
         latencyMs,
         repaired: false,
         error: classified.kind ? errorMessageForKind(classified.kind) : null,
+        retries,
+        lastStatus,
       },
     };
   };
@@ -382,12 +391,14 @@ export async function callOrcaJson<T>(input: {
       latencyMs: Date.now() - started,
       repaired: false,
       error: "ORCAROUTER_API_KEY missing",
+      retries: 0,
+      lastStatus: null,
     };
   }
   const messages = input.messages.some((m) => /json/i.test(m.content))
     ? input.messages
     : [{ role: "system" as const, content: "Respond with a JSON object." }, ...input.messages];
-  const res = await fetch(`${orcaBase()}/chat/completions`, {
+  const { response: res, retries, lastStatus } = await fetchOrcaWithRetry(`${orcaBase()}/chat/completions`, {
     method: "POST",
     headers: orcaHeaders(),
     body: JSON.stringify({
@@ -416,6 +427,8 @@ export async function callOrcaJson<T>(input: {
       latencyMs,
       repaired: false,
       error: `orcarouter ${res.status}`,
+      retries,
+      lastStatus,
     };
   }
   const json = (await res.json()) as {
@@ -444,6 +457,8 @@ export async function callOrcaJson<T>(input: {
     latencyMs,
     repaired: false,
     error: checked.success ? null : "schema validation failed",
+    retries,
+    lastStatus,
   };
 }
 
@@ -470,17 +485,6 @@ export function extractJsonObject(content: string): unknown {
   } catch {
     return null;
   }
-}
-
-export function estimateFromTable(
-  model: string,
-  promptTokens: number | null,
-  completionTokens: number | null,
-): number | null {
-  const row = LLM_PRICE_TABLE.usdPer1M[model as keyof typeof LLM_PRICE_TABLE.usdPer1M];
-  if (!row || promptTokens == null || completionTokens == null) return null;
-  const usd = (promptTokens * row.input + completionTokens * row.output) / 1_000_000;
-  return usdToJpy(usd);
 }
 
 export const llmActionSchema = z.object({

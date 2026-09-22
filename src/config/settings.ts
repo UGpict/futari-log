@@ -71,15 +71,6 @@ export const WORKER = {
   heartbeatMs: 5_000,
 } as const;
 
-/** 版付き料金表。実請求は OrcaRouter の usage.cost_usd を優先する */
-export const LLM_PRICE_TABLE = {
-  version: "2026-09-01-config",
-  usdPer1M: {
-    "openai/gpt-4o-mini": { input: 0.15, output: 0.6 },
-    "openai/gpt-4o": { input: 2.5, output: 10 },
-  },
-} as const;
-
 export const MODEL_PARAMS = {
   temperature: 0.2,
   maxTokens: 2000,

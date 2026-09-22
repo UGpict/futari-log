@@ -1,5 +1,6 @@
 import { getEnv } from "@/config/env";
 import { withTimeout } from "@/lib/abort";
+import { fetchOrcaWithRetry } from "./fetchOrcaWithRetry";
 import {
   lookupSettledCost,
   orcaBase,
@@ -30,6 +31,8 @@ export type GroundedSearchResult = {
   costSource: "settled" | "inline" | "missing";
   latencyMs: number;
   error: string | null;
+  retries: number;
+  lastStatus: number | null;
   rawKeys: string[];
   messageKeys: string[];
 };
@@ -148,6 +151,8 @@ function emptyResult(
     costSource: "missing",
     latencyMs: Date.now() - started,
     error,
+    retries: 0,
+    lastStatus: null,
     rawKeys: [],
     messageKeys: [],
   };
@@ -159,7 +164,7 @@ async function chatCompletionsSearch(
   signal?: AbortSignal,
 ): Promise<GroundedSearchResult> {
   const started = Date.now();
-  const res = await fetch(`${orcaBase()}/chat/completions`, {
+  const { response: res, retries, lastStatus } = await fetchOrcaWithRetry(`${orcaBase()}/chat/completions`, {
     method: "POST",
     headers: orcaHeaders(),
     body: JSON.stringify({
@@ -186,6 +191,8 @@ async function chatCompletionsSearch(
       ...emptyResult(model, started, `orcarouter chat ${res.status}`),
       actualModel: actualHeader,
       latencyMs,
+      retries,
+      lastStatus,
     };
   }
   const json = (await res.json()) as Record<string, unknown>;
@@ -218,6 +225,8 @@ async function chatCompletionsSearch(
     costSource: cost.costSource,
     latencyMs,
     error: grounded ? null : "chat completions returned no grounding citations",
+    retries,
+    lastStatus,
     rawKeys: Object.keys(json),
     messageKeys: message ? Object.keys(message) : [],
   };
@@ -229,21 +238,26 @@ async function nativeGeminiSearch(
   signal?: AbortSignal,
 ): Promise<GroundedSearchResult> {
   const started = Date.now();
-  const res = await fetch(`${orcaBase().replace(/\/v1$/, "")}/v1beta/models/${model}:generateContent`, {
-    method: "POST",
-    headers: orcaHeaders(),
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: query }] }],
-      tools: [{ googleSearch: {} }],
-    }),
-    signal: withTimeout(signal, 45000),
-  });
+  const { response: res, retries, lastStatus } = await fetchOrcaWithRetry(
+    `${orcaBase().replace(/\/v1$/, "")}/v1beta/models/${model}:generateContent`,
+    {
+      method: "POST",
+      headers: orcaHeaders(),
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: query }] }],
+        tools: [{ googleSearch: {} }],
+      }),
+      signal: withTimeout(signal, 45000),
+    },
+  );
   const latencyMs = Date.now() - started;
   if (!res.ok) {
     return {
       ...emptyResult(model, started, `orcarouter native ${res.status}`),
       path: "native",
       latencyMs,
+      retries,
+      lastStatus,
     };
   }
   const json = (await res.json()) as Record<string, unknown>;
@@ -273,6 +287,8 @@ async function nativeGeminiSearch(
     costSource: cost.costSource,
     latencyMs,
     error: grounded ? null : "native generateContent returned no grounding citations",
+    retries,
+    lastStatus,
     rawKeys: Object.keys(json),
     messageKeys: candidate ? Object.keys(candidate) : [],
   };
