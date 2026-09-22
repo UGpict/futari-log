@@ -29,7 +29,7 @@ function findLeg(
 }
 
 function cloneLeg(leg: TravelLeg, suffix: string): TravelLeg {
-  return { ...leg, id: `${leg.id}:${suffix}` };
+  return { ...leg, id: `${leg.id}:${suffix}`, bufferMinutes: leg.bufferMinutes ?? 0 };
 }
 
 /**
@@ -117,6 +117,7 @@ export function mergePartialPlan(input: {
       departureAt,
       durationMinutes: { value: null, evidenceIds: [] },
       distanceMeters: { value: null, evidenceIds: [] },
+      bufferMinutes: 0,
       delayMinutesInjected: null,
       evidenceIds: [],
     });

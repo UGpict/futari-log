@@ -314,7 +314,7 @@ export const travelLegDtoSchema = z.object({
   walkMinutesWithin: z
     .object({ value: z.number().nullable(), evidenceIds: z.array(z.string()) })
     .optional(),
-  bufferMinutes: z.number(),
+  bufferMinutes: z.number().default(0),
   cachedAt: z.string().nullable().optional(),
   evidenceIds: z.array(z.string()).optional(),
 });
