@@ -38,60 +38,41 @@ UI だけ触る場合は [`docs/ui-handoff.md`](docs/ui-handoff.md) と `npm run
 
 ## アーキテクチャ
 
-審査・説明用の全体像。詳細な実行経路は [`docs/workflows.md`](docs/workflows.md) / [`docs/cloud-run.md`](docs/cloud-run.md)。
+審査・説明用の全体像。詳細な実行経路は [`docs/workflows.md`](docs/workflows.md) / [`docs/cloud-run.md`](docs/cloud-run.md)。LLM のルーター対応は [`docs/specs/llm-routing.md`](docs/specs/llm-routing.md)。
 
 ![ふたりログ アーキテクチャ](docs/architecture-futari-log.png)
 
 ```mermaid
-flowchart TB
-  CS["Cloud Scheduler<br/>毎朝の収集トリガー"]
-  EXT["外部データ<br/>Places • Routes • 天気 • 公式ページ"]
-
-  subgraph CR["Cloud Run | ふたりログ"]
-    ASYNC["非同期実行基盤<br/>実行管理 • 重複防止 • 承認待ち"]
-
-    subgraph BG["バックグラウンドの AI 処理"]
-      EV["イベント収集<br/>検索 — 構造化 — 出典照合"]
-      PR["料金の追加調査<br/>公式情報の検索 — 本文照合"]
-      RA["振り返りエージェント<br/>記録を分析 → 次の行動を選択"]
-    end
-
-    UI["Next.js UI • API<br/>Firebase Auth で本人確認"]
-    VAL["行程検証<br/>違反時は候補を差し替え • 再検証"]
-    PLAN["決定論的プランニング<br/>希望 • 記憶 • 営業時間 • 移動を照合"]
-    CONF["ユーザー確認 • 承認<br/>質問への回答 / 記憶の保存"]
+flowchart LR
+  subgraph PLAN["プランを作る"]
+    direction TB
+    U1["ふたり<br/>希望・予定"] --> APP["アプリ<br/>ログイン・依頼"]
+    APP --> GATH["候補を集める<br/>場所・移動・天気"]
+    GATH --> BUILD["行程を組む<br/>AIを使わずルールで"]
+    BUILD --> CHK["行程チェック<br/>NGなら差し替え"]
+    CHK --> OUT["デートのプラン"]
   end
 
-  ORCA["OrcaRouter<br/>Gemini 検索 • LLM 分析"]
-  USER["ユーザー<br/>希望 • 予定 • 振り返り"]
-
-  subgraph FS["Firestore | 用途別に保存"]
-    EXEC[("実行記録<br/>行程版 • 判断 • モデル • 費用")]
-    CAT[("共有カタログ<br/>イベント • 会場 • 料金の根拠")]
-    MEM[("ふたりの承認済み記憶<br/>対象 • 適用範囲 • 根拠")]
+  subgraph BG["情報を集める（自動）"]
+    direction TB
+    SCH["毎朝起動<br/>Cloud Scheduler"] --> EVT["イベントを探す<br/>Gemini"]
+    EVT --> CAT[("共有カタログ<br/>イベント・会場・料金")]
+    PRICE["料金を調べる<br/>Gemini・公式ページ"] --> CAT
   end
 
-  CS -->|"OIDC 認証"| ASYNC
-  EXT --> EV
-  EXT --> PR
-  ASYNC --> EV
-  ASYNC --> PR
-  ASYNC --> RA
-  EV --> ORCA
-  PR --> ORCA
-  RA --> ORCA
-  ORCA -->|"承認した内容だけ"| CONF
-  RA -->|"確認質問・記憶候補"| CONF
-  CONF -->|"回答後に再分析"| RA
-  USER --> UI
-  UI --> CONF
-  UI -->|"行程・確認事項"| PLAN
-  PLAN <-->|"修正して再検証 • 最大〇回"| VAL
-  MEM -->|"既存記憶との照合"| PLAN
-  EV --> CAT
-  PR --> CAT
-  ASYNC --> EXEC
-  CONF --> MEM
+  subgraph AFTER["おでかけのあと"]
+    direction TB
+    NOTE["振り返りを書く<br/>感想・気分・訪問"] --> RAI["振り返りAI"]
+    RAI -->|"不明点は1つだけ"| ASK["質問 → 再分析"]
+    ASK --> RAI
+    RAI --> CAND["覚える候補"]
+    CAND --> APPR["ふたりが承認<br/>今回だけ / ずっと"]
+    APPR --> MEM[("ふたりの記憶<br/>承認したものだけ")]
+  end
+
+  CAT --> BUILD
+  BUILD -.->|"料金が分からないとき"| PRICE
+  MEM -->|"次回のプランに反映"| BUILD
 ```
 
 Cloud Run では `PLAN_ORCHESTRATOR=workflows`。ローカルは worker。
