@@ -37,6 +37,7 @@ export async function applyStoredPricesToSpot(
     partySize: 2,
     preferUsage: dining ? "DINING" : "PERMANENT",
     isDining: dining,
+    spotName: spot.name,
   });
 
   const ceiling = budgetCeilingJpy(accounting);

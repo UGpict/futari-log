@@ -44,7 +44,9 @@ export const reflectionDtoSchema = z.object({
     .object({
       id: z.string(),
       prompt: z.string(),
-      options: z.array(z.string()),
+      options: z.array(
+        z.union([z.string(), z.object({ id: z.string(), label: z.string() })]),
+      ),
     })
     .nullable()
     .optional(),

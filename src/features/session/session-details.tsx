@@ -12,17 +12,28 @@ import { useSession } from "@/client/hooks/use-session";
 import { Card } from "@/components/card";
 import { formatTokyoHm } from "@/lib/time";
 import { HomeLogo } from "@/components/home-logo";
+import { waitingOptionId, waitingOptionLabel } from "@/contracts/waitingChoice";
 import { spotCostLabel, spotCostSourceNote } from "./cost-label";
+
+function analysisStatusLabel(status: string | undefined) {
+  if (!status) return null;
+  if (["PENDING", "RUNNING", "WAITING_INPUT"].includes(status)) return "分析中";
+  if (status === "SUCCEEDED" || status === "PARTIAL") return "分析完了";
+  if (["FAILED", "CANCELLED", "INTERRUPTED"].includes(status)) return "分析失敗";
+  return null;
+}
 
 export function SessionDetails({ sessionId }: { sessionId: string }) {
   const router = useRouter();
-  const { data, error, post, reload } = useSession(sessionId);
+  const { data, error, post, reload, setError } = useSession(sessionId);
   const [draft, setDraft] = useState<string | null>(null);
   const [note, setNote] = useState("カフェは喜んでた。展示は途中で疲れてた");
 
   const latestRun = data?.runs
     .filter((run) => run.kind !== "PRICE_ENRICH" && run.kind !== "REFLECTION")
     .at(-1);
+  const analysisRun = data?.runs.filter((run) => run.kind === "REFLECTION").at(-1);
+  const analysisBadge = analysisStatusLabel(analysisRun?.status);
 
   const pendingApproval = data?.approvals.find((a) => a.status === "PENDING");
   const autoEvent = data?.events.find((e) => e.type === "PLAN_AUTO_APPLIED");
@@ -42,7 +53,13 @@ export function SessionDetails({ sessionId }: { sessionId: string }) {
           </h1>
           <p className="text-sm text-ink-soft">
             セッション {data.session.status} / 行程 v{data.plan?.version ?? "—"} / 検証 {data.plan?.validation.state ?? "—"}
+            {analysisBadge ? ` / 振り返り ${analysisBadge}` : ""}
           </p>
+          {analysisBadge ? (
+            <p className="mt-1 inline-flex rounded-full bg-black/5 px-2.5 py-0.5 text-xs text-ink-soft" role="status">
+              振り返り分析: {analysisBadge}
+            </p>
+          ) : null}
         </div>
         <Link href={`/memory?couple=${data.couple.id}`} className="text-sm underline">
           記憶
@@ -315,20 +332,39 @@ export function SessionDetails({ sessionId }: { sessionId: string }) {
         {latestRun?.waitingQuestion ? (
           <div className="mt-4 space-y-2">
             <p>{latestRun.waitingQuestion.prompt}</p>
-            {latestRun.waitingQuestion.options.map((opt) => (
-              <Button size="compact" variant="secondary"
-                key={opt}
-
-                onClick={() =>
-                  void post(`/api/runs/${latestRun.id}/answers`, {
-                    questionId: latestRun.waitingQuestion!.id,
-                    answer: opt,
-                  })
-                }
-              >
-                {opt}
-              </Button>
-            ))}
+            {latestRun.waitingQuestion.options.map((opt) => {
+              const label = waitingOptionLabel(opt);
+              const answerId = waitingOptionId(opt);
+              return (
+                <Button
+                  size="compact"
+                  variant="secondary"
+                  key={answerId ?? label}
+                  onClick={() =>
+                    void (async () => {
+                      const res = await api<{ ok: true; next?: string; runId?: string }>(
+                        `/api/runs/${latestRun.id}/answers`,
+                        {
+                          method: "POST",
+                          body: JSON.stringify({
+                            questionId: latestRun.waitingQuestion!.id,
+                            answer: label,
+                            ...(answerId ? { answerId } : {}),
+                          }),
+                        },
+                      );
+                      if (res.next === "edit_conditions" && res.runId) {
+                        router.push(`/plans/new?from=${encodeURIComponent(res.runId)}`);
+                        return;
+                      }
+                      await reload();
+                    })().catch((e) => setError(e instanceof Error ? e.message : "error"))
+                  }
+                >
+                  {label}
+                </Button>
+              );
+            })}
           </div>
         ) : null}
         {data.memoryCandidates.length ? (

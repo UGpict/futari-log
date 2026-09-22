@@ -389,8 +389,12 @@ export const runStatusSchema = z.enum([
   "FAILED",
   "INTERRUPTED",
   "CANCELLED",
+  "SUPERSEDED",
 ]);
 export type RunStatus = z.infer<typeof runStatusSchema>;
+
+export const cancelReasonSchema = z.enum(["user"]);
+export type CancelReason = z.infer<typeof cancelReasonSchema>;
 
 export const runSchema = z.object({
   id: z.string(),
@@ -417,7 +421,12 @@ export const runSchema = z.object({
     .object({
       id: z.string(),
       prompt: z.string(),
-      options: z.array(z.string()),
+      options: z.array(
+        z.union([
+          z.string(),
+          z.object({ id: z.string(), label: z.string() }),
+        ]),
+      ),
     })
     .nullable(),
   waitingApprovalId: z.string().nullable(),
@@ -425,6 +434,7 @@ export const runSchema = z.object({
   reflectionId: z.string().nullable().optional(),
   reflectionContentVersion: z.number().int().positive().nullable().optional(),
   error: z.string().nullable(),
+  cancelReason: cancelReasonSchema.nullable().optional(),
   cost: z.object({
     llmUsd: z.number().nullable().optional(),
     llmJpy: z.number().nullable(),

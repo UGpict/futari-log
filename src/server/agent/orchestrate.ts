@@ -27,6 +27,7 @@ import { pickReplacementCandidate, runPlanner } from "./planner";
 import { jobsMissingCoverage, mergeScoutBuckets, runScout, scoutPool } from "./scout";
 import { scoutJobsForPreferences } from "./scoutJobs";
 import { refillOpenSpotIds, SELF_CORRECT_REFILL_LOOKUPS } from "./selfCorrect";
+import { ANSWER, choice, type WaitingOption } from "@/contracts/waitingChoice";
 import {
   areaPointFromFixedNameHint,
   assessTokyoPlan,
@@ -43,7 +44,7 @@ import { runWeather } from "./weather";
 
 export type OrchestratedPlan = {
   built: BuiltPlan | null;
-  waitingQuestion?: { id: string; prompt: string; options: string[] };
+  waitingQuestion?: { id: string; prompt: string; options: WaitingOption[] };
   walkAckFingerprint?: string;
   llm: LlmCallResult<{
     think?: string;
@@ -151,8 +152,12 @@ export async function orchestratePlanning(input: {
           ? `「${wish.unsupported.join("、")}」は現在の Places type だけでは達成判定できません。温泉をスパとして探すか、対応できる範囲で続けますか？`
           : `「${wish.unsupported.join("、")}」はまだ候補検索に対応していません。対応できる範囲で続けますか？`,
         options: hasOnsen
-          ? ["スパとして探す", "対応できる範囲で続ける", "中断する"]
-          : ["対応できる範囲で続ける", "中断する"],
+          ? [
+              choice(ANSWER.continue_spa, "スパとして探す"),
+              choice(ANSWER.continue_supported, "対応できる範囲で続ける"),
+              choice(ANSWER.abort, "中断する"),
+            ]
+          : [choice(ANSWER.continue_supported, "対応できる範囲で続ける"), choice(ANSWER.abort, "中断する")],
       },
       built: null,
       llm: noneLlm(),
@@ -221,7 +226,10 @@ export async function orchestratePlanning(input: {
       waitingQuestion: {
         id: "q_event_fallback",
         prompt: `選択したイベントを確定プランに使えません（${catalog.failed[0]?.reason ?? "取得失敗"}）。施設の候補で続けますか？黙って置き換えはしません。`,
-        options: ["施設の候補で続ける", "中断する"],
+        options: [
+          choice(ANSWER.continue_event_fallback, "施設の候補で続ける"),
+          choice(ANSWER.abort, "中断する"),
+        ],
       },
       built: null,
       llm: noneLlm(),
@@ -365,7 +373,7 @@ export async function orchestratePlanning(input: {
       waitingQuestion: {
         id: "q_must_overflow",
         prompt: `必須の希望（${labels}）が今日の立ち寄り枠に収まりません。希望を減らすか、時間・固定予定を調整しますか？黙って必須希望は外しません。`,
-        options: ["希望を減らす", "中断する"],
+        options: [choice(ANSWER.reduce_wishes, "希望を減らす"), choice(ANSWER.abort, "中断する")],
       },
       built: null,
       llm: planned.llm,
@@ -378,7 +386,7 @@ export async function orchestratePlanning(input: {
       waitingQuestion: {
         id: "q_must_unmet",
         prompt: `必須の希望「${labels}」を満たす実在候補を行程に載せられませんでした。希望か場所を変えますか？黙って必須希望は外しません。`,
-        options: ["条件を変える", "中断する"],
+        options: [choice(ANSWER.change_conditions, "条件を変える"), choice(ANSWER.abort, "中断する")],
       },
       built: null,
       llm: planned.llm,
@@ -390,7 +398,7 @@ export async function orchestratePlanning(input: {
       waitingQuestion: {
         id: "q_no_candidates",
         prompt: "この場所と希望では実在候補を行程に載せられません。場所か希望を変えますか？",
-        options: ["条件を変える", "中断する"],
+        options: [choice(ANSWER.change_conditions, "条件を変える"), choice(ANSWER.abort, "中断する")],
       },
       built: null,
       llm: planned.llm,
@@ -519,7 +527,10 @@ export async function orchestratePlanning(input: {
       waitingQuestion: {
         id: "q_event_fallback",
         prompt: `選択したイベントを確定プランに使えません（${eventBlocked[0]?.message ?? "検証失敗"}）。施設の候補で続けますか？黙って置き換えはしません。`,
-        options: ["施設の候補で続ける", "中断する"],
+        options: [
+          choice(ANSWER.continue_event_fallback, "施設の候補で続ける"),
+          choice(ANSWER.abort, "中断する"),
+        ],
       },
       built: null,
       llm: planned.llm,
@@ -606,7 +617,7 @@ export async function orchestratePlanning(input: {
       waitingQuestion: {
         id: "q_plan_unmet",
         prompt: `実在候補では確定プランを作れません（${reason}）。条件を変えますか？検証は緩めていません。`,
-        options: ["条件を変える", "中断する"],
+        options: [choice(ANSWER.change_conditions, "条件を変える"), choice(ANSWER.abort, "中断する")],
       },
       built: null,
       llm: planned.llm,
