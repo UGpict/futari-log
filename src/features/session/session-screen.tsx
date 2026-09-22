@@ -6,7 +6,7 @@ import { Button, ButtonLink } from "@/components/button";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, MessageCircle, ArrowUpRight, ExternalLink, Clock3, SlidersHorizontal } from "lucide-react";
+import { AlertTriangle, Check, MessageCircle, ArrowUpRight, ExternalLink, Clock3 } from "lucide-react";
 import { useSession } from "@/client/hooks/use-session";
 import { usePlacePhotos } from "@/client/hooks/use-place-photos";
 import { api, fixturesEnabled } from "@/client/api";
@@ -22,6 +22,7 @@ import { SpotCardImage } from "./spot-photo";
 import { spotVisual } from "./spot-visuals";
 import { spotCostLabel, spotCostSourceNote } from "./cost-label";
 import type { SessionSnapshot } from "@/contracts";
+import { proposalRows, type ProposalRow } from "./proposal-rows";
 import styles from "./session.module.css";
 
 function hasVisibleProposal(approval: {
@@ -76,6 +77,10 @@ function SessionPlanningSkeleton({ data }: { data: SessionSnapshot | null }) {
         <span><PlanStickerIcon kind={travel.icon} /><span><small className="sr-only">移動手段</small>{input ? <strong>{travel.label}</strong> : <i className={styles.skeletonLine} />}</span></span>
       </div>
     </section>
+    <section className={`${styles.preflightNotice} ${styles.preflightSkeleton}`} aria-label="お出かけ前の確認事項を読み込み中">
+      <header aria-hidden="true"><span className={styles.preflightIcon}><span className={styles.skeletonLine} /></span><div><strong><span className={styles.skeletonLine} /></strong><small><span className={styles.skeletonLine} /></small></div></header>
+      <ul aria-hidden="true">{[0, 1, 2].map((index) => <li key={index}><span className={styles.skeletonLine} /><span className={`${styles.skeletonLine} ${styles.preflightSkeletonWrap}`} /></li>)}</ul>
+    </section>
     <section className={`${styles.itinerary} ${styles.itinerarySkeleton}`} aria-label="プランを作成中">
       <svg className={styles.itineraryRoutePath} viewBox="0 0 40 100" preserveAspectRatio="none" aria-hidden="true"><path d="M18 0C35 10 4 23 20 36S35 59 18 72S6 91 20 100" /></svg>
       <div className={`${styles.meeting} ${styles.planningMeeting}`}><span className={styles.endpointSticker}><PlanStickerIcon kind="start" /></span><div><small>{input?.startTime ?? "--:--"} 集合</small>{input ? <strong>{input.meet.name}</strong> : <span className={styles.skeletonLine} />}</div><PlanningAgentTicker /></div>
@@ -102,14 +107,18 @@ function SessionPlanningSkeleton({ data }: { data: SessionSnapshot | null }) {
 export function SessionScreen({ sessionId }: { sessionId: string }) {
   const router = useRouter();
   const { data, error, reload, startReplan } = useSession(sessionId);
-  const [sheet, setSheet] = useState<"conditions" | "feedback" | null>(null);
+  const [sheet, setSheet] = useState<"feedback" | null>(null);
   const [target, setTarget] = useState<{ id: string; name: string; locked: boolean } | null>(null);
   const [feedback, setFeedback] = useState("");
   const [actionError, setActionError] = useState("");
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
   const [replanningItemId, setReplanningItemId] = useState<string | null>(null);
+  const [replanSubmitting, setReplanSubmitting] = useState(false);
   const [saving, setSaving] = useState(false);
+  // UI-only decisions until the backend supports individual changes. Never send
+  // these selections to the existing whole-plan approval endpoint.
+  const [proposalChoices, setProposalChoices] = useState<{ scope: string; items: Record<string, "APPROVE" | "REJECT"> }>({ scope: "", items: {} });
   // PRICE_ENRICH / REFLECTION share the session run list but are background jobs.
   // Don't treat their FAILED (e.g. no_verified_or_partial_facts) as plan failure.
   const planRuns = data?.runs.filter((run) => run.kind !== "PRICE_ENRICH" && run.kind !== "REFLECTION") ?? [];
@@ -119,8 +128,20 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   const approval = data?.approvals.find((item) => item.status === "PENDING" && item.kind === "PLAN_APPLY");
   const proposalReady = Boolean(approval && data?.proposedPlan && hasVisibleProposal(approval));
   const attention = latest?.status === "WAITING_INPUT" || proposalReady || Boolean(approval && latest?.status === "WAITING_APPROVAL");
-  const displayPlan = proposalReady && data?.proposedPlan ? data.proposedPlan : data?.plan ?? null;
-  const { photos: placePhotos, loading: photosLoading } = usePlacePhotos((displayPlan?.items ?? []).map((item) => item.spotId));
+
+  // 提案は比較カード内だけで先に見せ、承認されるまでは現在の行程を保つ。
+  // 承認後に plan が更新された瞬間、該当カードが差し替わる。
+  const displayPlan = data?.plan ?? null;
+  const validationIssues = displayPlan?.validation.issues ?? [];
+  const replanning = replanSubmitting || (latest?.kind === "REPLAN" && active && !attention && !failed);
+  const loadingTargetId = replanSubmitting ? replanningItemId : latest?.targetPlanItemId;
+  const rows = proposalRows(displayPlan?.items ?? [], proposalReady ? data?.proposedPlan?.items : undefined, approval?.diff);
+  const proposalScope = JSON.stringify([sessionId, approval?.id, approval?.planVersionFrom, approval?.planVersionTo, approval?.diff]);
+  const photoSpotIds = [
+    ...(displayPlan?.items ?? []).map((item) => item.spotId),
+    ...(proposalReady ? data?.proposedPlan?.items ?? [] : []).map((item) => item.spotId),
+  ];
+  const { photos: placePhotos, loading: photosLoading } = usePlacePhotos(photoSpotIds);
   if (!data && error) return <main className={styles.page}><HomeLogo className={styles.homeLogo} /><h1>読み込めませんでした</h1><p role="alert">{error}</p><Button variant="secondary" size="compact" onClick={() => void reload().catch(() => undefined)}>もう一度読み込む</Button></main>;
   if (!data || (!data.plan && !failed && !attention)) return <SessionPlanningSkeleton data={data} />;
   const travelUnverified = Boolean(
@@ -133,6 +154,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   const confirmed = ["CONFIRMED", "IN_PROGRESS", "DONE", "REFLECTED"].includes(data.session.status);
   const budget = [input.budget.mealsJpy, input.budget.facilitiesJpy, input.budget.transitJpy];
   const budgetLabel = budget.every((value) => value !== null) ? `¥${budget.reduce<number>((sum, value) => sum + (value ?? 0), 0).toLocaleString()}` : "未設定あり";
+  const snapshot = data;
   function travelModeLabel(mode: string, walkWithin?: number | null) {
     if (mode === "WALK") return "徒歩";
     if (mode === "TRANSIT") {
@@ -160,9 +182,51 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   function openFeedback(item?: { id: string; name: string; locked: boolean }) {
     setTarget(item ?? null); setFeedback(""); setActionError(""); setSheet("feedback");
   }
+  function proposalActions(row: ProposalRow) {
+    const choice = proposalChoices.scope === proposalScope ? proposalChoices.items[row.key] : undefined;
+    function choose(decision: "APPROVE" | "REJECT") {
+      if (fixturesEnabled()) {
+        void act("/api/fixtures/proposal-decision", { sessionId, approvalId: approval?.id, rowKey: row.key, decision }, decision === "APPROVE" ? "この予定の変更を反映しました" : "この予定は元のままにしました");
+        return;
+      }
+      setProposalChoices((previous) => ({
+        scope: proposalScope,
+        items: { ...(previous.scope === proposalScope ? previous.items : {}), [row.key]: decision },
+      }));
+    }
+    return <div className={styles.proposalDecision}>
+      <div className={styles.proposalActions}>
+        <Button variant={choice === "REJECT" ? "primary" : "secondary"} size="compact" disabled={pending} aria-pressed={fixturesEnabled() ? undefined : choice === "REJECT"} onClick={() => choose("REJECT")}>{choice === "REJECT" && <Check size={12} aria-hidden="true" />}{row.change === "add" ? "追加しない" : "元のまま"}</Button>
+        <Button variant={choice === "REJECT" ? "secondary" : "primary"} size="compact" disabled={pending} aria-pressed={fixturesEnabled() ? undefined : choice === "APPROVE"} onClick={() => choose("APPROVE")}>{choice === "APPROVE" && <Check size={12} aria-hidden="true" />}この変更を許可</Button>
+      </div>
+      <p className={styles.proposalDecisionStatus} role="status">{choice === "APPROVE" ? "許可を選択しました。予定にはまだ反映されていません。" : choice === "REJECT" ? `${row.change === "add" ? "追加しない" : "元のまま"}を選択しました。予定にはまだ反映されていません。` : "この予定の変更を選んでください。"}</p>
+    </div>;
+  }
+  function renderProposal(row: ProposalRow) {
+    const item = row.proposed ?? row.current!;
+    const spot = snapshot.spots[item.spotId];
+    const previous = row.current && snapshot.spots[row.current.spotId];
+    const visual = spotVisual(spot?.name ?? "", spot?.categories ?? []);
+    const label = row.change === "remove" ? "この予定を外す案" : row.change === "add" ? "追加する予定" : row.change === "time" ? "時間を変更する案" : "ここを変更する案";
+    return <section className={`${styles.spot} ${styles.proposalCard}`} aria-label={`${spot?.name ?? "予定"}：${label}`} aria-busy={pending}>
+      <div className={styles.proposalPhoto}>
+        <SpotCardImage key={item.spotId} spotId={item.spotId} name={spot?.name ?? "立ち寄りスポット"} visual={visual} photo={placePhotos[item.spotId]} loading={photosLoading} />
+        <span className={styles.proposalBadge}>{label} · 確認待ち</span>
+      </div>
+      <div className={styles.spotBody}>
+        <div className={styles.spotTop}><span className={styles.category}>{visual.label}</span><small><Clock3 size={12} aria-hidden="true" />{Math.max(0, Math.round((Date.parse(item.endAt) - Date.parse(item.startAt)) / 60000))}分</small>{item.locked && <small>時間固定</small>}</div>
+        <h3>{spot?.name ?? "立ち寄りスポット"}</h3>
+        <div className={styles.proposalTime}>{formatTokyoHm(item.startAt)}–{formatTokyoHm(item.endAt)}</div>
+        <p>{row.change === "remove" ? "変更を反映すると、この予定は行程から外れます。" : item.reason || approval?.summary}</p>
+        <div className={styles.spotFoot}><span>{spotCostLabel(spot)}{spotCostSourceNote(spot) ? ` · ${spotCostSourceNote(spot)}` : ""}</span>{(spot?.costAccounting?.sourceUrl || spot?.officialUrl) && <a href={spot.costAccounting?.sourceUrl || spot.officialUrl || undefined} target="_blank" rel="noreferrer">出典 <ExternalLink size={12} /></a>}</div>
+        {row.current && row.change !== "remove" && <div className={styles.proposalPrevious}><span>変更前</span><div><strong>{previous?.name ?? "現在のスポット"}</strong><small>{formatTokyoHm(row.current.startAt)}–{formatTokyoHm(row.current.endAt)}</small></div></div>}
+      </div>
+      {proposalActions(row)}
+    </section>;
+  }
   return <main className={styles.page} data-sheet-open={sheet ? "" : undefined}>
     <Toast message={message} onDismiss={() => setMessage("")} />
-    <header className={styles.header}><HomeLogo className={styles.homeLogo} />{!fixturesEnabled() && <span className={styles.planStatus}>{confirmed ? "予定に追加済み" : proposalReady ? "変更案を確認中" : active && !attention ? "変更案を作成中" : "プランを相談中"}</span>}<Button className={styles.conditionButton} variant="ghost" size="compact" onClick={() => setSheet("conditions")}><SlidersHorizontal size={14} />条件</Button></header>
+    <header className={styles.header}><HomeLogo className={styles.homeLogo} /></header>
     <section className={styles.hero}>
       <div className={styles.planDateHeading}>
         <span className={styles.resultDateSticker}><PlanStickerIcon kind="calendar" /></span><div><h1><time dateTime={input.dateTokyo}>
@@ -178,41 +242,31 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
       </div>
     </section>
     {(error || actionError) && !sheet && <p className={styles.notice} role="alert">{actionError || error}</p>}
-    {active && !attention && <p className={styles.workingMessage} role="status">変更案を考えています。このまま少しお待ちください。</p>}
     {failed && <div className={styles.notice} role="alert"><strong>プランを作り直せませんでした</strong><p>{latest?.error || "時間をおいて、もう一度お試しください。"}</p><Button variant="secondary" size="compact" disabled={pending || active} onClick={() => void act(`/api/sessions/${sessionId}/runs`, { kind: data.plan ? "REPLAN" : "INITIAL_PLAN", trigger: latest?.trigger, instruction: latest?.instruction ?? undefined, targetPlanItemId: latest?.targetPlanItemId ?? undefined, basePlanVersion: data.session.currentPlanVersion ?? undefined }, "再度プランを考えています")}>もう一度試す</Button></div>}
-    {proposalReady && approval && data.proposedPlan && <section className={styles.approval}><strong>変更案が届きました</strong><p>{approval.diff?.summary || approval.summary}</p><div className={styles.proposalCompare}>{(approval.diff?.replaced.length ? approval.diff.replaced : []).map((row) => {
-      const fromItem = data.plan?.items.find((item) => item.id === row.fromItemId);
-      const toItem = data.proposedPlan?.items.find((item) => item.id === row.toItemId);
-      return <div key={`${row.fromItemId}:${row.toItemId}`} className={styles.proposalRow}><div><small>現在</small><strong>{data.spots[row.fromSpotId]?.name ?? row.fromSpotId}</strong><span>{fromItem ? `${formatTokyoHm(fromItem.startAt)}–${formatTokyoHm(fromItem.endAt)}` : ""}</span></div><div><small>変更案</small><strong>{data.spots[row.toSpotId]?.name ?? row.toSpotId}</strong><span>{toItem ? `${formatTokyoHm(toItem.startAt)}–${formatTokyoHm(toItem.endAt)}` : ""}</span></div></div>;
-    })}{(approval.diff?.timeShifts ?? []).map((shift) => {
-      const currentItem = data.plan?.items.find((item) => item.spotId === data.proposedPlan?.items.find((next) => next.id === shift.itemId)?.spotId);
-      const proposedItem = data.proposedPlan?.items.find((item) => item.id === shift.itemId);
-      if (!proposedItem) return null;
-      return <div key={shift.itemId} className={styles.proposalRow}><div><small>現在</small><strong>{data.spots[proposedItem.spotId]?.name ?? proposedItem.spotId}</strong><span>{currentItem ? `${formatTokyoHm(currentItem.startAt)}–${formatTokyoHm(currentItem.endAt)}` : ""}</span></div><div><small>変更案</small><strong>{data.spots[proposedItem.spotId]?.name ?? proposedItem.spotId}</strong><span>{`${formatTokyoHm(proposedItem.startAt)}–${formatTokyoHm(proposedItem.endAt)}`}</span></div></div>;
-    })}</div><small>{data.proposedPlan.assumptions.find((line) => line.startsWith("希望「")) || "内容を確認してから、プランに反映できます。"}</small><div className={styles.buttonRow}><Button variant="primary" size="compact" disabled={pending} onClick={() => void act(`/api/approvals/${approval.id}/decision`, { decision: "APPROVE" }, "変更を反映しました")}>この変更にする</Button><Button variant="secondary" size="compact" disabled={pending} onClick={() => void act(`/api/approvals/${approval.id}/decision`, { decision: "REJECT" }, "元のプランを残しました")}>元のままにする</Button></div></section>}
     {approval && !proposalReady && latest?.status === "WAITING_APPROVAL" && <section className={styles.approval}><strong>条件に合う別の候補が見つかりませんでした。条件を変えて探しますか？</strong><div className={styles.buttonRow}><Button variant="secondary" size="compact" disabled={pending} onClick={() => void act(`/api/approvals/${approval.id}/decision`, { decision: "REJECT" }, "元のプランを残しました")}>元のままにする</Button></div></section>}
     {data.grounding?.searchEntryPointHtml && <iframe title="検索情報の出典" sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={data.grounding.searchEntryPointHtml} className={styles.searchSources} />}
     {latest?.status === "WAITING_INPUT" && latest.waitingQuestion && <section className={styles.approval}><strong>{latest.waitingQuestion.prompt}</strong><div className={styles.buttonRow}>{latest.waitingQuestion.options.map((answer) => <Button variant="secondary" size="compact" key={answer} disabled={pending} onClick={() => void act(`/api/runs/${latest.id}/answers`, { questionId: latest.waitingQuestion!.id, answer }, "回答を送りました")}>{answer}</Button>)}</div></section>}
     {travelUnverified && <section className={styles.notice} role="status"><strong>移動を確認できていない暫定案</strong><p>店舗候補はありますが、必須区間の経路が取れていません。このままでは確定できません。再試行・近場で再検索・集合/解散の変更から進めてください。</p></section>}
-    {!!displayPlan?.validation.issues.length && <section className={styles.notice}><strong>お出かけ前に確認</strong>{displayPlan.validation.issues.map((issue, index) => <p key={index}>{issue.message}</p>)}</section>}
+    {!!validationIssues.length && <section className={styles.preflightNotice} aria-labelledby="preflight-title"><header><span className={styles.preflightIcon}><AlertTriangle aria-hidden="true" /></span><div><strong id="preflight-title">お出かけ前に確認</strong><small>確定前に、次の内容を確認してください</small></div></header><ul>{validationIssues.map((issue, index) => <li key={`${issue.code}:${index}`}>{issue.message}</li>)}</ul></section>}
     <section className={styles.itinerary} aria-label="この日のスケジュール"><h2 className="sr-only">この日のスケジュール</h2>
       <svg className={styles.itineraryRoutePath} viewBox="0 0 40 100" preserveAspectRatio="none" aria-hidden="true"><path d="M18 0C35 10 4 23 20 36S35 59 18 72S6 91 20 100" /></svg>
       <div className={styles.meeting}><span className={styles.endpointSticker}><PlanStickerIcon kind="start" /></span><div><small>{input.startTime} 集合</small><strong>{input.meet.name}</strong></div></div>
-      <ol>{displayPlan?.items.map((item, index) => {
+      <ol>{rows.map((row, index) => {
+        const item = row.current ?? row.proposed!;
         const spot = data.spots[item.spotId];
         const visual = spotVisual(spot?.name ?? "", spot?.categories ?? []);
         const duration = Math.max(0, Math.round((Date.parse(item.endAt) - Date.parse(item.startAt)) / 60000));
-        const next = displayPlan?.items[index + 1];
+        const next = rows[index + 1]?.current;
         const gap = next ? Math.round((Date.parse(next.startAt) - Date.parse(item.endAt)) / 60000) : 0;
         const prevSpotId = index === 0 ? (input.meet.spotId ?? null) : displayPlan?.items[index - 1]?.spotId ?? null;
         const inbound = index === 0
           ? displayPlan?.legs.find((leg) => leg.from === "MEET" && leg.toSpotId === item.spotId)
           : legForTransition(prevSpotId, item.spotId);
-        return <li key={item.id}>
+        return <li key={row.key}>
           <div className={styles.timelineTime}><time dateTime={item.startAt}>{formatTokyoHm(item.startAt)}</time><span data-kind={visual.id}><visual.Icon size={19} /></span></div>
           <div className={styles.stop}>
-            {inbound && <p className={styles.transition}><span />{inbound.durationMinutes.value != null ? `${inbound.durationMinutes.value}分` : "未検証"} · {travelModeLabel(inbound.mode, inbound.walkMinutesWithin?.value)}</p>}
-            {replanningItemId === item.id ? <article className={styles.replanningSpot} aria-label={`${spot?.name ?? "この場所"}の変更案を考えています`}><PlanLoading demo={fixturesEnabled()} compact /></article> : <article className={styles.spot}>
+            {!proposalReady && inbound && <p className={styles.transition}><span />{inbound.durationMinutes.value != null ? `${inbound.durationMinutes.value}分` : "未検証"} · {travelModeLabel(inbound.mode, inbound.walkMinutesWithin?.value)}</p>}
+            {replanning && (!loadingTargetId || loadingTargetId === item.id) ? <article className={styles.replanningSpot} aria-label={`${spot?.name ?? "この場所"}の変更案を考えています`} aria-busy="true"><PlanLoading demo={fixturesEnabled()} compact /></article> : row.change ? renderProposal(row) : <article className={styles.spot}>
               <SpotCardImage key={item.spotId} spotId={item.spotId} name={spot?.name ?? ""} visual={visual} photo={placePhotos[item.spotId]} loading={photosLoading} />
               <div className={styles.spotBody}>
                 <div className={styles.spotTop}><span className={styles.category}>{visual.label}</span><small><Clock3 size={12} />{duration}分</small>{item.locked && <small>時間固定</small>}{item.progress === "DONE" && <small><Check size={12} />訪問済み</small>}</div>
@@ -222,7 +276,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
                 {!["DONE", "REFLECTED"].includes(data.session.status) && <button className={styles.changeSpot} disabled={Boolean(active) || pending} onClick={() => openFeedback({ id: item.id, name: spot?.name ?? "このスポット", locked: item.locked })}><MessageCircle size={14} />ここを変えたい<ArrowUpRight size={13} /></button>}
               </div>
             </article>}
-            {gap > 0 && <p className={styles.transition}><span />次の予定まで {gap}分<small>移動・ひと休み</small></p>}
+            {!proposalReady && gap > 0 && <p className={styles.transition}><span />次の予定まで {gap}分<small>移動・ひと休み</small></p>}
           </div>
         </li>;
       })}</ol>
@@ -232,12 +286,12 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
         const endLeg = last
           ? displayPlan?.legs.find((leg) => leg.fromSpotId === last.spotId && leg.to === "END")
           : null;
-        return endLeg ? <p className={styles.transition}><span />解散まで {endLeg.durationMinutes.value != null ? `${endLeg.durationMinutes.value}分` : "未検証"} · {travelModeLabel(endLeg.mode, endLeg.walkMinutesWithin?.value)}</p> : null;
+        return endLeg && !proposalReady ? <p className={styles.transition}><span />解散まで {endLeg.durationMinutes.value != null ? `${endLeg.durationMinutes.value}分` : "未検証"} · {travelModeLabel(endLeg.mode, endLeg.walkMinutesWithin?.value)}</p> : null;
       })()}
       <div className={styles.meeting}><span className={styles.endpointSticker}><PlanStickerIcon kind="goal" /></span><div><small>{input.endTime}ごろ 解散</small><strong>{input.end.name}</strong></div></div>
     </section>
     {!["DONE", "REFLECTED"].includes(data.session.status) && <button className={styles.wholeFeedback} disabled={Boolean(active) || pending} onClick={() => openFeedback()}><MoodSticker mood="relaxed" /><span><strong>もう少し、こんな一日にしたい</strong><small>プラン全体の希望を伝える</small></span><ArrowUpRight size={16} /></button>}
-    <footer className={styles.footer} inert={sheet ? true : undefined}>{confirmed ? <ButtonLink variant="secondary" fullWidth href="/"><Check size={17} />カレンダーで予定を見る</ButtonLink> : <Button fullWidth disabled={saving || pending || Boolean(active) || !data.plan?.items.length || data.plan.validation.state === "FAIL" || travelUnverified || Boolean(attention)} onClick={async () => {
+    {!proposalReady && <footer className={styles.footer} inert={sheet ? true : undefined}>{confirmed ? <ButtonLink variant="secondary" fullWidth href="/"><Check size={17} />カレンダーで予定を見る</ButtonLink> : <Button fullWidth disabled={saving || pending || Boolean(active) || !data.plan?.items.length || data.plan.validation.state === "FAIL" || travelUnverified || Boolean(attention)} onClick={async () => {
       setSaving(true);
       try {
         const saved = await act(`/api/sessions/${sessionId}/progress`, { confirm: true, status: "CONFIRMED" }, "カレンダーに予定を追加しました");
@@ -248,19 +302,18 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
       } finally {
         setSaving(false);
       }
-    }}>{saving ? "保存しています…" : travelUnverified ? "移動確認後に確定できます" : "このプランで決める"}<Check size={17} /></Button>}</footer>
+    }}>{saving ? "保存しています…" : travelUnverified ? "移動確認後に確定できます" : "このプランで決める"}<Check size={17} /></Button>}</footer>}
     {sheet === "feedback" && <HomeSheet title={target ? "ここ、少し変えよう" : "プランの希望を伝える"} onClose={() => setSheet(null)}>
       <form className={styles.feedbackForm} onSubmit={async (event) => {
         event.preventDefault();
         if (!feedback.trim() || pending || active) return;
         const version = data.session.currentPlanVersion;
         if (version == null) { setActionError("今見ているプランを読み込めませんでした。画面を更新してからもう一度。"); return; }
-        setSheet(null); setPending(true); setActionError(""); setMessage(""); setReplanningItemId(target?.id ?? null);
+        setSheet(null); setPending(true); setActionError(""); setMessage(""); setReplanningItemId(target?.id ?? null); setReplanSubmitting(true);
         const startedAt = Date.now();
         try {
           await startReplan({ instruction: feedback.trim(), targetPlanItemId: target?.id, basePlanVersion: version });
           await new Promise((resolve) => setTimeout(resolve, Math.max(0, 1800 - (Date.now() - startedAt))));
-          setMessage(target ? "この場所をもう一度考えています。" : "希望を送りました。変更案を考えています。");
         } catch (error) {
           const raw = error instanceof Error ? error.message : "保存できませんでした。もう一度お試しください。";
           if (raw === "stale version") {
@@ -272,7 +325,8 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
             setActionError(raw);
           }
         } finally {
-          setPending(false); setReplanningItemId(null);
+          setReplanSubmitting(false);
+          setPending(false);
         }
       }}>
         <div className={styles.feedbackIntro}><MoodSticker mood="relaxed" /><div className={styles.feedbackSpeech}><small>{target?.name ?? "一日の過ごし方"}</small><strong>どんなふうに変えたい？</strong></div></div>
@@ -285,13 +339,6 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
         {actionError && <p className={styles.notice} role="alert">{actionError}</p>}
         <Button fullWidth type="submit" className={styles.feedbackSubmit} disabled={!feedback.trim() || pending || Boolean(active)}>{pending ? "送っています…" : "この希望で考え直す"}<ArrowUpRight size={17} /></Button>
       </form>
-    </HomeSheet>}
-    {sheet === "conditions" && <HomeSheet title="プランをつくった条件" onClose={() => setSheet(null)}>
-      <div className={styles.conditionSheet}><p>最初の3ステップで入力した内容です。</p><dl><dt>時間</dt><dd>{input.startTime}〜{input.endTime}</dd><dt>集合 → 解散</dt><dd>{input.meet.name} → {input.end.name}</dd><dt>ふたりの予算</dt><dd>{budgetLabel}</dd><dt>移動手段</dt><dd>{travel.label}</dd></dl>
-        <h3>伝えた希望</h3>{input.preferences.map((item) => <p className={styles.preference} key={item.id}>{item.content}</p>)}
-        {!!displayPlan?.assumptions.length && <><h3>まだ確認できていないこと</h3>{displayPlan.assumptions.map((item) => <p key={item}>{item}</p>)}</>}
-        {!!displayPlan?.planB.length && <><h3>予定が変わったら</h3>{displayPlan.planB.map((item) => <p key={item.id}><strong>{item.trigger}</strong><br />{item.isVerifiedAlternative && item.candidateSpotId ? data.spots[item.candidateSpotId]?.name : item.policy || "代わりのプランを検討します"}</p>)}</>}
-      </div>
     </HomeSheet>}
   </main>;
 }

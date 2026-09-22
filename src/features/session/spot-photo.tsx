@@ -4,10 +4,23 @@ import { useState } from "react";
 import Image from "next/image";
 import { isVenuePlaceId, type PlacePhoto } from "@/contracts";
 import type { SpotDto } from "@/contracts/session";
-import { fixturesEnabled } from "@/client/api";
 import styles from "./session.module.css";
 
 type Visual = { image: string | null; label: string };
+
+export function SpotComparisonImage({ name, visual, photo }: { name: string; visual: Visual; photo?: PlacePhoto }) {
+  const ready = photo?.state === "ready" && photo.imageUrl;
+  const image = ready ? (
+    // Places 写真は next/image 最適化キャッシュに載せない
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={photo.imageUrl!} alt={`${name}の写真`} loading="lazy" decoding="async" />
+  ) : visual.image ? (
+    <Image src={`/images/itinerary/${visual.image}.jpg`} alt={`${visual.label}のイメージ写真`} fill sizes="140px" />
+  ) : (
+    <span className={styles.proposalImageFallback}>{visual.label}</span>
+  );
+  return <div className={styles.proposalImage}>{image}</div>;
+}
 
 export function SpotCardImage({
   spotId,
@@ -23,7 +36,7 @@ export function SpotCardImage({
   loading: boolean;
 }) {
   const [broken, setBroken] = useState(false);
-  const usePlaces = !fixturesEnabled() && isVenuePlaceId(spotId);
+  const usePlaces = isVenuePlaceId(spotId);
   if (!usePlaces) {
     if (!visual.image) return null;
     return (
@@ -57,28 +70,21 @@ export function SpotCardImage({
       />
     );
     return (
-      <div className={styles.spotImage}>
-        {photo.googleMapsUri ? (
-          <a className={styles.spotPhotoLink} href={photo.googleMapsUri} target="_blank" rel="noreferrer">
-            {image}
-          </a>
-        ) : (
-          image
-        )}
-        <span className={styles.photoLabel}>
-          {author?.displayName ? (
-            <>
-              {author.uri ? (
-                <a href={author.uri} target="_blank" rel="noreferrer">{author.displayName}</a>
-              ) : (
-                author.displayName
-              )}
-              <span aria-hidden="true"> · </span>
-            </>
-          ) : null}
-          Google
-        </span>
-      </div>
+      <>
+        <div className={styles.spotImage}>
+          {photo.googleMapsUri ? (
+            <a className={styles.spotPhotoLink} href={photo.googleMapsUri} target="_blank" rel="noreferrer">
+              {image}
+            </a>
+          ) : (
+            image
+          )}
+          <span className={styles.photoLabel} aria-label="写真の提供元">
+            {author?.displayName ? <span className={styles.photoLabelAuthor} title={author.displayName}>{author.uri ? <a href={author.uri} target="_blank" rel="noreferrer">{author.displayName}</a> : author.displayName}</span> : null}
+            <strong>Google</strong>
+          </span>
+        </div>
+      </>
     );
   }
 

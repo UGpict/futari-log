@@ -1,9 +1,17 @@
 import type { MeResponse, SessionSnapshot } from "@/contracts";
 
 export function fixturesEnabled(): boolean {
-  if (process.env.NEXT_PUBLIC_USE_API_FIXTURES !== "true") return false;
   if (process.env.NEXT_PUBLIC_APP_RUNTIME === "LIVE") return false;
-  return true;
+  if (process.env.NEXT_PUBLIC_USE_API_FIXTURES === "true") return true;
+  if (process.env.NODE_ENV !== "development" || typeof window === "undefined") return false;
+  const requested = new URLSearchParams(window.location.search).get("mock") === "1";
+  try {
+    if (requested) window.sessionStorage.setItem("futari-ui-mock", "1");
+    if (window.sessionStorage.getItem("futari-ui-mock") === "1") return true;
+  } catch {
+    // sessionStorage が使えないプレビューでも fx-* の直リンクは動かす。
+  }
+  return /^\/sessions\/fx-[^/]+\/?$/.test(window.location.pathname);
 }
 
 const now = "2026-09-19T13:00:00+09:00";
@@ -289,6 +297,13 @@ export const fixtureFailed = baseSnapshot("fx-failed", {
 });
 
 export const fixtureApproval = baseSnapshot("fx-approval", {
+  spots: {
+    ...fixtureSuccess.spots,
+    ChIJ_museum: {
+      ...baseSpot("ChIJ_museum", "名古屋市美術館"),
+      categories: ["museum"],
+    },
+  },
   runs: [
     {
       ...fixtureSuccess.runs[0],
@@ -375,6 +390,33 @@ export const fixtureReplan = baseSnapshot("fx-replan", {
   },
 });
 
+export const fixtureFinalReview = baseSnapshot("fx-final-review", {
+  plan: {
+    ...fixtureSuccess.plan!,
+    validation: {
+      state: "CONDITIONAL",
+      issues: [
+        { code: "PRICE_UNKNOWN", severity: "WARNING", itemIds: ["it_1"], message: "Places の価格帯は単位不明のため二人料金にできません", evidenceIds: [] },
+        { code: "PRICE_UNVERIFIED", severity: "WARNING", itemIds: ["it_lock"], message: "料金情報を確認できませんでした", evidenceIds: [] },
+        { code: "PRICE_UNKNOWN", severity: "WARNING", itemIds: ["it_3"], message: "Places の価格帯は単位不明のため二人料金にできません", evidenceIds: [] },
+      ],
+    },
+  },
+});
+
+export const fixtureReplanning = baseSnapshot("fx-replanning", {
+  runs: [{
+    ...fixtureSuccess.runs[0],
+    kind: "REPLAN",
+    status: "RUNNING",
+    resultPlanVersion: null,
+    finishedAt: null,
+    instruction: "別の場所がいい",
+    targetPlanItemId: "it_1",
+    basePlanVersion: 1,
+  }],
+});
+
 // Isolated Tokyo dataset for PR screenshots; only served by the UI fixture runtime.
 const fixturePrTokyo = baseSnapshot("fx-pr-tokyo");
 const tokyoInput = fixturePrTokyo.session.input;
@@ -407,6 +449,8 @@ export function snapshotFor(id: string): SessionSnapshot | null {
   if (id === "fx-failed") return fixtureFailed;
   if (id === "fx-approval") return fixtureApproval;
   if (id === "fx-replan") return fixtureReplan;
+  if (id === "fx-final-review") return fixtureFinalReview;
+  if (id === "fx-replanning") return fixtureReplanning;
   if (id === "fx-loading") return null;
   return fixtureSuccess;
 }
