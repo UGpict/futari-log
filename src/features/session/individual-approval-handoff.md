@@ -2,21 +2,29 @@
 
 ## 実装済みのUI
 
-`session-screen.tsx` の `proposalActions(row)` でカード単位に「この変更を許可」「元のまま」（追加の場合は「追加しない」）を選択できる。別のカードの選択に影響せず、選び直せる。
+`session-screen.tsx` の `proposalActions(row)` でカード単位に「この変更を許可」「元のまま」（追加の場合は「追加しない」）を選択できる。
 
-モックでは `/api/fixtures/proposal-decision` をメモリ内の fixture API で処理し、対象カードだけを反映／見送りする。他カードの未決定案は残り、全件判断すると通常の確定操作に戻る。ページ再読み込みでリセットされる。
+モックでは `/api/fixtures/proposal-decision` をメモリ内の fixture API で処理する。
 
-LIVE では引き続きUI内の一時選択のみ。選択後には未反映と表示し、既存の全件承認APIは呼ばない。全件反映ボタンも表示しない。LIVEの予定の確定は、個別反映APIと接続してから有効にする。モック用URLに対応する本番ルートは存在せず、LIVEから送信しない。
+LIVE では `POST /api/approvals/:id/changes` に接続する。選択のたびに対象カードだけを反映／見送りし、他カードの未決定案は `approval.diff` に残る。リロード後も diff から復元する。全件判断が終わると通常の「このプランで決める」が再表示される。
 
-## 接続箇所と必要な契約
+既存の全件 `/api/approvals/:id/decision` には対象IDを足して送らない（無視されて全件反映される危険がある）。
 
-- 接続箇所：`SessionScreen` の `proposalActions` 内の `choose`。
-- 対象：approval ID、変更単位の安定したID、元／変更先の plan item ID、基準プランバージョン、APPROVE / REJECT。
-- `proposal-rows.ts` の `ProposalRow` が差し替え・時間変更・追加・削除を各カードに割り当てる。`row.key` は画面のキーなので、そのままAPIの正式IDにはしない。
-- 既存の `/api/approvals/:id/decision` は全件処理。対象IDを追加しただけで送らないこと（無視されて全件反映される危険がある）。個別処理の契約確定後に接続する。
-- 応答に変更ごとの状態と更新後のスナップショットが必要。他カードの未決定案と決定済み状態を維持し、リロードしても復元する。
-- カード間の移動・時間固定・予算の整合性を確認する。依存する変更を黙って一緒に承認せず、追加確認が必要な場合はUIへ返す。
-- 処理中は対象カードの操作を止め、失敗時はそのカードに再試行可能なエラーを表示。競合・二重送信にも対応する。
-- 全変更の判断が完了し、行程検証が完了したら通常の「このプランで決める」を再表示する。
+## 契約
 
-共有契約 `src/contracts` の変更はフロント・バックエンド双方で確認する。
+`approvalChangeDecisionRequestSchema`（`src/contracts/session.ts`）
+
+- `decision`: APPROVE | REJECT
+- `basePlanVersion`: 画面の現行プラン版
+- `change`: discriminated union
+  - `replace` — `fromItemId` / `toItemId`
+  - `time` — `itemId`（提案側）+ 任意の `fromItemId`
+  - `add` — `itemId`
+  - `remove` — `itemId`
+- `row.key` は画面キーであり API には送らない
+
+応答: `{ ok, approval, planVersion, remaining }`
+
+## サーバ処理
+
+`decideApprovalChange` → `mergePartialPlan`（許可時）→ `validatePlan` → `planHistory` に新版を保存。却下は diff から当該変更だけ削除。

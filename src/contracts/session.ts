@@ -197,6 +197,33 @@ export const approvalDecisionRequestSchema = z.object({
 });
 export type ApprovalDecisionRequest = z.infer<typeof approvalDecisionRequestSchema>;
 
+/** カード単位の変更決定。全件 `/decision` とは別契約（混ぜると全件反映の危険がある）。 */
+export const approvalChangeDecisionRequestSchema = z.object({
+  decision: z.enum(["APPROVE", "REJECT"]),
+  basePlanVersion: z.number().int().positive(),
+  change: z.discriminatedUnion("kind", [
+    z.object({
+      kind: z.literal("replace"),
+      fromItemId: z.string().min(1),
+      toItemId: z.string().min(1),
+    }),
+    z.object({
+      kind: z.literal("time"),
+      itemId: z.string().min(1),
+      fromItemId: z.string().min(1).optional(),
+    }),
+    z.object({
+      kind: z.literal("add"),
+      itemId: z.string().min(1),
+    }),
+    z.object({
+      kind: z.literal("remove"),
+      itemId: z.string().min(1),
+    }),
+  ]),
+});
+export type ApprovalChangeDecisionRequest = z.infer<typeof approvalChangeDecisionRequestSchema>;
+
 export const validationIssueDtoSchema = z.object({
   code: z.string(),
   severity: z.enum(["ERROR", "UNKNOWN", "WARNING"]),

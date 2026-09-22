@@ -2,7 +2,8 @@
  * Run MOCK unit tests: every tests/*.test.ts except emulator / live suites.
  * New *.test.ts files are picked up automatically.
  */
-import { readdirSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -22,7 +23,10 @@ if (files.length === 0) {
   process.exit(1);
 }
 
+// Isolate file-backend store from live next/worker `.data/store.json`.
+const storeDir = mkdtempSync(join(tmpdir(), "futari-store-"));
 console.log(`MOCK unit tests (${files.length}): ${files.map((f) => f.replace(/\\/g, "/")).join(", ")}`);
+console.log(`STORE_DIR=${storeDir}`);
 
 const result = spawnSync(process.execPath, ["--import", "tsx", "--test", ...files], {
   stdio: "inherit",
@@ -31,7 +35,9 @@ const result = spawnSync(process.execPath, ["--import", "tsx", "--test", ...file
     APP_RUNTIME: process.env.APP_RUNTIME ?? "MOCK",
     DATA_BACKEND: process.env.DATA_BACKEND ?? "file",
     USE_FIREBASE_EMULATOR: process.env.USE_FIREBASE_EMULATOR ?? "false",
+    STORE_DIR: process.env.STORE_DIR?.trim() || storeDir,
   },
 });
 
+rmSync(storeDir, { recursive: true, force: true });
 process.exit(result.status ?? 1);

@@ -117,9 +117,6 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   const [replanningItemId, setReplanningItemId] = useState<string | null>(null);
   const [replanSubmitting, setReplanSubmitting] = useState(false);
   const [saving, setSaving] = useState(false);
-  // UI-only decisions until the backend supports individual changes. Never send
-  // these selections to the existing whole-plan approval endpoint.
-  const [proposalChoices, setProposalChoices] = useState<{ scope: string; items: Record<string, "APPROVE" | "REJECT"> }>({ scope: "", items: {} });
   // PRICE_ENRICH / REFLECTION share the session run list but are background jobs.
   // Don't treat their FAILED (e.g. no_verified_or_partial_facts) as plan failure.
   const planRuns = data?.runs.filter((run) => run.kind !== "PRICE_ENRICH" && run.kind !== "REFLECTION") ?? [];
@@ -141,7 +138,6 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   const replanning = replanSubmitting || (latest?.kind === "REPLAN" && active && !attention && !failed);
   const loadingTargetId = replanSubmitting ? replanningItemId : latest?.targetPlanItemId;
   const rows = proposalRows(displayPlan?.items ?? [], proposalReady ? data?.proposedPlan?.items : undefined, approval?.diff);
-  const proposalScope = JSON.stringify([sessionId, approval?.id, approval?.planVersionFrom, approval?.planVersionTo, approval?.diff]);
   const photoSpotIds = [
     ...(displayPlan?.items ?? []).map((item) => item.spotId),
     ...(proposalReady ? data?.proposedPlan?.items ?? [] : []).map((item) => item.spotId),
@@ -229,23 +225,41 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
     setTarget(item ?? null); setFeedback(""); setActionError(""); setSheet("feedback");
   }
   function proposalActions(row: ProposalRow) {
-    const choice = proposalChoices.scope === proposalScope ? proposalChoices.items[row.key] : undefined;
+    function changeBody() {
+      if (row.change === "replace" && row.current && row.proposed) {
+        return { kind: "replace" as const, fromItemId: row.current.id, toItemId: row.proposed.id };
+      }
+      if (row.change === "time" && row.proposed) {
+        return { kind: "time" as const, itemId: row.proposed.id, fromItemId: row.current?.id };
+      }
+      if (row.change === "add" && row.proposed) {
+        return { kind: "add" as const, itemId: row.proposed.id };
+      }
+      if (row.change === "remove" && row.current) {
+        return { kind: "remove" as const, itemId: row.current.id };
+      }
+      return null;
+    }
     function choose(decision: "APPROVE" | "REJECT") {
+      if (!approval || snapshot.session.currentPlanVersion == null) return;
       if (fixturesEnabled()) {
-        void act("/api/fixtures/proposal-decision", { sessionId, approvalId: approval?.id, rowKey: row.key, decision }, decision === "APPROVE" ? "この予定の変更を反映しました" : "この予定は元のままにしました");
+        void act("/api/fixtures/proposal-decision", { sessionId, approvalId: approval.id, rowKey: row.key, decision }, decision === "APPROVE" ? "この予定の変更を反映しました" : "この予定は元のままにしました");
         return;
       }
-      setProposalChoices((previous) => ({
-        scope: proposalScope,
-        items: { ...(previous.scope === proposalScope ? previous.items : {}), [row.key]: decision },
-      }));
+      const change = changeBody();
+      if (!change) return;
+      void act(
+        `/api/approvals/${approval.id}/changes`,
+        { decision, change, basePlanVersion: snapshot.session.currentPlanVersion },
+        decision === "APPROVE" ? "この予定の変更を反映しました" : "この予定は元のままにしました",
+      );
     }
     return <div className={styles.proposalDecision}>
       <div className={styles.proposalActions}>
-        <Button variant={choice === "REJECT" ? "primary" : "secondary"} size="compact" disabled={pending} aria-pressed={fixturesEnabled() ? undefined : choice === "REJECT"} onClick={() => choose("REJECT")}>{choice === "REJECT" && <Check size={12} aria-hidden="true" />}{row.change === "add" ? "追加しない" : "元のまま"}</Button>
-        <Button variant={choice === "REJECT" ? "secondary" : "primary"} size="compact" disabled={pending} aria-pressed={fixturesEnabled() ? undefined : choice === "APPROVE"} onClick={() => choose("APPROVE")}>{choice === "APPROVE" && <Check size={12} aria-hidden="true" />}この変更を許可</Button>
+        <Button variant="secondary" size="compact" disabled={pending} onClick={() => choose("REJECT")}>{row.change === "add" ? "追加しない" : "元のまま"}</Button>
+        <Button variant="primary" size="compact" disabled={pending} onClick={() => choose("APPROVE")}>この変更を許可</Button>
       </div>
-      <p className={styles.proposalDecisionStatus} role="status">{choice === "APPROVE" ? "許可を選択しました。予定にはまだ反映されていません。" : choice === "REJECT" ? `${row.change === "add" ? "追加しない" : "元のまま"}を選択しました。予定にはまだ反映されていません。` : "この予定の変更を選んでください。"}</p>
+      <p className={styles.proposalDecisionStatus} role="status">この予定の変更を選んでください。</p>
     </div>;
   }
   function renderProposal(row: ProposalRow) {
