@@ -225,32 +225,15 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
     setTarget(item ?? null); setFeedback(""); setActionError(""); setSheet("feedback");
   }
   function proposalActions(row: ProposalRow) {
-    function changeBody() {
-      if (row.change === "replace" && row.current && row.proposed) {
-        return { kind: "replace" as const, fromItemId: row.current.id, toItemId: row.proposed.id };
-      }
-      if (row.change === "time" && row.proposed) {
-        return { kind: "time" as const, itemId: row.proposed.id, fromItemId: row.current?.id };
-      }
-      if (row.change === "add" && row.proposed) {
-        return { kind: "add" as const, itemId: row.proposed.id };
-      }
-      if (row.change === "remove" && row.current) {
-        return { kind: "remove" as const, itemId: row.current.id };
-      }
-      return null;
-    }
     function choose(decision: "APPROVE" | "REJECT") {
-      if (!approval || snapshot.session.currentPlanVersion == null) return;
+      if (!approval || snapshot.session.currentPlanVersion == null || !row.apiChange) return;
       if (fixturesEnabled()) {
         void act("/api/fixtures/proposal-decision", { sessionId, approvalId: approval.id, rowKey: row.key, decision }, decision === "APPROVE" ? "この予定の変更を反映しました" : "この予定は元のままにしました");
         return;
       }
-      const change = changeBody();
-      if (!change) return;
       void act(
         `/api/approvals/${approval.id}/changes`,
-        { decision, change, basePlanVersion: snapshot.session.currentPlanVersion },
+        { decision, change: row.apiChange, basePlanVersion: snapshot.session.currentPlanVersion },
         decision === "APPROVE" ? "この予定の変更を反映しました" : "この予定は元のままにしました",
       );
     }
@@ -259,7 +242,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
         <Button variant="secondary" size="compact" disabled={pending} onClick={() => choose("REJECT")}>{row.change === "add" ? "追加しない" : "元のまま"}</Button>
         <Button variant="primary" size="compact" disabled={pending} onClick={() => choose("APPROVE")}>この変更を許可</Button>
       </div>
-      <p className={styles.proposalDecisionStatus} role="status">この予定の変更を選んでください。</p>
+      <p className={styles.proposalDecisionStatus} role="status">このカードだけ選んでください。ほかの予定はそのまま残ります。</p>
     </div>;
   }
   function renderProposal(row: ProposalRow) {
@@ -331,7 +314,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
           <div className={styles.timelineTime}><time dateTime={item.startAt}>{formatTokyoHm(item.startAt)}</time><span data-kind={visual.id}><visual.Icon size={19} /></span></div>
           <div className={styles.stop}>
             {!proposalReady && inbound && <p className={styles.transition}><span />{legDurationLabel(inbound)} · {travelModeLabel(inbound.mode, inbound.walkMinutesWithin?.value)}</p>}
-            {replanning && (!loadingTargetId || loadingTargetId === item.id) ? <article className={styles.replanningSpot} aria-label={`${spot?.name ?? "この場所"}の変更案を考えています`} aria-busy="true"><PlanLoading demo={fixturesEnabled()} compact /></article> : row.change ? renderProposal(row) : <article className={styles.spot}>
+            {replanning && (!loadingTargetId || loadingTargetId === item.id) ? <article className={styles.replanningSpot} aria-label={`${spot?.name ?? "この場所"}の変更案を考えています`} aria-busy="true"><PlanLoading demo={fixturesEnabled()} compact /></article> : row.apiChange ? renderProposal(row) : <article className={styles.spot}>
               <SpotCardImage key={item.spotId} spotId={item.spotId} name={spot?.name ?? ""} visual={visual} photo={placePhotos[item.spotId]} loading={photosLoading} />
               <div className={styles.spotBody}>
                 <div className={styles.spotTop}><span className={styles.category}>{visual.label}</span><small><Clock3 size={12} />{duration}分</small>{item.locked && <small>時間固定</small>}{item.progress === "DONE" && <small><Check size={12} />訪問済み</small>}</div>

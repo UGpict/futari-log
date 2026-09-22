@@ -195,6 +195,38 @@ export function changeExistsInDiff(diff: PlanDiff, change: DiffChangeRef): boole
   return diff.removedItemIds.includes(change.itemId);
 }
 
+/**
+ * UI の推定 kind と diff の実体がずれていても、残っている差分へ正規化する。
+ * 見つからなければ null（すでに判断済み、または候補外）。
+ */
+export function resolveChangeInDiff(diff: PlanDiff, change: DiffChangeRef): DiffChangeRef | null {
+  if (changeExistsInDiff(diff, change)) return change;
+
+  if (change.kind === "time") {
+    const byTo = diff.replaced.find((row) => row.toItemId === change.itemId);
+    if (byTo) return { kind: "replace", fromItemId: byTo.fromItemId, toItemId: byTo.toItemId };
+    if (change.fromItemId) {
+      const byFrom = diff.replaced.find((row) => row.fromItemId === change.fromItemId);
+      if (byFrom) return { kind: "replace", fromItemId: byFrom.fromItemId, toItemId: byFrom.toItemId };
+    }
+  }
+
+  if (change.kind === "replace") {
+    if (diff.timeShifts.some((row) => row.itemId === change.toItemId)) {
+      return { kind: "time", itemId: change.toItemId, fromItemId: change.fromItemId };
+    }
+    const byFrom = diff.replaced.find((row) => row.fromItemId === change.fromItemId);
+    if (byFrom) return { kind: "replace", fromItemId: byFrom.fromItemId, toItemId: byFrom.toItemId };
+  }
+
+  if (change.kind === "remove") {
+    const byFrom = diff.replaced.find((row) => row.fromItemId === change.itemId);
+    if (byFrom) return { kind: "replace", fromItemId: byFrom.fromItemId, toItemId: byFrom.toItemId };
+  }
+
+  return null;
+}
+
 export function stripChangeFromDiff(diff: PlanDiff, change: DiffChangeRef): PlanDiff {
   if (change.kind === "replace") {
     return {

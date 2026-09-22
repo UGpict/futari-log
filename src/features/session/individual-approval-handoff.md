@@ -10,21 +10,28 @@ LIVE では `POST /api/approvals/:id/changes` に接続する。選択のたび�
 
 既存の全件 `/api/approvals/:id/decision` には対象IDを足して送らない（無視されて全件反映される危険がある）。
 
+## 「すでに判断済み」になる条件
+
+API は `approval.diff` に **まだ残っている変更** だけ受理する。次だと 409 になる。
+
+1. そのカードをすでに許可／却下して diff から消えたあと、もう一度送った
+2. 画面の見た目だけ時刻が違うが、`diff.timeShifts` / `replaced` に無い（操作ボタンは出さない）
+3. `basePlanVersion` が現行プランとずれた（先に別カードを反映したあと古い版のまま送った）
+4. approval 自体が CONSUMED / REJECTED
+
+対策: `proposalRows` は `apiChange`（diff 由来）があるカードだけボタンを出す。サーバは `resolveChangeInDiff` で kind のズレを吸収する。
+
 ## 契約
 
 `approvalChangeDecisionRequestSchema`（`src/contracts/session.ts`）
 
 - `decision`: APPROVE | REJECT
 - `basePlanVersion`: 画面の現行プラン版
-- `change`: discriminated union
-  - `replace` — `fromItemId` / `toItemId`
-  - `time` — `itemId`（提案側）+ 任意の `fromItemId`
-  - `add` — `itemId`
-  - `remove` — `itemId`
+- `change`: discriminated union（`row.apiChange` をそのまま送る）
 - `row.key` は画面キーであり API には送らない
 
 応答: `{ ok, approval, planVersion, remaining }`
 
 ## サーバ処理
 
-`decideApprovalChange` → `mergePartialPlan`（許可時）→ `validatePlan` → `planHistory` に新版を保存。却下は diff から当該変更だけ削除。
+`decideApprovalChange` → `resolveChangeInDiff` → `mergePartialPlan`（許可時）→ `validatePlan` → `planHistory` に新版を保存。却下は diff から当該変更だけ削除。

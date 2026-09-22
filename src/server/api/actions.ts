@@ -11,9 +11,9 @@ import { candidateToMemory, bindNextDateMemories } from "@/domain/memory";
 import { reflectionAnalysisProgress } from "@/domain/reflection/analysisProgress";
 import { parseWalkAckScope, hasUnverifiedTravel } from "@/domain/plan/walkLimits";
 import {
-  changeExistsInDiff,
   hasRemainingDiff,
   mergePartialPlan,
+  resolveChangeInDiff,
   selectionForChange,
   stripChangeFromDiff,
 } from "@/domain/plan/mergePartialPlan";
@@ -701,10 +701,15 @@ export async function decideApprovalChange(
       return { ok: false as const, status: 409, error: "stale version" };
     }
     if (bundle.session.currentPlanVersion !== body.basePlanVersion) {
-      return { ok: false as const, status: 409, error: "stale version" };
+      return { ok: false as const, status: 409, error: "プランが更新されています。画面を更新してから、残りのカードを選んでください。" };
     }
-    if (!changeExistsInDiff(approval.diff, body.change)) {
-      return { ok: false as const, status: 409, error: "change already decided" };
+    const resolved = resolveChangeInDiff(approval.diff, body.change);
+    if (!resolved) {
+      return {
+        ok: false as const,
+        status: 409,
+        error: "この変更はすでに判断済みか、候補にありません。他のカードを選ぶか、画面を更新してください。",
+      };
     }
 
     const current = bundle.planHistory[String(approval.planVersionFrom)];
@@ -727,7 +732,7 @@ export async function decideApprovalChange(
         from: current,
         to: proposed,
         diff: approval.diff,
-        selection: selectionForChange(body.change),
+        selection: selectionForChange(resolved),
         nextVersion,
       });
       merged.validation = validatePlan(merged, {
@@ -738,12 +743,12 @@ export async function decideApprovalChange(
       bundle.session.currentPlanVersion = nextVersion;
       approval.planVersionFrom = nextVersion;
       approval.diff = {
-        ...stripChangeFromDiff(approval.diff, body.change),
+        ...stripChangeFromDiff(approval.diff, resolved),
         fromVersion: nextVersion,
       };
       acceptedAny = true;
     } else {
-      approval.diff = stripChangeFromDiff(approval.diff, body.change);
+      approval.diff = stripChangeFromDiff(approval.diff, resolved);
     }
 
     const run = bundle.runs[approval.runId];
