@@ -1,6 +1,6 @@
 import type { SpotDto } from "@/contracts/session";
 
-/** レイアウトを変えず、料金ラベルだけ差し替える。COST_UNKNOWN を黙って消さない。 */
+/** レイアウトを変えず、料金ラベルだけ差し替える。COST_UNKNOWN を黙って消さない。カード内は店名なし。 */
 export function spotCostLabel(spot: SpotDto | undefined | null): string {
   if (!spot) return "料金情報を確認できませんでした";
   const acc = spot.costAccounting;
@@ -15,7 +15,18 @@ export function spotCostLabel(spot: SpotDto | undefined | null): string {
         : `¥${acc.amountMinJpy.toLocaleString()}〜`;
     return `${range}（${acc.assumptionLabel ?? "二人の目安"}）`;
   }
-  if (acc?.note) return acc.note;
+  if (acc?.status === "UNKNOWN") {
+    if (spot.placesPriceBand || /価格帯|単位不明/.test(acc.note ?? "")) {
+      return "Places の価格帯は単位不明のため二人料金にできません";
+    }
+    return "料金情報を確認できませんでした";
+  }
+  if (acc?.note) {
+    // 店名付き note でもカードでは汎用文言にする
+    if (/料金情報を確認できませんでした/.test(acc.note)) return "料金情報を確認できませんでした";
+    if (/価格帯|単位不明/.test(acc.note)) return "Places の価格帯は単位不明のため二人料金にできません";
+    return acc.note;
+  }
   if (spot.placesPriceBand) {
     return "Places の価格帯は単位不明のため二人料金にできません";
   }

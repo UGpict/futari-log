@@ -1,3 +1,4 @@
+import { ANSWER, resolveWaitingAnswerId, resolveWaitingAnswerLabel } from "@/contracts/waitingChoice";
 import { getEnv, publicBlockers } from "@/config/env";
 import {
   planningInputSchema,
@@ -307,33 +308,101 @@ export async function getRunView(uid: string, runId: string) {
       ok: true,
       run: found.run,
       events,
+      sessionId: found.bundle.session.id,
+      planningInput: found.bundle.session.input,
     }),
   };
 }
 
-export async function answerQuestion(uid: string, runId: string, questionId: string, answer: string) {
+const CONDITION_EDIT_QUESTIONS = new Set([
+  "q_unsupported_wish",
+  "q_plan_unmet",
+  "q_no_candidates",
+  "q_replan_no_change",
+  "q_outside_tokyo",
+  "q_tokyo_unconfirmed",
+  "q_search_range",
+  "q_must_unmet",
+  "q_must_overflow",
+  "q_event_fallback",
+]);
+
+function markUserCancelled(run: { status: string; finishedAt: string | null; waitingQuestion: unknown; leaseOwner: string | null; error: string | null; cancelReason?: string | null }) {
+  run.status = "CANCELLED";
+  run.finishedAt = realNowIso();
+  run.waitingQuestion = null;
+  run.leaseOwner = null;
+  run.error = null;
+  run.cancelReason = "user";
+}
+
+export async function answerQuestion(
+  uid: string,
+  runId: string,
+  questionId: string,
+  answer: string | undefined,
+  answerId?: string,
+) {
   const result = await withRun(runId, (found) => {
     if (!found) return { ok: false as const, status: 404, error: "not found", restart: false };
     if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden", restart: false };
     if (found.run.status !== "WAITING_INPUT" || found.run.waitingQuestion?.id !== questionId) {
       return { ok: false as const, status: 409, error: "question mismatch", restart: false };
     }
-    if (questionId === "q_event_fallback") {
-      if (answer === "施設の候補で続ける") {
-        found.bundle.session.input = { ...found.bundle.session.input, eventFallbackAcknowledged: true };
-        found.run.status = "PENDING";
-        found.run.waitingQuestion = null;
-        found.run.leaseOwner = null;
-        return { ok: true as const, restart: true, sessionId: found.bundle.session.id };
-      }
-      found.run.status = "CANCELLED";
+    const options = found.run.waitingQuestion.options;
+    const resolvedId = resolveWaitingAnswerId(options, answer, answerId);
+    const resolvedLabel = resolveWaitingAnswerLabel(options, answer, answerId);
+
+    const resume = () => {
+      found.run.status = "PENDING" as const;
+      found.run.waitingQuestion = null;
+      found.run.leaseOwner = null;
+      found.run.error = null;
+      found.run.cancelReason = null;
+      return {
+        ok: true as const,
+        restart: true,
+        sessionId: found.bundle.session.id,
+        next: "continued" as const,
+        runId: found.run.id,
+      };
+    };
+
+    const supersedeForEdit = () => {
+      found.run.status = "SUPERSEDED";
       found.run.finishedAt = realNowIso();
       found.run.waitingQuestion = null;
       found.run.leaseOwner = null;
-      found.run.error = "selected event unavailable; user cancelled";
-      return { ok: true as const, restart: false };
+      found.run.error = null;
+      found.run.cancelReason = null;
+      return {
+        ok: true as const,
+        restart: false,
+        next: "edit_conditions" as const,
+        runId: found.run.id,
+        sessionId: found.bundle.session.id,
+      };
+    };
+
+    const cancelByUser = () => {
+      markUserCancelled(found.run);
+      return {
+        ok: true as const,
+        restart: false,
+        next: "cancelled" as const,
+        runId: found.run.id,
+        sessionId: found.bundle.session.id,
+      };
+    };
+
+    if (questionId === "q_event_fallback") {
+      if (resolvedId === ANSWER.continue_event_fallback) {
+        found.bundle.session.input = { ...found.bundle.session.input, eventFallbackAcknowledged: true };
+        return resume();
+      }
+      return cancelByUser();
     }
-    if (questionId === "q_unsupported_wish" && answer === "スパとして探す") {
+    if (questionId === "q_unsupported_wish" && resolvedId === ANSWER.continue_spa) {
       found.bundle.session.input = {
         ...found.bundle.session.input,
         preferences: found.bundle.session.input.preferences.map((pref) => ({
@@ -341,50 +410,36 @@ export async function answerQuestion(uid: string, runId: string, questionId: str
           content: pref.content.replaceAll("温泉", "スパ"),
         })),
       };
-      found.run.status = "PENDING";
-      found.run.waitingQuestion = null;
-      found.run.leaseOwner = null;
-      return { ok: true as const, restart: true, sessionId: found.bundle.session.id };
+      return resume();
     }
-    if (questionId === "q_unsupported_wish" && answer === "対応できる範囲で続ける") {
+    if (questionId === "q_unsupported_wish" && resolvedId === ANSWER.continue_supported) {
       found.bundle.session.input = { ...found.bundle.session.input, unsupportedWishAcknowledged: true };
-      found.run.status = "PENDING";
-      found.run.waitingQuestion = null;
-      found.run.leaseOwner = null;
-      return { ok: true as const, restart: true, sessionId: found.bundle.session.id };
+      return resume();
     }
-    if (questionId === "q_tokyo_unconfirmed" && answer === "都内の場所です") {
+    if (questionId === "q_tokyo_unconfirmed" && resolvedId === ANSWER.continue_tokyo) {
       found.bundle.session.input = { ...found.bundle.session.input, tokyoAreaAcknowledged: true };
-      found.run.status = "PENDING";
-      found.run.waitingQuestion = null;
-      found.run.leaseOwner = null;
-      return { ok: true as const, restart: true, sessionId: found.bundle.session.id };
+      return resume();
     }
-    if (questionId === "q_search_range" && answer === "この範囲で続ける") {
+    if (questionId === "q_search_range" && resolvedId === ANSWER.continue_range) {
       found.bundle.session.input = { ...found.bundle.session.input, searchExpandAcknowledged: true };
-      found.run.status = "PENDING";
-      found.run.waitingQuestion = null;
-      found.run.leaseOwner = null;
-      return { ok: true as const, restart: true, sessionId: found.bundle.session.id };
+      return resume();
     }
-    if (
-      questionId === "q_unsupported_wish" ||
-      questionId === "q_plan_unmet" ||
-      questionId === "q_no_candidates" ||
-      questionId === "q_replan_no_change" ||
-      questionId === "q_outside_tokyo" ||
-      questionId === "q_tokyo_unconfirmed" ||
-      questionId === "q_search_range"
-    ) {
-      found.run.status = "CANCELLED";
-      found.run.finishedAt = realNowIso();
-      found.run.waitingQuestion = null;
-      found.run.leaseOwner = null;
-      found.run.error = answer;
-      return { ok: true as const, restart: false };
+    if (questionId === "q_must_overflow" && resolvedId === ANSWER.reduce_wishes) {
+      // 希望削減は条件編集へ（自動では MUST を外さない）
+      return supersedeForEdit();
+    }
+    if (CONDITION_EDIT_QUESTIONS.has(questionId)) {
+      if (
+        resolvedId === ANSWER.change_conditions ||
+        resolvedId === ANSWER.change_endpoints ||
+        resolvedId === ANSWER.reduce_wishes
+      ) {
+        return supersedeForEdit();
+      }
+      return cancelByUser();
     }
     if (questionId === "q_long_walk") {
-      if (answer === "このまま徒歩で続ける") {
+      if (resolvedId === ANSWER.continue_walk) {
         const fingerprint = found.bundle.session.pendingWalkAckFingerprint;
         const scope = parseWalkAckScope(fingerprint);
         if (!fingerprint || !scope) {
@@ -403,54 +458,41 @@ export async function answerQuestion(uid: string, runId: string, questionId: str
           acknowledgedLongLegs: scope.acknowledgedLongLegs,
         };
         found.bundle.session.pendingWalkAckFingerprint = null;
-        found.run.status = "PENDING";
-        found.run.waitingQuestion = null;
-        found.run.leaseOwner = null;
-        return { ok: true as const, restart: true, sessionId: found.bundle.session.id };
+        return resume();
       }
-      if (answer === "公共交通を使う") {
+      if (resolvedId === ANSWER.use_transit) {
         found.bundle.session.input = { ...found.bundle.session.input, travelMode: "TRANSIT" };
         found.bundle.session.walkLongAck = null;
         found.bundle.session.pendingWalkAckFingerprint = null;
-        found.run.status = "PENDING";
-        found.run.waitingQuestion = null;
-        found.run.leaseOwner = null;
-        return { ok: true as const, restart: true, sessionId: found.bundle.session.id };
+        return resume();
       }
-      found.run.status = "CANCELLED";
-      found.run.finishedAt = realNowIso();
-      found.run.waitingQuestion = null;
-      found.run.leaseOwner = null;
-      found.run.error = answer;
-      return { ok: true as const, restart: false };
+      if (resolvedId === ANSWER.change_endpoints || resolvedId === ANSWER.change_conditions) {
+        return supersedeForEdit();
+      }
+      return cancelByUser();
     }
     if (questionId === "q_travel_unverified") {
-      if (answer === "経路を再取得する" || answer === "近場の候補で組み直す") {
+      if (resolvedId === ANSWER.retry_routes || resolvedId === ANSWER.shrink_search) {
         const memories = readMemories(found.couple);
         if (memories.travel) memories.travel.facts = {};
         writeMemories(found.couple, memories);
-        if (answer === "近場の候補で組み直す") {
+        if (resolvedId === ANSWER.shrink_search) {
           const current = found.bundle.session.input.radiusMeters;
           found.bundle.session.input = {
             ...found.bundle.session.input,
             radiusMeters: Math.max(800, Math.min(current, Math.floor(current * 0.6))),
           };
         }
-        found.run.status = "PENDING";
-        found.run.waitingQuestion = null;
-        found.run.leaseOwner = null;
-        return { ok: true as const, restart: true, sessionId: found.bundle.session.id };
+        return resume();
       }
-      found.run.status = "CANCELLED";
-      found.run.finishedAt = realNowIso();
-      found.run.waitingQuestion = null;
-      found.run.leaseOwner = null;
-      found.run.error = answer;
-      return { ok: true as const, restart: false };
+      if (resolvedId === ANSWER.change_conditions) {
+        return supersedeForEdit();
+      }
+      return cancelByUser();
     }
     // 振り返り分析の一問確認: 回答を instruction に残して再開（Worker 非占有）
     if (found.run.kind === "REFLECTION" && found.run.reflectionId) {
-      found.run.instruction = answer;
+      found.run.instruction = resolvedLabel;
       found.run.status = "PENDING";
       found.run.waitingQuestion = null;
       found.run.leaseOwner = null;
@@ -459,11 +501,17 @@ export async function answerQuestion(uid: string, runId: string, questionId: str
         reflection.analysisStatus = "PENDING";
         reflection.updatedAt = realNowIso();
       }
-      return { ok: true as const, restart: true, sessionId: found.bundle.session.id };
+      return {
+        ok: true as const,
+        restart: true,
+        sessionId: found.bundle.session.id,
+        next: "continued" as const,
+        runId: found.run.id,
+      };
     }
     // 旧固定質問フロー互換（reflectionId なしの REFLECTION）
     const reflectionId = newId("ref");
-    const masked = maskPii(answer);
+    const masked = maskPii(resolvedLabel);
     found.couple.reflections[reflectionId] = {
       id: reflectionId,
       sessionId: found.bundle.session.id,
@@ -483,7 +531,7 @@ export async function answerQuestion(uid: string, runId: string, questionId: str
       updatedAt: realNowIso(),
     };
     found.bundle.session.status = "REFLECTED";
-    if (answer !== "保存しない" && answer !== "分からない") {
+    if (resolvedLabel !== "保存しない" && resolvedLabel !== "分からない") {
       const cid = newId("mc");
       found.couple.memoryCandidates[cid] = {
         id: cid,
@@ -494,12 +542,12 @@ export async function answerQuestion(uid: string, runId: string, questionId: str
         answerId: questionId,
         subject: "SELF",
         type: "CARE",
-        content: answer,
+        content: resolvedLabel,
         sourceType: "SELF_REPORT",
         evidenceQuote: masked.masked,
         strength: "SOFT",
         scope: "NEXT_DATE",
-        planDirectives: /立|歩|休憩|座/.test(answer)
+        planDirectives: /立|歩|休憩|座/.test(resolvedLabel)
           ? [
               {
                 kind: "PREFER_SEATED_REST",
@@ -522,7 +570,7 @@ export async function answerQuestion(uid: string, runId: string, questionId: str
         planVersionTo: found.bundle.session.currentPlanVersion ?? 0,
         kind: "MEMORY_SAVE",
         status: "PENDING",
-        summary: `記憶候補: ${answer}`,
+        summary: `記憶候補: ${resolvedLabel}`,
         targetCandidateId: cid,
         targetMemoryId: null,
         expectedVersion: null,
@@ -534,7 +582,7 @@ export async function answerQuestion(uid: string, runId: string, questionId: str
     found.run.status = "SUCCEEDED";
     found.run.finishedAt = realNowIso();
     found.run.waitingQuestion = null;
-    return { ok: true as const, restart: false };
+    return { ok: true as const, restart: false, next: "continued" as const, runId: found.run.id };
   });
   if (result.ok && "restart" in result && result.restart) {
     const { dispatchProposal } = await import("@/server/workflows/dispatch");

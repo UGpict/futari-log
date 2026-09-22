@@ -1,10 +1,12 @@
 # Demo photo stickers
 
-Pre-cut photo stickers for tournament demo calendar samples (`DEMO_CALENDAR_STICKERS`).
-Baked with the same U2NetP outline style as on-device stickers:
+Tournament demo calendar samples (`DEMO_CALENDAR_STICKERS`).
+
+Current set: `drink.webp`, `ramen.webp`, `cake.webp`, `onsen.webp`
+(black studio backdrop keyed to transparent; white sticker rim kept).
+
+Older U2NetP bake path (optional):
 
 ```bash
 npx tsx scripts/bake-demo-photo-stickers.ts
 ```
-
-Sources are existing `public/images/itinerary/*` and related UI assets — not venue-verified photos.

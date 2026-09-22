@@ -8,7 +8,7 @@ import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as R
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { PlanLoading } from "@/features/session/plan-loading";
-import { api, fixturesEnabled } from "@/client/api";
+import { api, ensureAuth, fixturesEnabled } from "@/client/api";
 import { useMe } from "@/client/hooks/use-me";
 import { usePlaceSearch } from "@/client/hooks/use-place-search";
 import { SERVICE_AREA_NOTICE, tokyoToday } from "@/config/public";
@@ -98,12 +98,14 @@ function PlaceSuggest({
 
 const stepNames = ["activity", "schedule", "details"] as const;
 
-export function PlanForm({ initialDate, initialWish, seed, seedParam, initialStep = 0, fullPage = false, onStepChange }: {
+export function PlanForm({ initialDate, initialWish, seed, seedParam, fromRunId, initialStep = 0, fullPage = false, onStepChange }: {
   initialDate: string;
   initialWish?: string;
   seed?: PlanFormSeed;
   /** URL の seed= をステップ遷移で維持する */
   seedParam?: string;
+  /** 条件変更: /plans/new?from=runId で前回条件をプリフィル */
+  fromRunId?: string;
   initialStep?: number;
   fullPage?: boolean;
   onStepChange?: (step: number) => void;
@@ -296,6 +298,7 @@ export function PlanForm({ initialDate, initialWish, seed, seedParam, initialSte
       setReached((previous) => Math.max(previous, next));
       if (fullPage) {
         const query = new URLSearchParams({ date: initialDate, step: stepNames[next] });
+        if (fromRunId) query.set("from", fromRunId);
         if (seedParam) query.set("seed", seedParam);
         else if (seedWish) query.set("wish", seedWish);
         router.push(`/plans/new?${query.toString()}`, { scroll: false });
@@ -340,6 +343,75 @@ export function PlanForm({ initialDate, initialWish, seed, seedParam, initialSte
   });
   const [meetPlace, setMeetPlace] = useState<PlaceCandidate | null>(seed?.meet ?? null);
   const [endPlace, setEndPlace] = useState<PlaceCandidate | null>(null);
+  const [fromHydrated, setFromHydrated] = useState(!fromRunId);
+  useEffect(() => {
+    if (!fromRunId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        await ensureAuth();
+        const view = await api<{
+          planningInput?: {
+            dateTokyo: string;
+            startTime: string;
+            endTime: string;
+            meet: { name: string; lat: number; lng: number; spotId: string | null; address?: string | null };
+            end: { name: string; lat: number; lng: number; spotId: string | null; address?: string | null };
+            budget: { mealsJpy: number | null; facilitiesJpy: number | null; transitJpy: number | null };
+            preferences: Array<{ content: string }>;
+            travelMode: TravelMode;
+            fixedAppointments: Array<{ label: string; startAt: string; endAt: string; spotId: string | null }>;
+          };
+        }>(`/api/runs/${fromRunId}`);
+        if (cancelled || !view.planningInput) return;
+        const input = view.planningInput;
+        const selfWish = input.preferences.map((p) => p.content).join("。");
+        const fixed = input.fixedAppointments[0];
+        const meet: PlaceCandidate = {
+          id: input.meet.spotId ?? input.meet.name,
+          name: input.meet.name,
+          lat: input.meet.lat,
+          lng: input.meet.lng,
+          address: input.meet.address ?? null,
+        };
+        const end: PlaceCandidate = {
+          id: input.end.spotId ?? input.end.name,
+          name: input.end.name,
+          lat: input.end.lat,
+          lng: input.end.lng,
+          address: input.end.address ?? null,
+        };
+        setForm((prev) => ({
+          ...prev,
+          dateTokyo: input.dateTokyo,
+          startTime: input.startTime,
+          endTime: input.endTime,
+          meetName: meet.name,
+          endName: end.name !== meet.name ? end.name : "",
+          meals: input.budget.mealsJpy != null ? String(input.budget.mealsJpy) : prev.meals,
+          facilities: input.budget.facilitiesJpy != null ? String(input.budget.facilitiesJpy) : prev.facilities,
+          transit: input.budget.transitJpy != null ? String(input.budget.transitJpy) : prev.transit,
+          self: selfWish || prev.self,
+          travelMode: input.travelMode,
+          locked: Boolean(fixed),
+          fixedName: fixed?.label ?? "",
+          fixedStart: fixed ? fixed.startAt.slice(11, 16) : prev.fixedStart,
+          fixedEnd: fixed ? fixed.endAt.slice(11, 16) : prev.fixedEnd,
+          fixedSpotId: fixed?.spotId ?? null,
+        }));
+        setMeetPlace(meet);
+        setEndPlace(end.name !== meet.name ? end : null);
+        setCalendarMonth(new Date(parseDate(input.dateTokyo).getFullYear(), parseDate(input.dateTokyo).getMonth(), 1));
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "前回の条件を読み込めませんでした");
+      } finally {
+        if (!cancelled) setFromHydrated(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fromRunId]);
   const bias = me ? { lat: me.demoLat, lng: me.demoLng } : null;
   const meetSearch = usePlaceSearch(form.meetName, bias);
   const endSearch = usePlaceSearch(form.endName, bias);
@@ -544,6 +616,7 @@ export function PlanForm({ initialDate, initialWish, seed, seedParam, initialSte
     }
   }
 
+  if (!fromHydrated) return <div className={`${styles.planningOverlay} ${fullPage ? styles.planPageLoading : ""}`}><PlanLoading demo={fixturesEnabled()} centered={fullPage} /></div>;
   if (busy) return <div className={`${styles.planningOverlay} ${fullPage ? styles.planPageLoading : ""}`}><PlanLoading demo={fixturesEnabled()} centered={fullPage} /></div>;
 
   return (

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { planningInputSchema } from "./planning";
+import { waitingOptionSchema } from "./waitingChoice";
 
 export const runKindSchema = z.enum([
   "INITIAL_PLAN",
@@ -20,8 +21,13 @@ export const runStatusSchema = z.enum([
   "FAILED",
   "INTERRUPTED",
   "CANCELLED",
+  /** 条件変更のため打ち切った。失敗ではない。 */
+  "SUPERSEDED",
 ]);
 export type RunStatus = z.infer<typeof runStatusSchema>;
+
+export const cancelReasonSchema = z.enum(["user"]);
+export type CancelReason = z.infer<typeof cancelReasonSchema>;
 
 export const startRunRequestSchema = z.object({
   kind: runKindSchema.optional(),
@@ -50,7 +56,7 @@ export type CostSnapshot = z.infer<typeof costSchema>;
 export const waitingQuestionSchema = z.object({
   id: z.string(),
   prompt: z.string(),
-  options: z.array(z.string()),
+  options: z.array(waitingOptionSchema),
 });
 export type WaitingQuestion = z.infer<typeof waitingQuestionSchema>;
 
@@ -78,6 +84,8 @@ export const runDtoSchema = z.object({
   waitingQuestion: waitingQuestionSchema.nullable(),
   waitingApprovalId: z.string().nullable(),
   error: z.string().nullable(),
+  /** ユーザーが中断したとき。失敗表示にしない。 */
+  cancelReason: cancelReasonSchema.nullable().optional(),
   cost: costSchema,
   versions: z.object({
     schema: z.string(),
@@ -381,11 +389,25 @@ export const progressRequestSchema = z.object({
 });
 export type ProgressRequest = z.infer<typeof progressRequestSchema>;
 
-export const answerRequestSchema = z.object({
-  questionId: z.string().min(1),
-  answer: z.string().min(1),
-});
+export const answerRequestSchema = z
+  .object({
+    questionId: z.string().min(1),
+    /** 表示ラベル（互換・振り返り自由回答）。choice があるときは answerId を優先。 */
+    answer: z.string().min(1).optional(),
+    answerId: z.string().min(1).optional(),
+  })
+  .refine((value) => Boolean(value.answer || value.answerId), {
+    message: "answer or answerId required",
+  });
 export type AnswerRequest = z.infer<typeof answerRequestSchema>;
+
+export const answerResponseSchema = z.object({
+  ok: z.literal(true),
+  next: z.enum(["edit_conditions", "cancelled", "continued"]).optional(),
+  runId: z.string().optional(),
+  sessionId: z.string().optional(),
+});
+export type AnswerResponse = z.infer<typeof answerResponseSchema>;
 
 export const sessionSnapshotSchema = z.object({
   runtime: z.string(),
@@ -420,6 +442,9 @@ export const runViewSchema = z.object({
   ok: z.literal(true).optional(),
   run: runDtoSchema,
   events: z.array(progressEventSchema),
+  /** 条件編集フォームのプリフィル用（from=runId）。 */
+  sessionId: z.string().optional(),
+  planningInput: planningInputSchema.optional(),
 });
 export type RunView = z.infer<typeof runViewSchema>;
 

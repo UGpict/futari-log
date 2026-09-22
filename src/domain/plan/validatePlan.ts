@@ -219,6 +219,9 @@ export function validatePlan(plan: Plan, ctx: PlanContext): ValidationResult {
   let costUnknown = false;
   let knownSubtotal = 0;
   let hasKnownPartial = false;
+  const costUnknownNames: string[] = [];
+  const costUnknownItemIds: string[] = [];
+  const costUnknownEvidenceIds: string[] = [];
   for (const item of items) {
     const spot = spots[item.spotId];
     if (!spot) continue;
@@ -230,14 +233,9 @@ export function validatePlan(plan: Plan, ctx: PlanContext): ValidationResult {
     // 下限のみ・maxInclusive=false は予算上限に使わない。
     if (ceiling == null) {
       costUnknown = true;
-      const note =
-        accounting?.note ??
-        (spot.placesPriceBand
-          ? `${spot.name} の Places 価格帯は単位不明のため二人料金にできません`
-          : `${spot.name} の二人料金は不明です。予算内とは断定しません`);
-      issues.push(
-        issue("COST_UNKNOWN", "UNKNOWN", note, [item.id], spot.costForTwoJpy.evidenceIds),
-      );
+      costUnknownNames.push(spot.name);
+      costUnknownItemIds.push(item.id);
+      costUnknownEvidenceIds.push(...spot.costForTwoJpy.evidenceIds);
       if (accounting?.knownSubtotalJpy != null) {
         knownSubtotal += accounting.knownSubtotalJpy;
         hasKnownPartial = true;
@@ -256,6 +254,17 @@ export function validatePlan(plan: Plan, ctx: PlanContext): ValidationResult {
         );
       }
     }
+  }
+  if (costUnknownNames.length) {
+    issues.push(
+      issue(
+        "COST_UNKNOWN",
+        "UNKNOWN",
+        `料金を確認できなかったお店：${costUnknownNames.join("、")}`,
+        costUnknownItemIds,
+        [...new Set(costUnknownEvidenceIds)],
+      ),
+    );
   }
   const budgetTotal =
     (input.budget.mealsJpy ?? 0) +

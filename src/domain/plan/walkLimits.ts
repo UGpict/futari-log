@@ -1,4 +1,5 @@
 import { WALK_LIMITS } from "@/config/settings";
+import { ANSWER, choice, type WaitingOption } from "@/contracts/waitingChoice";
 import type { Memory, Plan, Session, TravelLeg, TravelMode, WalkLongAck } from "@/domain/schemas";
 
 export type WalkOverageLeg = {
@@ -412,9 +413,14 @@ export function longWalkQuestion(
 ): {
   id: "q_long_walk";
   prompt: string;
-  options: string[];
+  options: WaitingOption[];
 } {
-  const options = ["公共交通を使う", "解散場所を変える", "このまま徒歩で続ける", "中断する"];
+  const options = [
+    choice(ANSWER.use_transit, "公共交通を使う"),
+    choice(ANSWER.change_endpoints, "解散場所を変える"),
+    choice(ANSWER.continue_walk, "このまま徒歩で続ける"),
+    choice(ANSWER.abort, "中断する"),
+  ];
 
   if (result.overTotal && result.hardTotalMinutes != null && !result.overLeg) {
     return {
@@ -458,12 +464,17 @@ export function longWalkQuestion(
 export function travelUnverifiedQuestion(unknownCount: number): {
   id: "q_travel_unverified";
   prompt: string;
-  options: string[];
+  options: WaitingOption[];
 } {
   return {
     id: "q_travel_unverified",
     prompt: `店舗候補はありますが、必須の移動 ${unknownCount} 区間を確認できていません。直線距離では代用していません。移動を確認できていない暫定案として表示しています。通常の確定はできません。経路を再取得する、近場の候補で組み直す、集合・解散を変える、から選んでください。`,
-    options: ["経路を再取得する", "近場の候補で組み直す", "集合・解散を変える", "中断する"],
+    options: [
+      choice(ANSWER.retry_routes, "経路を再取得する"),
+      choice(ANSWER.shrink_search, "近場の候補で組み直す"),
+      choice(ANSWER.change_conditions, "集合・解散を変える"),
+      choice(ANSWER.abort, "中断する"),
+    ],
   };
 }
 

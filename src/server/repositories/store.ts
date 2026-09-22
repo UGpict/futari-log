@@ -262,6 +262,7 @@ export async function insertPendingRun(input: {
     reflectionId: input.reflectionId ?? null,
     reflectionContentVersion: input.reflectionContentVersion ?? null,
     error: null,
+    cancelReason: null,
     cost: {
       llmUsd: env.runtime === "MOCK" ? 0 : null,
       llmJpy: env.runtime === "MOCK" ? 0 : null,
