@@ -68,6 +68,8 @@ function noneLlm(): OrchestratedPlan["llm"] {
     latencyMs: 0,
     repaired: false,
     error: null,
+    retries: 0,
+    lastStatus: null,
   };
 }
 

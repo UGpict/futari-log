@@ -74,8 +74,8 @@ ORCA_MUNDANE="$(env_get ORCAROUTER_MUNDANE_MODEL)"
 ORCA_HARD="$(env_get ORCAROUTER_HARD_MODEL)"
 FIREBASE_AUTH_DOMAIN="${FIREBASE_AUTH_DOMAIN:-$PROJECT_ID.firebaseapp.com}"
 ORCA_BASE="${ORCA_BASE:-https://api.orcarouter.ai/v1}"
-ORCA_MUNDANE="${ORCA_MUNDANE:-openai/gpt-4o-mini}"
-ORCA_HARD="${ORCA_HARD:-openai/gpt-4o}"
+ORCA_MUNDANE="${ORCA_MUNDANE:-orcarouter/futari-mundane}"
+ORCA_HARD="${ORCA_HARD:-orcarouter/futari-hard}"
 
 echo "project=$PROJECT_ID region=$REGION service=$SERVICE account=$ACCOUNT runtime=$DEPLOY_RUNTIME"
 

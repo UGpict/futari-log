@@ -7,10 +7,23 @@ import {
   LLM_FAILURE_CONTENT_CHARS,
   llmParseFailureEventPayload,
   previewMaskedLlmContent,
+  TASK_POOL,
 } from "../src/server/llm/index";
 
 const tiny = z.object({
   action: z.enum(["DONE", "ASK_ONE"]),
+});
+
+describe("TASK_POOL", () => {
+  it("routes reflection analysis to hard; catalog structure stays mundane", () => {
+    assert.equal(TASK_POOL.reflect, "hard");
+    assert.equal(TASK_POOL.structure, "mundane");
+    assert.equal(TASK_POOL.candidates, "mundane");
+    assert.equal(TASK_POOL.share, "mundane");
+    assert.equal(TASK_POOL.final_plan, "hard");
+    assert.equal(TASK_POOL.replan, "hard");
+    assert.equal(TASK_POOL.conflict, "hard");
+  });
 });
 
 describe("classifyLlmJsonAgainstSchema", () => {

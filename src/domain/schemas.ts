@@ -485,6 +485,8 @@ export const eventSchema = z.object({
       costJpy: z.number().nullable(),
       latencyMs: z.number().nullable(),
       ok: z.boolean(),
+      retries: z.number().int().nonnegative().optional(),
+      lastStatus: z.number().int().nullable().optional(),
     })
     .nullable(),
   payload: z.unknown().nullable(),

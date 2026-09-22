@@ -140,6 +140,8 @@ export async function ingestEvents(input?: {
       grounded: search.grounded,
       orcaRequestId: search.orcaRequestId,
       costSource: search.costSource,
+      retries: search.retries,
+      lastStatus: search.lastStatus,
     };
     if (!search.grounded || !search.citations.length) {
       run.status = "FAILED";
@@ -186,6 +188,8 @@ export async function ingestEvents(input?: {
       costUsd: structured.usage.costUsd,
       costJpy: structured.usage.costJpy,
       ok: structured.usage.ok,
+      retries: structured.usage.retries,
+      lastStatus: structured.usage.lastStatus,
     };
     if (!structured.data?.events.length) {
       run.status = "FAILED";

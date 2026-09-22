@@ -6,8 +6,8 @@ substitutions:
   _CPU: "1"
   _APP_RUNTIME: MOCK
   _ORCA_BASE: https://api.orcarouter.ai/v1
-  _ORCA_MUNDANE: openai/gpt-4o-mini
-  _ORCA_HARD: openai/gpt-4o
+  _ORCA_MUNDANE: orcarouter/futari-mundane
+  _ORCA_HARD: orcarouter/futari-hard
   _TAG: latest
   # Tournament calendar stickers (display-only). Set true for demo day.
   _DEMO_CALENDAR_STICKERS: "false"

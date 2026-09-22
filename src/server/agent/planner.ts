@@ -278,6 +278,8 @@ function deterministicLlm(
     latencyMs: 0,
     repaired: false,
     error: null,
+    retries: 0,
+    lastStatus: null,
   };
 }
 
