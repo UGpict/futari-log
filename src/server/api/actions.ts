@@ -1,4 +1,5 @@
 import { ANSWER, resolveWaitingAnswerId, resolveWaitingAnswerLabel } from "@/contracts/waitingChoice";
+import type { ApprovalChangeDecisionRequest } from "@/contracts/session";
 import { getEnv, publicBlockers } from "@/config/env";
 import {
   planningInputSchema,
@@ -9,6 +10,14 @@ import {
 import { candidateToMemory, bindNextDateMemories } from "@/domain/memory";
 import { reflectionAnalysisProgress } from "@/domain/reflection/analysisProgress";
 import { parseWalkAckScope, hasUnverifiedTravel } from "@/domain/plan/walkLimits";
+import {
+  changeExistsInDiff,
+  hasRemainingDiff,
+  mergePartialPlan,
+  selectionForChange,
+  stripChangeFromDiff,
+} from "@/domain/plan/mergePartialPlan";
+import { validatePlan } from "@/domain/plan/validatePlan";
 import { readMemories, writeMemories } from "@/server/agent/memory";
 import { maskPii } from "@/server/privacy/mask";
 import { draftShareMessage } from "@/server/privacy/dto";
@@ -671,6 +680,90 @@ export async function decideApproval(uid: string, approvalId: string, decision: 
       return { ok: true as const, approval };
     }
     return { ok: false as const, status: 400, error: "kind" };
+  });
+}
+
+export async function decideApprovalChange(
+  uid: string,
+  approvalId: string,
+  body: ApprovalChangeDecisionRequest,
+) {
+  return withApproval(approvalId, (found) => {
+    if (!found) return { ok: false as const, status: 404, error: "not found" };
+    if (found.couple.couple.ownerUid !== uid) return { ok: false as const, status: 403, error: "forbidden" };
+    const approval = found.approval;
+    if (approval.status !== "PENDING") return { ok: false as const, status: 409, error: "already consumed" };
+    if (approval.kind !== "PLAN_APPLY") return { ok: false as const, status: 400, error: "kind" };
+    if (!approval.diff) return { ok: false as const, status: 409, error: "no diff" };
+    const bundle = found.couple.sessions[approval.sessionId];
+    if (!bundle) return { ok: false as const, status: 404, error: "session" };
+    if (bundle.session.currentPlanVersion !== approval.planVersionFrom) {
+      return { ok: false as const, status: 409, error: "stale version" };
+    }
+    if (bundle.session.currentPlanVersion !== body.basePlanVersion) {
+      return { ok: false as const, status: 409, error: "stale version" };
+    }
+    if (!changeExistsInDiff(approval.diff, body.change)) {
+      return { ok: false as const, status: 409, error: "change already decided" };
+    }
+
+    const current = bundle.planHistory[String(approval.planVersionFrom)];
+    const proposed = bundle.planHistory[String(approval.planVersionTo)];
+    if (!current || !proposed) return { ok: false as const, status: 404, error: "plan" };
+
+    let acceptedAny =
+      Object.keys(bundle.planHistory)
+        .map(Number)
+        .some((version) => version > approval.planVersionTo);
+
+    if (body.decision === "APPROVE") {
+      const nextVersion =
+        Math.max(
+          ...Object.keys(bundle.planHistory).map(Number),
+          approval.planVersionFrom,
+          approval.planVersionTo,
+        ) + 1;
+      const merged = mergePartialPlan({
+        from: current,
+        to: proposed,
+        diff: approval.diff,
+        selection: selectionForChange(body.change),
+        nextVersion,
+      });
+      merged.validation = validatePlan(merged, {
+        spots: bundle.spots,
+        input: bundle.session.input,
+      });
+      bundle.planHistory[String(nextVersion)] = merged;
+      bundle.session.currentPlanVersion = nextVersion;
+      approval.planVersionFrom = nextVersion;
+      approval.diff = {
+        ...stripChangeFromDiff(approval.diff, body.change),
+        fromVersion: nextVersion,
+      };
+      acceptedAny = true;
+    } else {
+      approval.diff = stripChangeFromDiff(approval.diff, body.change);
+    }
+
+    const run = bundle.runs[approval.runId];
+    if (!hasRemainingDiff(approval.diff)) {
+      approval.status = acceptedAny ? "CONSUMED" : "REJECTED";
+      approval.consumedAt = realNowIso();
+      approval.diff = { ...approval.diff, summary: approval.diff.summary || approval.summary };
+      if (run) {
+        run.status = "SUCCEEDED";
+        run.waitingApprovalId = null;
+        run.finishedAt = realNowIso();
+      }
+    }
+
+    return {
+      ok: true as const,
+      approval,
+      planVersion: bundle.session.currentPlanVersion,
+      remaining: hasRemainingDiff(approval.diff),
+    };
   });
 }
 

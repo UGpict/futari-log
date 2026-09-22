@@ -31,28 +31,40 @@ export type {
   SessionBundle,
 } from "./types";
 
-const STORE_PATH = join(process.cwd(), ".data", "store.json");
-const LOCK_PATH = join(process.cwd(), ".data", "store.lock");
+/** File backend root. Tests set STORE_DIR to a temp dir so they never touch live `.data/`. */
+function storeDir() {
+  const override = process.env.STORE_DIR?.trim();
+  return override && override.length > 0 ? override : join(process.cwd(), ".data");
+}
+
+function storePath() {
+  return join(storeDir(), "store.json");
+}
+
+function lockPath() {
+  return join(storeDir(), "store.lock");
+}
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
 async function acquireLock(): Promise<number> {
-  mkdirSync(dirname(STORE_PATH), { recursive: true });
+  mkdirSync(storeDir(), { recursive: true });
+  const lock = lockPath();
   for (let i = 0; i < 80; i++) {
     try {
-      return openSync(LOCK_PATH, "wx");
+      return openSync(lock, "wx");
     } catch {
       await sleep(25);
     }
   }
   try {
-    unlinkSync(LOCK_PATH);
+    unlinkSync(lock);
   } catch {
     /* ignore */
   }
-  return openSync(LOCK_PATH, "wx");
+  return openSync(lock, "wx");
 }
 
 function releaseLock(fd: number) {
@@ -62,26 +74,28 @@ function releaseLock(fd: number) {
     /* ignore */
   }
   try {
-    unlinkSync(LOCK_PATH);
+    unlinkSync(lockPath());
   } catch {
     /* ignore */
   }
 }
 
 function readDb(): Db {
-  if (!existsSync(STORE_PATH)) return emptyDb();
+  const path = storePath();
+  if (!existsSync(path)) return emptyDb();
   try {
-    return JSON.parse(readFileSync(STORE_PATH, "utf8")) as Db;
+    return JSON.parse(readFileSync(path, "utf8")) as Db;
   } catch {
     return emptyDb();
   }
 }
 
 function writeDb(db: Db) {
-  mkdirSync(dirname(STORE_PATH), { recursive: true });
-  const tmp = `${STORE_PATH}.${process.pid}.tmp`;
+  const path = storePath();
+  mkdirSync(dirname(path), { recursive: true });
+  const tmp = `${path}.${process.pid}.tmp`;
   writeFileSync(tmp, JSON.stringify(db));
-  renameSync(tmp, STORE_PATH);
+  renameSync(tmp, path);
 }
 
 async function withFile<T>(fn: (db: Db) => T | Promise<T>, persist: boolean): Promise<T> {
