@@ -110,6 +110,7 @@ Places / Routes は `ProviderCtx.onHttp` 経路、LLM は `src/server/llm`、bre
 
 - 対象: Places Nearby/Text、Routes `computeRoutes`、OrcaRouter（`fetchOrcaWithRetry`）
 - 状態: CLOSED / OPEN / HALF_OPEN（プロセス局所。複数 Cloud Run instance では共有されない → follow-up）
+- HALF_OPEN は **同時 probe 1 本のみ**。他の呼び出しは OPEN 同様 **503 `CIRCUIT_OPEN`**
 - OPEN 時: **503** `{ error, code: "CIRCUIT_OPEN" }`（MOCK フォールバックなし）
 - 閾値: `CIRCUIT_BREAKER` in `src/config/settings.ts`
 
@@ -123,6 +124,7 @@ Places / Routes は `ProviderCtx.onHttp` 経路、LLM は `src/server/llm`、bre
   - `SYNTHETIC_OIDC_SERVICE_ACCOUNT`（未設定時は `INGEST_OIDC_SERVICE_ACCOUNT`）
 - 中身: Phase 1 fixture 5 本を **MOCK** で `evals/harness/runScenario` 再利用（LIVE 課金なし）
   - `smoke-cafe-tokyo`, `rain-indoor-01`, `hours-ok-catalog`, `fixed-time-gallery`, `outside-tokyo-nagoya`
+  - **`process.env` は書き換えない**。`runWithEnvScopeAsync({ runtime: "MOCK", dataBackend: "file", storeDir })` でリクエストスコープ注入（本番 LIVE リクエストと並走してもグローバル設定を汚さない）
 - 成功 200 / いずれか fail で 502。メトリクス `futari/synthetic_plan_smoke`
 
 #### Cloud Scheduler（手動・gcloud 例）

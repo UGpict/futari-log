@@ -51,6 +51,53 @@ describe("circuit breaker state transitions", () => {
     );
   });
 
+  it("HALF_OPEN allows only one in-flight probe", async () => {
+    let now = 2_000_000;
+    setBreakerClockForTests(() => now);
+    for (let i = 0; i < CIRCUIT_BREAKER.failureThreshold; i++) {
+      recordBreakerFailure("routes");
+    }
+    now += CIRCUIT_BREAKER.openMs;
+
+    let releaseProbe!: () => void;
+    const probeGate = new Promise<void>((resolve) => {
+      releaseProbe = resolve;
+    });
+
+    const probe = runWithBreaker("routes", async () => {
+      await probeGate;
+      return "probe-ok";
+    });
+
+    // Give the probe a tick to acquire the HALF_OPEN lease.
+    await Promise.resolve();
+    assert.equal(getBreakerState("routes").state, "HALF_OPEN");
+    assert.equal(getBreakerState("routes").halfOpenProbeInFlight, true);
+
+    assert.throws(() => assertBreakerAllows("routes"), (err: unknown) => {
+      assert.ok(isOpsGuardError(err));
+      assert.equal(err.code, "CIRCUIT_OPEN");
+      return true;
+    });
+    await assert.rejects(
+      () => runWithBreaker("routes", async () => "should-not-run"),
+      (err: unknown) => {
+        assert.ok(isOpsGuardError(err));
+        assert.equal(err.code, "CIRCUIT_OPEN");
+        return true;
+      },
+    );
+
+    releaseProbe();
+    assert.equal(await probe, "probe-ok");
+    assert.equal(getBreakerState("routes").halfOpenProbeInFlight, false);
+
+    // Next sequential probe allowed while still HALF_OPEN (successThreshold may be >1).
+    assertBreakerAllows("routes");
+    assert.equal(getBreakerState("routes").halfOpenProbeInFlight, true);
+    recordBreakerSuccess("routes");
+  });
+
   it("OPEN → HALF_OPEN after openMs then CLOSED after successThreshold", () => {
     let now = 1_000_000;
     setBreakerClockForTests(() => now);

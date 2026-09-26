@@ -1,5 +1,6 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { API_BUDGETS, RATE_LIMITS, TIME_ZONE } from "./settings";
 import { tokyoToday } from "./public";
 
@@ -55,6 +56,38 @@ function resolveDemoDate(): string {
 export type RuntimeMode = "MOCK" | "LIVE";
 export type DataBackend = "file" | "firestore";
 export type AuthBackend = "mock" | "firebase";
+
+/**
+ * Request-scoped overrides (e.g. synthetic plan-smoke on Cloud Run).
+ * Prefer this over mutating `process.env` — concurrent LIVE requests must not see MOCK.
+ */
+export type EnvScopeOverrides = {
+  runtime?: RuntimeMode;
+  dataBackend?: DataBackend;
+  storeDir?: string;
+  enableEventCatalog?: boolean;
+};
+
+const envScope = new AsyncLocalStorage<EnvScopeOverrides>();
+
+export function runWithEnvScope<T>(overrides: EnvScopeOverrides, fn: () => T): T {
+  return envScope.run(overrides, fn);
+}
+
+export function runWithEnvScopeAsync<T>(
+  overrides: EnvScopeOverrides,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return envScope.run(overrides, fn);
+}
+
+/** File-store root: ALS override → STORE_DIR → `.data`. */
+export function getStoreDir(): string {
+  const scoped = envScope.getStore()?.storeDir?.trim();
+  if (scoped) return scoped;
+  const fromEnv = process.env.STORE_DIR?.trim();
+  return fromEnv && fromEnv.length > 0 ? fromEnv : join(process.cwd(), ".data");
+}
 
 const EMULATOR_AUTH_HOST = "127.0.0.1:9099";
 const EMULATOR_FIRESTORE_HOST = "127.0.0.1:8080";
@@ -124,7 +157,7 @@ export function getEnv() {
         : "mock";
   const onCloudRun = Boolean(read("K_SERVICE"));
 
-  return {
+  const base = {
     runtime,
     requestedRuntime: requested === "LIVE" ? ("LIVE" as const) : ("MOCK" as const),
     firebaseConfigured,
@@ -230,6 +263,19 @@ export function getEnv() {
       llm_hard: Math.max(1, readNumber("API_BUDGET_LLM_HARD_PER_DAY", API_BUDGETS.llm_hard)),
       llm_search: Math.max(1, readNumber("API_BUDGET_LLM_SEARCH_PER_DAY", API_BUDGETS.llm_search)),
     },
+  };
+
+  const scoped = envScope.getStore();
+  if (!scoped) return base;
+  return {
+    ...base,
+    ...(scoped.runtime
+      ? { runtime: scoped.runtime, requestedRuntime: scoped.runtime }
+      : {}),
+    ...(scoped.dataBackend ? { dataBackend: scoped.dataBackend } : {}),
+    ...(scoped.enableEventCatalog != null
+      ? { enableEventCatalog: scoped.enableEventCatalog }
+      : {}),
   };
 }
 

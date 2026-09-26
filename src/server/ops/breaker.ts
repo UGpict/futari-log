@@ -3,6 +3,9 @@
  *
  * Targets: places (Nearby/Text), routes (computeRoutes), orcarouter.
  * Multi-instance shared state (Firestore/Redis) is a follow-up — see docs/ops/monitoring.md.
+ *
+ * HALF_OPEN allows **one in-flight probe** at a time. Concurrent callers get CIRCUIT_OPEN
+ * until the probe settles (success/failure/ignore/release).
  */
 
 import { CIRCUIT_BREAKER, type BreakerProvider } from "@/config/settings";
@@ -18,6 +21,8 @@ type BreakerSnapshot = {
   consecutiveSuccesses: number;
   openedAtMs: number | null;
   lastTransitionAtMs: number;
+  /** True while a HALF_OPEN probe is in flight (single-probe gate). */
+  halfOpenProbeInFlight: boolean;
 };
 
 type Clock = () => number;
@@ -32,6 +37,7 @@ function fresh(): BreakerSnapshot {
     consecutiveSuccesses: 0,
     openedAtMs: null,
     lastTransitionAtMs: clock(),
+    halfOpenProbeInFlight: false,
   };
 }
 
@@ -51,17 +57,27 @@ function transition(provider: BreakerProvider, snap: BreakerSnapshot, next: Brea
   if (next === "OPEN") {
     snap.openedAtMs = snap.lastTransitionAtMs;
     snap.consecutiveSuccesses = 0;
+    snap.halfOpenProbeInFlight = false;
   }
   if (next === "CLOSED") {
     snap.openedAtMs = null;
     snap.consecutiveFailures = 0;
     snap.consecutiveSuccesses = 0;
+    snap.halfOpenProbeInFlight = false;
   }
   if (next === "HALF_OPEN") {
     snap.consecutiveSuccesses = 0;
     snap.consecutiveFailures = 0;
+    // probe lease is acquired by assertBreakerAllows, not here
   }
   emitBreakerState({ provider, state: next });
+}
+
+function releaseHalfOpenProbe(provider: BreakerProvider) {
+  const snap = getOrCreate(provider);
+  if (snap.state === "HALF_OPEN") {
+    snap.halfOpenProbeInFlight = false;
+  }
 }
 
 /** Test/helpers: force clock (ms). */
@@ -81,7 +97,7 @@ export function getBreakerState(provider: BreakerProvider): BreakerSnapshot {
 
 /**
  * Allow a call, or throw CIRCUIT_OPEN.
- * OPEN → HALF_OPEN after openMs so one probe can run.
+ * OPEN → HALF_OPEN after openMs; only one HALF_OPEN probe may run at a time.
  */
 export function assertBreakerAllows(provider: BreakerProvider): void {
   const snap = getOrCreate(provider);
@@ -90,15 +106,23 @@ export function assertBreakerAllows(provider: BreakerProvider): void {
     const openedAt = snap.openedAtMs ?? snap.lastTransitionAtMs;
     if (now - openedAt >= CIRCUIT_BREAKER.openMs) {
       transition(provider, snap, "HALF_OPEN");
+      snap.halfOpenProbeInFlight = true;
       return;
     }
     throw circuitOpenError(provider);
+  }
+  if (snap.state === "HALF_OPEN") {
+    if (snap.halfOpenProbeInFlight) {
+      throw circuitOpenError(provider);
+    }
+    snap.halfOpenProbeInFlight = true;
   }
 }
 
 export function recordBreakerSuccess(provider: BreakerProvider): void {
   const snap = getOrCreate(provider);
   if (snap.state === "HALF_OPEN") {
+    snap.halfOpenProbeInFlight = false;
     snap.consecutiveSuccesses += 1;
     snap.consecutiveFailures = 0;
     if (snap.consecutiveSuccesses >= CIRCUIT_BREAKER.successThreshold) {
@@ -114,6 +138,7 @@ export function recordBreakerSuccess(provider: BreakerProvider): void {
 export function recordBreakerFailure(provider: BreakerProvider): void {
   const snap = getOrCreate(provider);
   if (snap.state === "HALF_OPEN") {
+    snap.halfOpenProbeInFlight = false;
     transition(provider, snap, "OPEN");
     return;
   }
@@ -129,8 +154,8 @@ export function recordBreakerFailure(provider: BreakerProvider): void {
 export type BreakerClassify = "success" | "failure" | "ignore";
 
 /**
- * Run `fn` under the breaker. Throws OpsGuardError CIRCUIT_OPEN when OPEN.
- * OpsGuardError from fn (budget / nested open) is rethrown without counting as provider failure.
+ * Run `fn` under the breaker. Throws OpsGuardError CIRCUIT_OPEN when OPEN / non-probe HALF_OPEN.
+ * OpsGuardError from fn (budget / nested open) is rethrown; probe lease is released.
  */
 export async function runWithBreaker<T>(
   provider: BreakerProvider,
@@ -138,15 +163,25 @@ export async function runWithBreaker<T>(
   opts?: { classify?: (result: T) => BreakerClassify },
 ): Promise<T> {
   assertBreakerAllows(provider);
+  let settled = false;
   try {
     const result = await fn();
     const verdict = opts?.classify?.(result) ?? "success";
-    if (verdict === "success") recordBreakerSuccess(provider);
-    else if (verdict === "failure") recordBreakerFailure(provider);
+    if (verdict === "success") {
+      recordBreakerSuccess(provider);
+    } else if (verdict === "failure") {
+      recordBreakerFailure(provider);
+    } else {
+      releaseHalfOpenProbe(provider);
+    }
+    settled = true;
     return result;
   } catch (error) {
     if (isOpsGuardError(error)) throw error;
     recordBreakerFailure(provider);
+    settled = true;
     throw error;
+  } finally {
+    if (!settled) releaseHalfOpenProbe(provider);
   }
 }

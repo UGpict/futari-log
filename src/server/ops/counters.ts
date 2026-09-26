@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { getEnv } from "@/config/env";
+import { getEnv, getStoreDir } from "@/config/env";
 import { adminDb } from "@/server/firebase/admin";
 import { col } from "@/server/repositories/layout";
 
@@ -12,8 +12,7 @@ type FileDb = { counters: Record<string, number> };
 const memory = new Map<string, number>();
 
 function storeDir(): string {
-  const override = process.env.STORE_DIR?.trim();
-  return override && override.length > 0 ? override : join(process.cwd(), ".data");
+  return getStoreDir();
 }
 
 function filePath(): string {

@@ -69,7 +69,8 @@ Monitoring → Log-based metrics で、上記 `jsonPayload.metric` ごとに Cou
 ## Circuit breaker（コード）
 
 - 対象: `places` / `routes` / `orcarouter`
-- 状態: CLOSED → OPEN（連続失敗）→ HALF_OPEN（`openMs` 後）→ CLOSED（連続成功）
+- 状態: CLOSED → OPEN（連続失敗）→ HALF_OPEN（`openMs` 後、**同時 probe は 1 本だけ**）→ CLOSED（連続成功）
+- HALF_OPEN 中の非 probe 呼び出しは `CIRCUIT_OPEN`（503）
 - OPEN 時: **503 `CIRCUIT_OPEN`**（黙って MOCK に落とさない）
 - 永続: **プロセスメモリのみ**。Cloud Run 複数 revision / instance では各プロセス独立。共有 state（Firestore/Redis）は次イテレーション
 
