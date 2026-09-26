@@ -30,6 +30,15 @@ export const evalOverlaySpecSchema = z.object({
   overlay: z.record(z.string(), z.unknown()).optional(),
 });
 
+export const evalFixedAppointmentExpectSchema = z.object({
+  /** Match fixedAppointments[].label → spotId must appear locked on the plan. */
+  label: z.string().optional(),
+  /** Locked item startAt must include this substring (e.g. "T14:00"). */
+  startAtContains: z.string().optional(),
+  /** Prefer matching this spotId directly when set. */
+  spotId: z.string().optional(),
+});
+
 export const evalExpectedSchema = z.object({
   outcome: evalOutcomeSchema,
   /** Exact question id, or any of questionIds. */
@@ -41,6 +50,21 @@ export const evalExpectedSchema = z.object({
   maxLatencyMs: z.number().int().positive().optional(),
   /** When outcome is PLAN, optionally require validation.state. */
   validationStates: z.array(z.enum(["PASS", "CONDITIONAL", "FAIL"])).optional(),
+  /** None of these spotIds may appear in built.plan.items. */
+  forbidSpotIds: z.array(z.string()).optional(),
+  /** All of these spotIds must appear in built.plan.items. */
+  requireSpotIds: z.array(z.string()).optional(),
+  /** REPLAN: first item spotId must differ from INITIAL first item. */
+  replanChangedFirstSpot: z.boolean().optional(),
+  /** Locked TIME_FIXED item must preserve appointment time. */
+  requireFixedAppointment: evalFixedAppointmentExpectSchema.optional(),
+  /** No plan item whose spot.environment is OUTDOOR. */
+  forbidOutdoor: z.boolean().optional(),
+  /**
+   * Plan must not claim haversine / 直線距離代用 as filled travel.
+   * Negated wording ("直線距離では代用しない") is allowed.
+   */
+  forbidHaversineAssumption: z.boolean().optional(),
 });
 
 export const evalProviderStubsSchema = z

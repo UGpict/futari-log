@@ -67,6 +67,10 @@
       "q_plan_unmet",
       "q_must_unmet",
       "q_no_candidates"
+    ],
+    "forbidSpotIds": [
+      "mock:cafe-kitte",
+      "mock:cafe-gransta"
     ]
   }
 }

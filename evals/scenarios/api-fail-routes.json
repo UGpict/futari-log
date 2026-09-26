@@ -53,6 +53,10 @@
     "outcome": "WAITING_INPUT",
     "questionIds": [
       "q_travel_unverified"
-    ]
+    ],
+    "requireIssueCodes": [
+      "TRAVEL_UNKNOWN"
+    ],
+    "forbidHaversineAssumption": true
   }
 }

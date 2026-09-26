@@ -53,7 +53,11 @@ const scenarios: Record<string, unknown>[] = [
       budget: { mealsJpy: 8000, facilitiesJpy: 4000, transitJpy: 2000 },
     }),
     overlays: [{ kind: "WEATHER", overlay: { precipitationMm: 8 } }],
-    expected: { outcome: "PLAN", validationStates: ["PASS", "CONDITIONAL"] },
+    expected: {
+      outcome: "PLAN",
+      validationStates: ["PASS", "CONDITIONAL"],
+      forbidOutdoor: true,
+    },
   },
   {
     id: "rain-indoor-02",
@@ -69,7 +73,11 @@ const scenarios: Record<string, unknown>[] = [
       ],
     }),
     overlays: [{ kind: "WEATHER", overlay: { precipitationMm: 15 } }],
-    expected: { outcome: "PLAN", validationStates: ["PASS", "CONDITIONAL"] },
+    expected: {
+      outcome: "PLAN",
+      validationStates: ["PASS", "CONDITIONAL"],
+      forbidOutdoor: true,
+    },
   },
   {
     id: "must-unmet-mars",
@@ -236,7 +244,15 @@ const scenarios: Record<string, unknown>[] = [
         },
       ],
     }),
-    expected: { outcome: "PLAN", validationStates: ["PASS", "CONDITIONAL"] },
+    expected: {
+      outcome: "PLAN",
+      validationStates: ["PASS", "CONDITIONAL"],
+      requireFixedAppointment: {
+        label: "KITTE cafe",
+        startAtContains: "T14:00",
+        spotId: "mock:cafe-kitte",
+      },
+    },
   },
   {
     id: "fixed-time-gallery",
@@ -258,7 +274,15 @@ const scenarios: Record<string, unknown>[] = [
         },
       ],
     }),
-    expected: { outcome: "PLAN", validationStates: ["PASS", "CONDITIONAL"] },
+    expected: {
+      outcome: "PLAN",
+      validationStates: ["PASS", "CONDITIONAL"],
+      requireFixedAppointment: {
+        label: "Station Gallery",
+        startAtContains: "T11:00",
+        spotId: "mock:tokyo-station-gallery",
+      },
+    },
   },
   {
     id: "reflect-schema-01",
@@ -307,6 +331,8 @@ const scenarios: Record<string, unknown>[] = [
     expected: {
       outcome: "WAITING_INPUT",
       questionIds: ["q_travel_unverified"],
+      requireIssueCodes: ["TRAVEL_UNKNOWN"],
+      forbidHaversineAssumption: true,
     },
   },
   {
@@ -330,7 +356,11 @@ const scenarios: Record<string, unknown>[] = [
       budget: { mealsJpy: 8000, facilitiesJpy: 4000, transitJpy: 2000 },
     }),
     overlays: [{ kind: "SPOT_FULL", target: { spotId: "mock:cafe-kitte" }, overlay: {} }],
-    expected: { outcome: "PLAN", validationStates: ["PASS", "CONDITIONAL"] },
+    expected: {
+      outcome: "PLAN",
+      validationStates: ["PASS", "CONDITIONAL"],
+      forbidSpotIds: ["mock:cafe-kitte"],
+    },
   },
   {
     id: "full-spot-alt",
@@ -351,6 +381,7 @@ const scenarios: Record<string, unknown>[] = [
     expected: {
       outcome: "WAITING_INPUT",
       questionIds: ["q_plan_unmet", "q_must_unmet", "q_no_candidates"],
+      forbidSpotIds: ["mock:cafe-kitte", "mock:cafe-gransta"],
     },
   },
   {
@@ -364,6 +395,7 @@ const scenarios: Record<string, unknown>[] = [
     expected: {
       outcome: "PLAN",
       validationStates: ["PASS", "CONDITIONAL"],
+      replanChangedFirstSpot: true,
     },
   },
   {

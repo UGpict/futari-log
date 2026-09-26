@@ -59,6 +59,11 @@
     "validationStates": [
       "PASS",
       "CONDITIONAL"
-    ]
+    ],
+    "requireFixedAppointment": {
+      "label": "Station Gallery",
+      "startAtContains": "T11:00",
+      "spotId": "mock:tokyo-station-gallery"
+    }
   }
 }
