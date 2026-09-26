@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
 import type { ZodType } from "zod";
+import type { RateLimitBucket } from "@/config/settings";
 import { verifyToken } from "@/server/auth";
+import { isOpsGuardError, type OpsGuardError } from "@/server/ops/errors";
+import { consumeRateLimit } from "@/server/ops/rateLimit";
 
 export function json(data: unknown, status = 200) {
   return NextResponse.json(data, { status });
+}
+
+export function opsErrorResponse(error: OpsGuardError) {
+  return json({ error: error.message, code: error.code }, error.status);
 }
 
 export function bearer(request: Request): string | null {
@@ -20,6 +27,40 @@ export async function requireUid(
   const uid = await verifyToken(bearer(request));
   if (!uid) return { error: json({ error: "unauthorized" }, 401) };
   return { uid };
+}
+
+/** Client IP for rate limiting when uid is absent. Prefer first X-Forwarded-For hop. */
+export function clientIp(request: Request): string {
+  const xff = request.headers.get("x-forwarded-for");
+  if (xff) {
+    const first = xff.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  const real = request.headers.get("x-real-ip")?.trim();
+  if (real) return real;
+  return "unknown";
+}
+
+/**
+ * uid-preferred rate limit. Over limit → 429 RATE_LIMITED (not silent MOCK).
+ */
+export async function enforceRateLimit(
+  request: Request,
+  uid: string | null | undefined,
+  bucket: RateLimitBucket,
+): Promise<{ ok: true } | { error: NextResponse }> {
+  const result = await consumeRateLimit({
+    bucket,
+    uid,
+    ip: clientIp(request),
+  });
+  if (!result.ok) return { error: opsErrorResponse(result.error) };
+  return { ok: true };
+}
+
+export function catchOpsGuard(error: unknown): NextResponse | null {
+  if (isOpsGuardError(error)) return opsErrorResponse(error);
+  return null;
 }
 
 export function idempotencyKey(request: Request): string | null {

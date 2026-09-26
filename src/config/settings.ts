@@ -15,6 +15,7 @@ export const LIMITS = {
   /** self-correct 補充で Place Details / 営業確認する候補の上限（決定論・課金の両方）。 */
   maxSelfCorrectRefillLookups: 6,
   maxConcurrentRunsPerSession: 1,
+  /** Couple-scoped run daily cap (store insertPendingRun). Distinct from API_BUDGETS. */
   maxRunsPerCouplePerDay: 20,
   maxInputChars: 2000,
   llmOutputRepairAttempts: 1,
@@ -26,6 +27,34 @@ export const LIMITS = {
   /** Soft USD ceiling for price enrichment searches per Tokyo day (grounded search is costly). */
   maxPriceEnrichCostUsdPerDay: 2,
 } as const;
+
+/**
+ * HTTP-edge rate limits (uid preferred, else IP). Windows are Tokyo-local.
+ * Env overrides live in `getEnv().rateLimits` (see src/config/env.ts).
+ */
+export const RATE_LIMITS = {
+  places_search: { perMinute: 30, perDay: 300 },
+  session_create: { perMinute: 10, perDay: 100 },
+  run_start: { perMinute: 10, perDay: 40 },
+  reflect: { perMinute: 20, perDay: 100 },
+} as const;
+
+export type RateLimitBucket = keyof typeof RATE_LIMITS;
+
+/**
+ * Process-wide Tokyo-day budgets for paid external / LLM calls.
+ * Enforced at provider/LLM call sites (not only HTTP edge). Over → 503 API_BUDGET_EXCEEDED.
+ * Env overrides: `getEnv().apiBudgets`.
+ */
+export const API_BUDGETS = {
+  places: 500,
+  routes: 500,
+  llm_mundane: 200,
+  llm_hard: 100,
+  llm_search: 50,
+} as const;
+
+export type ApiBudgetKind = keyof typeof API_BUDGETS;
 
 export const DEADLINES_MS = {
   INITIAL_PLAN: 60_000,

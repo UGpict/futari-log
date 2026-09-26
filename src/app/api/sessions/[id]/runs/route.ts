@@ -1,4 +1,4 @@
-import { json, requireUid, idempotencyKey, readJson } from "@/server/api/http";
+import { json, requireUid, idempotencyKey, readJson, enforceRateLimit } from "@/server/api/http";
 import { startRun } from "@/server/api/actions";
 import { sha256 } from "@/lib/ids";
 import { startRunRequestSchema } from "@/contracts/session";
@@ -10,6 +10,8 @@ export async function POST(
 ) {
   const auth = await requireUid(request);
   if ("error" in auth) return auth.error;
+  const limited = await enforceRateLimit(request, auth.uid, "run_start");
+  if ("error" in limited) return limited.error;
   const { id } = await ctx.params;
   const body = await readJson(request, startRunRequestSchema);
   if ("error" in body) return body.error;

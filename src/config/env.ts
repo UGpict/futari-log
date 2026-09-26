@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { TIME_ZONE } from "./settings";
+import { API_BUDGETS, RATE_LIMITS, TIME_ZONE } from "./settings";
 import { tokyoToday } from "./public";
 
 function loadDotEnv() {
@@ -193,6 +193,32 @@ export function getEnv() {
     onCloudRun,
     uiFixtures,
     firestoreNamespace: read("FIRESTORE_NAMESPACE"),
+    /** Phase 2a ops guardrails — defaults from settings; env can tighten for staging. */
+    rateLimits: {
+      places_search: {
+        perMinute: Math.max(1, readNumber("RATE_LIMIT_PLACES_SEARCH_PER_MINUTE", RATE_LIMITS.places_search.perMinute)),
+        perDay: Math.max(1, readNumber("RATE_LIMIT_PLACES_SEARCH_PER_DAY", RATE_LIMITS.places_search.perDay)),
+      },
+      session_create: {
+        perMinute: Math.max(1, readNumber("RATE_LIMIT_SESSION_CREATE_PER_MINUTE", RATE_LIMITS.session_create.perMinute)),
+        perDay: Math.max(1, readNumber("RATE_LIMIT_SESSION_CREATE_PER_DAY", RATE_LIMITS.session_create.perDay)),
+      },
+      run_start: {
+        perMinute: Math.max(1, readNumber("RATE_LIMIT_RUN_START_PER_MINUTE", RATE_LIMITS.run_start.perMinute)),
+        perDay: Math.max(1, readNumber("RATE_LIMIT_RUN_START_PER_DAY", RATE_LIMITS.run_start.perDay)),
+      },
+      reflect: {
+        perMinute: Math.max(1, readNumber("RATE_LIMIT_REFLECT_PER_MINUTE", RATE_LIMITS.reflect.perMinute)),
+        perDay: Math.max(1, readNumber("RATE_LIMIT_REFLECT_PER_DAY", RATE_LIMITS.reflect.perDay)),
+      },
+    },
+    apiBudgets: {
+      places: Math.max(1, readNumber("API_BUDGET_PLACES_PER_DAY", API_BUDGETS.places)),
+      routes: Math.max(1, readNumber("API_BUDGET_ROUTES_PER_DAY", API_BUDGETS.routes)),
+      llm_mundane: Math.max(1, readNumber("API_BUDGET_LLM_MUNDANE_PER_DAY", API_BUDGETS.llm_mundane)),
+      llm_hard: Math.max(1, readNumber("API_BUDGET_LLM_HARD_PER_DAY", API_BUDGETS.llm_hard)),
+      llm_search: Math.max(1, readNumber("API_BUDGET_LLM_SEARCH_PER_DAY", API_BUDGETS.llm_search)),
+    },
   };
 }
 
