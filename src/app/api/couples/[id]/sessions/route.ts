@@ -1,4 +1,4 @@
-import { json, requireUid } from "@/server/api/http";
+import { json, requireUid, enforceRateLimit } from "@/server/api/http";
 import { createSession, listCalendarPlans } from "@/server/api/actions";
 
 export async function GET(
@@ -23,6 +23,8 @@ export async function POST(
 ) {
   const auth = await requireUid(request);
   if ("error" in auth) return auth.error;
+  const limited = await enforceRateLimit(request, auth.uid, "session_create");
+  if ("error" in limited) return limited.error;
   const { id } = await ctx.params;
   const raw = await request.json().catch(() => null);
   const result = await createSession(auth.uid, id, raw);

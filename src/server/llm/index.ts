@@ -4,6 +4,8 @@ import type { AppEvent } from "@/domain/schemas";
 import { withTimeout } from "@/lib/abort";
 import { newId } from "@/lib/ids";
 import { realNowIso } from "@/lib/time";
+import { consumeApiBudget } from "@/server/ops/budget";
+import { emitLlmCost } from "@/server/ops/metrics";
 import { maskPii } from "@/server/privacy/mask";
 import { appendRunEvent, nextEventSeq } from "@/server/repositories/store";
 import { z, type ZodType } from "zod";
@@ -201,10 +203,11 @@ export async function callLLM<T>(input: {
   const requestedModel = modelFor(pool);
   const started = Date.now();
   const env = getEnv();
+  const budgetKind = pool === "hard" ? ("llm_hard" as const) : ("llm_mundane" as const);
 
   if (env.runtime !== "LIVE" || !env.orcaApiKey) {
     const parsed = input.schema.safeParse(input.mockValue);
-    return {
+    const result: LlmCallResult<T> = {
       data: parsed.success ? parsed.data : null,
       ok: parsed.success,
       requestedModel,
@@ -220,7 +223,19 @@ export async function callLLM<T>(input: {
       retries: 0,
       lastStatus: null,
     };
+    emitLlmCost({
+      provider: "mock-llm",
+      pool,
+      latency_ms: result.latencyMs,
+      ok: result.ok,
+      cost_usd: 0,
+      task: input.task,
+    });
+    return result;
   }
+
+  const gate = await consumeApiBudget(budgetKind);
+  if (!gate.ok) throw gate.error;
 
   const messages = input.messages.some((m) => /json/i.test(m.content))
     ? input.messages
@@ -360,10 +375,29 @@ export async function callLLM<T>(input: {
         first.content.slice(0, MODEL_PARAMS.maxTokens * 4),
       ].join("\n"),
     };
+    // Repair is a second paid call — consume another mundane/hard slot.
+    const repairGate = await consumeApiBudget(budgetKind);
+    if (!repairGate.ok) throw repairGate.error;
     const second = await attempt(2, true, [...messages, repairUser]);
     second.result.repaired = true;
+    emitLlmCost({
+      provider: "orcarouter",
+      pool,
+      latency_ms: second.result.latencyMs,
+      ok: second.result.ok,
+      cost_usd: second.result.costUsd,
+      task: input.task,
+    });
     return second.result;
   }
+  emitLlmCost({
+    provider: "orcarouter",
+    pool,
+    latency_ms: first.result.latencyMs,
+    ok: first.result.ok,
+    cost_usd: first.result.costUsd,
+    task: input.task,
+  });
   return first.result;
 }
 
@@ -395,6 +429,8 @@ export async function callOrcaJson<T>(input: {
       lastStatus: null,
     };
   }
+  const gate = await consumeApiBudget("llm_mundane");
+  if (!gate.ok) throw gate.error;
   const messages = input.messages.some((m) => /json/i.test(m.content))
     ? input.messages
     : [{ role: "system" as const, content: "Respond with a JSON object." }, ...input.messages];
@@ -414,7 +450,7 @@ export async function callOrcaJson<T>(input: {
   const actualModel =
     res.headers.get("X-Orca-Resolved-Model") ?? res.headers.get("x-orca-resolved-model") ?? "unknown";
   if (!res.ok) {
-    return {
+    const failed: LlmCallResult<T> = {
       data: null,
       ok: false,
       requestedModel,
@@ -430,6 +466,14 @@ export async function callOrcaJson<T>(input: {
       retries,
       lastStatus,
     };
+    emitLlmCost({
+      provider: "orcarouter",
+      pool: "mundane",
+      latency_ms: latencyMs,
+      ok: false,
+      cost_usd: null,
+    });
+    return failed;
   }
   const json = (await res.json()) as {
     model?: string;
@@ -444,7 +488,7 @@ export async function callOrcaJson<T>(input: {
   }
   const checked = input.schema.safeParse(parsed);
   const usage = usageFromOrca(json);
-  return {
+  const result: LlmCallResult<T> = {
     data: checked.success ? checked.data : null,
     ok: checked.success,
     requestedModel,
@@ -460,6 +504,14 @@ export async function callOrcaJson<T>(input: {
     retries,
     lastStatus,
   };
+  emitLlmCost({
+    provider: "orcarouter",
+    pool: "mundane",
+    latency_ms: latencyMs,
+    ok: result.ok,
+    cost_usd: result.costUsd,
+  });
+  return result;
 }
 
 /** Shared by callLLM and callOrcaJson: fenced or embedded JSON object/array. */

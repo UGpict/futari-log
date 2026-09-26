@@ -1,5 +1,7 @@
 import { getEnv } from "@/config/env";
 import { withTimeout } from "@/lib/abort";
+import { consumeApiBudget } from "@/server/ops/budget";
+import { emitLlmCost } from "@/server/ops/metrics";
 import { fetchOrcaWithRetry } from "./fetchOrcaWithRetry";
 import {
   lookupSettledCost,
@@ -304,9 +306,29 @@ export async function groundedGoogleSearch(input: {
   const started = Date.now();
   if (!env.orcaApiKey) return emptyResult(requestedModel, started, "ORCAROUTER_API_KEY missing");
 
+  const gate = await consumeApiBudget("llm_search");
+  if (!gate.ok) throw gate.error;
+
   const native = await nativeGeminiSearch(input.query, requestedModel, input.signal);
+  emitLlmCost({
+    provider: "orcarouter-search",
+    pool: "llm_search",
+    latency_ms: native.latencyMs,
+    ok: native.ok,
+    cost_usd: native.usage.costUsd,
+  });
   if (native.grounded) return native;
+
+  const chatGate = await consumeApiBudget("llm_search");
+  if (!chatGate.ok) throw chatGate.error;
   const chat = await chatCompletionsSearch(input.query, requestedModel, input.signal);
+  emitLlmCost({
+    provider: "orcarouter-search",
+    pool: "llm_search",
+    latency_ms: chat.latencyMs,
+    ok: chat.ok,
+    cost_usd: chat.usage.costUsd,
+  });
   if (chat.grounded) return chat;
   return {
     ...native,

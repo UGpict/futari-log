@@ -11,6 +11,8 @@ import type { Evidence, Spot } from "@/domain/schemas";
 import { withTimeout } from "@/lib/abort";
 import { newId } from "@/lib/ids";
 import { realNowIso } from "@/lib/time";
+import { consumeApiBudget } from "@/server/ops/budget";
+import { emitExternalCall } from "@/server/ops/metrics";
 import type { ProviderCtx } from "./types";
 
 type FetchLike = typeof fetch;
@@ -243,20 +245,38 @@ export async function resolvePhotoMedia(
   photoName: string,
   signal?: AbortSignal,
 ): Promise<string | null> {
+  if (getEnv().runtime === "LIVE") {
+    const gate = await consumeApiBudget("places");
+    if (!gate.ok) throw gate.error;
+  }
   ctx.httpAttempts += 1;
+  const started = Date.now();
   await ctx.onHttp({ provider: "places-photo", cacheHit: false, attempt: ctx.httpAttempts });
-  const res = await fetch(
-    `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=800&skipHttpRedirect=true`,
-    {
-      headers: { "X-Goog-Api-Key": apiKey },
-      signal: withTimeout(signal, 8000),
-    },
-  );
-  if (!res.ok) return null;
-  const body = (await res.json().catch(() => ({}))) as { photoUri?: string };
-  const uri = body.photoUri?.trim() ?? "";
-  if (!uri.startsWith("https://")) return null;
-  return uri;
+  try {
+    const res = await fetch(
+      `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=800&skipHttpRedirect=true`,
+      {
+        headers: { "X-Goog-Api-Key": apiKey },
+        signal: withTimeout(signal, 8000),
+      },
+    );
+    const latencyMs = Date.now() - started;
+    if (!res.ok) {
+      emitExternalCall({ provider: "places-photo", latency_ms: latencyMs, ok: false });
+      return null;
+    }
+    const body = (await res.json().catch(() => ({}))) as { photoUri?: string };
+    const uri = body.photoUri?.trim() ?? "";
+    if (!uri.startsWith("https://")) {
+      emitExternalCall({ provider: "places-photo", latency_ms: latencyMs, ok: false });
+      return null;
+    }
+    emitExternalCall({ provider: "places-photo", latency_ms: latencyMs, ok: true });
+    return uri;
+  } catch (error) {
+    emitExternalCall({ provider: "places-photo", latency_ms: Date.now() - started, ok: false });
+    throw error;
+  }
 }
 
 export async function hydratePlacePhotos(
@@ -280,7 +300,12 @@ export async function hydratePlacePhotos(
     let mapsUri = spot.imageSourceUrl ?? null;
 
     if (!photoName) {
+      if (getEnv().runtime === "LIVE") {
+        const gate = await consumeApiBudget("places");
+        if (!gate.ok) throw gate.error;
+      }
       ctx.httpAttempts += 1;
+      const started = Date.now();
       await ctx.onHttp({ provider: "places", cacheHit: false, attempt: ctx.httpAttempts });
       const details = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(spot.id)}`, {
         headers: {
@@ -288,6 +313,11 @@ export async function hydratePlacePhotos(
           "X-Goog-FieldMask": "id,photos.name,photos.authorAttributions,googleMapsUri",
         },
         signal: withTimeout(signal, 8000),
+      });
+      emitExternalCall({
+        provider: "places",
+        latency_ms: Date.now() - started,
+        ok: details.ok,
       });
       if (!details.ok) continue;
       const body = (await details.json()) as {

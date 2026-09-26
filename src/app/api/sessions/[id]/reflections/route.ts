@@ -1,4 +1,4 @@
-import { json, requireUid, readJson } from "@/server/api/http";
+import { json, requireUid, readJson, enforceRateLimit } from "@/server/api/http";
 import { listSessionReflections, saveReflection } from "@/server/api/actions";
 import {
   reflectionListResponseSchema,
@@ -24,6 +24,8 @@ export async function POST(
 ) {
   const auth = await requireUid(request);
   if ("error" in auth) return auth.error;
+  const limited = await enforceRateLimit(request, auth.uid, "reflect");
+  if ("error" in limited) return limited.error;
   const { id } = await ctx.params;
   const body = await readJson(request, saveReflectionRequestSchema);
   if ("error" in body) return body.error;

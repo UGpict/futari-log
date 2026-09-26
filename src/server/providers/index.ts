@@ -5,6 +5,7 @@ import {
   PLACES_FIELD_MASK_DETAILS,
   PLACES_FIELD_MASK_SEARCH,
   PLACES_FIELD_MASK_TEXT,
+  type ApiBudgetKind,
 } from "@/config/settings";
 import type {
   Evidence,
@@ -15,6 +16,9 @@ import type {
 import { newId } from "@/lib/ids";
 import { realNowIso, toTokyoParts, tokyoToday } from "@/lib/time";
 import { includedTypesForCategory, placeTypeList } from "@/contracts/spotKinds";
+import { consumeApiBudget } from "@/server/ops/budget";
+import { isOpsGuardError } from "@/server/ops/errors";
+import { emitExternalCall } from "@/server/ops/metrics";
 import { getCatalogSpot, MOCK_CATALOG, searchCatalog, searchCatalogByName, type CatalogSpot } from "./catalog";
 import { applyPhotoMeta, firstPhotoRef, resolvePhotoMedia } from "./placePhotos";
 import {
@@ -109,10 +113,42 @@ async function counted<T>(
   ctx: ProviderCtx,
   provider: string,
   fn: () => Promise<T>,
+  opts?: { budgetKind?: ApiBudgetKind },
 ): Promise<T> {
+  if (opts?.budgetKind) {
+    const gate = await consumeApiBudget(opts.budgetKind);
+    if (!gate.ok) throw gate.error;
+  }
   ctx.httpAttempts += 1;
-  await ctx.onHttp({ provider, cacheHit: false, attempt: ctx.httpAttempts });
-  return fn();
+  const started = Date.now();
+  try {
+    const result = await fn();
+    const latencyMs = Date.now() - started;
+    await ctx.onHttp({
+      provider,
+      cacheHit: false,
+      attempt: ctx.httpAttempts,
+      latencyMs,
+      ok: true,
+    });
+    emitExternalCall({ provider, latency_ms: latencyMs, ok: true });
+    return result;
+  } catch (error) {
+    const latencyMs = Date.now() - started;
+    try {
+      await ctx.onHttp({
+        provider,
+        cacheHit: false,
+        attempt: ctx.httpAttempts,
+        latencyMs,
+        ok: false,
+      });
+    } catch {
+      // event write must not mask the original failure
+    }
+    emitExternalCall({ provider, latency_ms: latencyMs, ok: false });
+    throw error;
+  }
 }
 
 function toSpot(c: CatalogSpot): Spot {
@@ -164,7 +200,9 @@ export async function searchSpots(
     return cached;
   }
   if (env.runtime === "LIVE" && env.googleMapsApiKey) {
-    const result = await counted(ctx, "places", () => liveSearch(env.googleMapsApiKey!, args));
+    const result = await counted(ctx, "places", () => liveSearch(env.googleMapsApiKey!, args), {
+      budgetKind: "places",
+    });
     cacheSet(ctx, key, result);
     return result;
   }
@@ -249,7 +287,9 @@ export async function getSpotDetails(
     return result;
   }
   if (env.runtime === "LIVE" && env.googleMapsApiKey && !args.spotId.startsWith("mock:") && !args.spotId.startsWith("demo:")) {
-    const result = await counted(ctx, "places", () => liveDetails(ctx, env.googleMapsApiKey!, args.spotId));
+    const result = await counted(ctx, "places", () => liveDetails(ctx, env.googleMapsApiKey!, args.spotId), {
+      budgetKind: "places",
+    });
     cacheSet(ctx, key, result);
     return result;
   }
@@ -548,14 +588,18 @@ export async function estimateTravel(
           }),
         };
       } else {
-        base = await counted(ctx, "routes", () =>
-          computeLiveRoute({
-            apiKey: env.googleMapsApiKey!,
-            from: args.from,
-            to: args.to,
-            mode: args.mode,
-            departureAt: args.departureAt,
-          }),
+        base = await counted(
+          ctx,
+          "routes",
+          () =>
+            computeLiveRoute({
+              apiKey: env.googleMapsApiKey!,
+              from: args.from,
+              to: args.to,
+              mode: args.mode,
+              departureAt: args.departureAt,
+            }),
+          { budgetKind: "routes" },
         );
       }
     } else {
@@ -938,6 +982,9 @@ export async function searchPlacesByText(args: {
   }
   const env = getEnv();
   if (env.runtime === "LIVE" && env.googleMapsApiKey) {
+    const gate = await consumeApiBudget("places");
+    if (!gate.ok) throw gate.error;
+    const started = Date.now();
     try {
       const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
         method: "POST",
@@ -963,7 +1010,9 @@ export async function searchPlacesByText(args: {
         }),
         signal: AbortSignal.timeout(10000),
       });
+      const latencyMs = Date.now() - started;
       if (!res.ok) {
+        emitExternalCall({ provider: "places", latency_ms: latencyMs, ok: false });
         return { query: q, state: "failed", places: [], error: `places searchText ${res.status}` };
       }
       const data = (await res.json()) as {
@@ -983,8 +1032,11 @@ export async function searchPlacesByText(args: {
           lng: p.location!.longitude,
           address: p.formattedAddress ?? null,
         }));
+      emitExternalCall({ provider: "places", latency_ms: latencyMs, ok: true });
       return { query: q, state: places.length ? "ok" : "empty", places, error: null };
     } catch (error) {
+      emitExternalCall({ provider: "places", latency_ms: Date.now() - started, ok: false });
+      if (isOpsGuardError(error)) throw error;
       return {
         query: q,
         state: "failed",

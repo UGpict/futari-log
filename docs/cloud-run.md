@@ -78,6 +78,32 @@ gcloud builds submit --config cloudbuild.yaml \
 
 Secret と IAM が未作成だとこのコマンド単体は失敗します。そのときは `npm run deploy:cloudrun` を使ってください。
 
+## Ops guardrails（Phase 2a）
+
+本番破壊を防ぐための最小ガード。**ダッシュボード / alert / circuit breaker / synthetic は Phase 2b。**
+
+### 構造化メトリクス（Cloud Logging）
+
+アプリは次の JSON ログを出す（`message` / `metric` が名前）:
+
+| metric | 主なラベル |
+|---|---|
+| `futari/external_calls` | `provider`, `latency_ms`, `ok`, `cost_usd?` |
+| `futari/external_errors` | `provider`, `latency_ms` |
+| `futari/llm_cost_usd` | `provider`, `kind` (pool), `cost_usd` |
+| `futari/rate_limited` | `bucket`, `subject` |
+| `futari/budget_exceeded` | `kind` |
+
+Places / Routes は `ProviderCtx.onHttp` 経路、LLM は `src/server/llm` から emit。Monitoring ダッシュボードへの配線は 2b。
+
+### Rate limit / API budget
+
+- **Rate limit**（HTTP 端）: uid 優先、なければ IP。分次 + 日次。対象 `places_search` / `session_create` / `run_start` / `reflect`。超過 → **429** `{ error, code: "RATE_LIMITED" }`
+- **API budget**（provider / LLM 呼び出し）: Tokyo 日次。`places` / `routes` / `llm_mundane` / `llm_hard` / `llm_search`。超過 → **503** `{ error, code: "API_BUDGET_EXCEEDED" }`。**黙って MOCK に落とさない**
+- 既定値は `src/config/settings.ts`（`RATE_LIMITS` / `API_BUDGETS`）。上書きは env（例: `RATE_LIMIT_PLACES_SEARCH_PER_MINUTE`, `API_BUDGET_PLACES_PER_DAY`）
+- カウンタ: `DATA_BACKEND=firestore` なら Firestore `opsCounters`、file なら `STORE_DIR/ops-counters.json`。テストは `OPS_COUNTER_BACKEND=memory`
+- 既存の couple 単位 `LIMITS.maxRunsPerCouplePerDay`（store daily cap）はそのまま。API budget とは別枠
+
 ## Cloud Agent ではやらないこと
 
 - `gcloud auth login` / `firebase login`

@@ -76,27 +76,27 @@ Phase1 は「eval 専用」に見えても、次は本番コード経路に載�
 
 ### 2.1 計測の出口
 
-- [ ] provider / LLM 呼び出しで構造化ログ or Cloud Monitoring カスタムメトリクス
-- [ ] Places / Routes / LLM cost・latency・error を同一ダッシュボード用ラベルで出す
+- [x] provider / LLM 呼び出しで構造化ログ（Cloud Logging JSON: `futari/external_calls` / `futari/external_errors` / `futari/llm_cost_usd`）。Dashboard 配線は Phase 2b
+- [x] Places / Routes / LLM に provider・latency_ms・ok/error・cost（既知時）ラベルを同一スキーマで emit（`ProviderCtx.onHttp` + `src/server/llm`）
 
 ### 2.2 保護
 
-- [ ] uid/IP rate limit（places_search / session_create / run_start / reflect）
-- [ ] API 別日次 budget（超過時は明確な 429/503）
-- [ ] Places / Routes / Orca の circuit breaker
+- [x] uid/IP rate limit（places_search / session_create / run_start / reflect）→ 超過時 **429 RATE_LIMITED**
+- [x] API 別日次 budget（places / routes / llm_mundane / llm_hard / llm_search）→ 超過時 **503 API_BUDGET_EXCEEDED**（黙って MOCK に落とさない）
+- [ ] Places / Routes / Orca の circuit breaker（Phase 2b）
 
 ### 2.3 Synthetic + 監視
 
 - [ ] Cloud Scheduler API 有効化（イベント ingest とは別ジョブ）
 - [ ] `/api/internal/synthetic/...` + OIDC
 - [ ] Phase1 fixture のうち 3〜5 本を synthetic に流用
-- [ ] Dashboard `futari-log production`
+- [ ] Dashboard `futari-log production`（Phase 2b）
 - [ ] Alert: budget / error rate / synthetic fail / breaker OPEN
 
 ### 2.4 検証
 
 - [ ] staging または本番で意図的に rate/budget を踏んで応答を確認
-- [ ] docs/cloud-run.md に運用手順を追記
+- [x] docs/cloud-run.md に Phase 2a ops スタブを追記（dashboard/alert は 2b）
 
 **Exit criteria:** 一画面で Places/Routes/LLM が見える。alert が鳴る経路を1回実証。
 
