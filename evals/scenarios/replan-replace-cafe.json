@@ -53,6 +53,7 @@
     "validationStates": [
       "PASS",
       "CONDITIONAL"
-    ]
+    ],
+    "replanChangedFirstSpot": true
   }
 }

@@ -58,6 +58,9 @@
     "validationStates": [
       "PASS",
       "CONDITIONAL"
+    ],
+    "forbidSpotIds": [
+      "mock:cafe-kitte"
     ]
   }
 }

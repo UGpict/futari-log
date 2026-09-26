@@ -74,6 +74,12 @@ async function runReflectSchema(scenario: EvalScenario): Promise<ScenarioResult>
     questionId: null,
     issueCodes: parsed.success ? [] : ["LLM_BAD_JSON"],
     validationState: null,
+    spotIds: [],
+    firstSpotId: null,
+    baseFirstSpotId: null,
+    assumptions: [],
+    items: [],
+    hasNullTravelDuration: false,
   };
   const metrics = computeMetrics({
     observed,
@@ -81,6 +87,7 @@ async function runReflectSchema(scenario: EvalScenario): Promise<ScenarioResult>
     apiCallsByProvider: {},
     latencyMs: Date.now() - started,
     cost: { llmJpy: 0, llmUsd: 0, apiJpy: 0 },
+    validation: null,
   });
   const asserted = assertExpected(scenario.expected, observed, metrics);
   return {
@@ -145,6 +152,7 @@ export async function runScenario(scenario: EvalScenario): Promise<ScenarioResul
   const input = defaultPlanningInput(scenario.input);
   let result: OrchestratedPlan | null = null;
   let error: string | undefined;
+  let baseFirstSpotId: string | null = null;
   const started = Date.now();
 
   try {
@@ -160,6 +168,7 @@ export async function runScenario(scenario: EvalScenario): Promise<ScenarioResul
           `replan seed failed: INITIAL_PLAN waiting=${initial.waitingQuestion?.id ?? "none"}`,
         );
       }
+      baseFirstSpotId = initial.built.plan.items[0]?.spotId ?? null;
       const targetFirst = scenario.replan.targetFirstItem !== false;
       const targetPlanItemId = targetFirst ? (initial.built.plan.items[0]?.id ?? null) : null;
       world = await seedReplanWorld({
@@ -177,7 +186,13 @@ export async function runScenario(scenario: EvalScenario): Promise<ScenarioResul
   }
 
   const latencyMs = Date.now() - started;
-  const observed = observeOutcome(result, Boolean(error));
+  const observed = observeOutcome(result, Boolean(error), {
+    baseFirstSpotId,
+    fixedAppointments: input.fixedAppointments.map((a) => ({
+      label: a.label,
+      spotId: a.spotId ?? null,
+    })),
+  });
   const metrics = computeMetrics({
     observed,
     expected: scenario.expected,
@@ -188,6 +203,7 @@ export async function runScenario(scenario: EvalScenario): Promise<ScenarioResul
       llmUsd: result?.llm.costUsd ?? 0,
       apiJpy: 0,
     },
+    validation: result?.built?.plan.validation ?? null,
   });
 
   const asserted = assertExpected(scenario.expected, observed, metrics);

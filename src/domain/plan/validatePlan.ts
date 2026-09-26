@@ -353,6 +353,20 @@ export function validatePlan(plan: Plan, ctx: PlanContext): ValidationResult {
   return { state, issues };
 }
 
+/** ERROR / UNKNOWN block plan confidence; WARNING alone does not. */
+export function isConstraintIssue(issue: Pick<ValidationIssue, "severity">): boolean {
+  return issue.severity === "ERROR" || issue.severity === "UNKNOWN";
+}
+
+/** True when validation fails or any constraint-severity issue is present. */
+export function hasConstraintViolation(
+  validation: Pick<ValidationResult, "state" | "issues"> | null | undefined,
+): boolean {
+  if (!validation) return false;
+  if (validation.state === "FAIL") return true;
+  return validation.issues.some(isConstraintIssue);
+}
+
 function tokyoEnd(input: PlanningInput): string {
   return `${input.dateTokyo}T${input.endTime}:00+09:00`;
 }

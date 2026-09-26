@@ -58,6 +58,11 @@ Fields:
 | `expected.questionId` / `questionIds` | Allowed waiting question ids |
 | `expected.forbidIssueCodes` / `requireIssueCodes` | Plan issue codes |
 | `expected.validationStates` | Allowed `validatePlan` states when outcome is PLAN |
+| `expected.forbidSpotIds` / `requireSpotIds` | Spot ids that must be absent / present on `built.plan.items` |
+| `expected.replanChangedFirstSpot` | First item spotId must differ from INITIAL seed |
+| `expected.requireFixedAppointment` | Locked TIME_FIXED item (`label` / `startAtContains` / `spotId`) |
+| `expected.forbidOutdoor` | No item with `spot.environment === OUTDOOR` (rain product filter) |
+| `expected.forbidHaversineAssumption` | Assumptions must not claim haversine / 直線距離代用 fill |
 
 ## How to unskip remaining fixtures
 
