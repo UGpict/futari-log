@@ -1,7 +1,7 @@
 {
-  "id": "llm-bad-json-02",
-  "family": "llm_bad_json",
-  "description": "Reflect payload with unknown action enum fails schema",
+  "id": "reflect-schema-02",
+  "family": "reflect_schema",
+  "description": "Reflect schema validation: unknown action enum fails Zod (not callLLM→repair E2E)",
   "path": "reflect_schema",
   "stubs": {
     "llmReflect": {

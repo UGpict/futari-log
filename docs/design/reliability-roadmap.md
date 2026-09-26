@@ -41,7 +41,7 @@ scripts/run-evals.ts   # npm run eval
 ```ts
 type EvalScenario = {
   id: string;
-  family: "rain" | "full" | "long_walk" | "hours" | "must" | "replan" | "fixed" | "api_fail" | "llm_bad_json" | "memory_conflict";
+  family: "rain" | "full" | "long_walk" | "hours" | "must" | "replan" | "fixed" | "api_fail" | "reflect_schema" | "memory_conflict";
   input: PlanningInput;           // または最小部分 + defaults
   overlays?: ScenarioOverlay[];   // WEATHER 等
   stubs?: {                       // MOCK 応答の上書き
@@ -180,7 +180,7 @@ type Step<I, O> = {
 
 ## PR 分割方針
 
-- Phase1: harness + 24 fixtures + CI（機能挙動変更なし）
+- Phase1: harness + fixtures + CI。製品挙動ゼロではない（`ProviderCtx.stubs`、`SPOT_FULL`→`CLOSED`、reflect Zod-only）
 - Phase2a: rate limit + budget + metrics emit
 - Phase2b: breaker + synthetic + dashboard/alert
 - Phase3a〜: Step ごと PR（各 PR で eval 緑）

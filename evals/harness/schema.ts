@@ -11,7 +11,7 @@ export const evalFamilySchema = z.enum([
   "replan",
   "fixed",
   "api_fail",
-  "llm_bad_json",
+  "reflect_schema",
   "memory_conflict",
 ]);
 
@@ -80,7 +80,8 @@ export const evalScenarioSchema = z.object({
   skipReason: z.string().optional(),
   /**
    * orchestrate = full planning (default).
-   * reflect_schema = unit-style: stubs.llmReflect must fail Zod parse.
+   * reflect_schema = unit-style Zod validation only (not callLLM→repair E2E).
+   * stubs.llmReflect must fail Zod parse.
    */
   path: z.enum(["orchestrate", "reflect_schema"]).optional(),
   input: planningInputSchema.optional(),

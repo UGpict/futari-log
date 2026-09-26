@@ -2,6 +2,8 @@
 
 Deterministic planning regression under `APP_RUNTIME=MOCK` + `DATA_BACKEND=file`.
 
+**Honesty:** Phase1 is not zero product-behavior change. It adds `ProviderCtx.stubs` (eval injection through real `searchSpots` / `estimateTravel`), maps `SPOT_FULL` → `CLOSED` (full spots unavailable to planner), and `reflect_schema` fixtures validate Zod only — not full `callLLM`→repair E2E.
+
 ## Run
 
 ```bash
@@ -42,15 +44,15 @@ Fields:
 
 | Field | Meaning |
 |---|---|
-| `family` | Scenario family (`rain`, `must`, `long_walk`, …) |
+| `family` | Scenario family (`rain`, `must`, `reflect_schema`, …). `reflect_schema` was formerly `llm_bad_json` |
 | `input` | PlanningInput (required for `path: orchestrate`) |
 | `overlays` | Partial scenario overlays (session ids filled by harness) |
 | `stubs.placeHours` | Optional `ProviderCtx.placeHours` injection |
-| `stubs.places.fail` / `empty` | Force Places search throw or empty list (`ProviderCtx.stubs`) |
-| `stubs.routes.fail` | Force Routes UNKNOWN (no haversine fill) |
-| `stubs.llmReflect` | Payload for `path: reflect_schema` |
+| `stubs.places.fail` / `empty` | Force Places search throw or empty list via real `searchSpots` (`ProviderCtx.stubs`) |
+| `stubs.routes.fail` | Force Routes UNKNOWN via real `estimateTravel` (no haversine fill) |
+| `stubs.llmReflect` | Payload for `path: reflect_schema` (Zod-only; not `callLLM`→repair E2E) |
 | `replan` | Run INITIAL first, seed `planHistory`, then REPLAN with `instruction` |
-| `path` | `orchestrate` (default) or `reflect_schema` |
+| `path` | `orchestrate` (default) or `reflect_schema` (Zod schema validation only) |
 | `skip` / `skipReason` | Document unfinished fixtures without failing CI |
 | `expected.outcome` | `PLAN` \| `WAITING_INPUT` \| `FAILED` |
 | `expected.questionId` / `questionIds` | Allowed waiting question ids |

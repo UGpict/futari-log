@@ -41,7 +41,7 @@
 | 再計画 | REPLAN replace / time / 保護アイテム |
 | 固定予約 | TIME_FIXED ロック・挟み込み |
 | API failure | Places/Routes HTTP 失敗の扱い（直線距離で埋めない） |
-| LLM invalid JSON | reflect 経路のみ（プラン選定は決定論）。壊れた JSON で本文は残す |
+| reflect schema（旧 LLM invalid JSON） | Zod schema 検証のみ（`path: reflect_schema`）。`callLLM`→repair のフル E2E ではない |
 | memory conflict | NOTE_CONFLICT / 承認後の NEXT_DATE 束縛 |
 
 ### 毎回測る指標

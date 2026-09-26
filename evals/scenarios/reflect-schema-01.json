@@ -1,0 +1,12 @@
+{
+  "id": "reflect-schema-01",
+  "family": "reflect_schema",
+  "description": "Reflect schema validation: invalid JSON string fails Zod (not callLLM→repair E2E)",
+  "path": "reflect_schema",
+  "stubs": {
+    "llmReflect": "{not-json"
+  },
+  "expected": {
+    "outcome": "FAILED"
+  }
+}

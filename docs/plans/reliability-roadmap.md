@@ -44,14 +44,22 @@ Design: [`docs/design/reliability-roadmap.md`](../design/reliability-roadmap.md)
 - [x] replan ×1 実行中（`replan-replace-cafe`）。time / protected は skip（README に Unskip 手順）
 - [x] fixed（固定予約）×2
 - [x] api_fail（Places/Routes）×3 — `ProviderCtx.stubs.places|routes`
-- [x] llm_bad_json（reflect のみ）×2 — `path: reflect_schema`
+- [x] reflect_schema（旧称 llm_bad_json）×2 — Zod schema 検証のみ。`callLLM`→repair の E2E ではない
 - [ ] memory_conflict ×2 — skip（reflect LLM mock / NEXT_DATE seed 未接続）
 
 ### 1.4 CI・ドキュメント
 
 - [x] `.github/workflows/ci.yml` に `npm run eval`（MOCK）
 - [x] README に「改善の測り方」節を短く追記
-- [ ] PR: Eval harness のみ（製品挙動変更なし）
+- [ ] PR: Eval harness + 明示した製品セマンティクス修正（下記 Honesty）
+
+### Honesty（製品挙動に触れる変更）
+
+Phase1 は「eval 専用」に見えても、次は本番コード経路に載る:
+
+- `ProviderCtx.stubs` — eval 注入のため実 `searchSpots` / `estimateTravel` を経由
+- `SPOT_FULL` overlay → `CLOSED`（満席スポットを planner が使えないようにする製品セマンティクス修正）
+- `reflect_schema` fixtures — Zod schema 検証のみ（LLM bad-JSON resilience E2E ではない）
 
 ### 1.5 拡張（Phase1 完了後でも可）
 

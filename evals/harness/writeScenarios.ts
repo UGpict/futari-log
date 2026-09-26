@@ -261,17 +261,19 @@ const scenarios: Record<string, unknown>[] = [
     expected: { outcome: "PLAN", validationStates: ["PASS", "CONDITIONAL"] },
   },
   {
-    id: "llm-bad-json-01",
-    family: "llm_bad_json",
-    description: "Invalid reflect LLM payload must fail Zod schema",
+    id: "reflect-schema-01",
+    family: "reflect_schema",
+    description:
+      "Reflect schema validation: invalid JSON string fails Zod (not callLLM→repair E2E)",
     path: "reflect_schema",
     stubs: { llmReflect: "{not-json" },
     expected: { outcome: "FAILED" },
   },
   {
-    id: "llm-bad-json-02",
-    family: "llm_bad_json",
-    description: "Reflect payload with unknown action enum fails schema",
+    id: "reflect-schema-02",
+    family: "reflect_schema",
+    description:
+      "Reflect schema validation: unknown action enum fails Zod (not callLLM→repair E2E)",
     path: "reflect_schema",
     stubs: {
       llmReflect: { action: "HACK_THE_PLANET", question: null, note: null, candidates: [] },
