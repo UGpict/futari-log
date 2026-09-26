@@ -1,14 +1,86 @@
 {
   "id": "memory-conflict-02",
   "family": "memory_conflict",
-  "description": "NEXT_DATE memory binding after approval — deferred",
-  "skip": true,
-  "skipReason": "Unskip: seed approved Memory with scope NEXT_DATE + targetSessionId, run INITIAL_PLAN, assert directive binding",
+  "description": "Seeded NEXT_DATE memory bound to session applies PREFER_SEATED_REST on INITIAL_PLAN",
+  "input": {
+    "dateTokyo": "2026-09-22",
+    "startTime": "11:00",
+    "endTime": "18:00",
+    "meet": {
+      "name": "東京駅",
+      "lat": 35.6812,
+      "lng": 139.7671,
+      "spotId": "mock:tokyo-station"
+    },
+    "end": {
+      "name": "東京駅",
+      "lat": 35.6812,
+      "lng": 139.7671,
+      "spotId": "mock:tokyo-station"
+    },
+    "travelMode": "WALK",
+    "budget": {
+      "mealsJpy": 8000,
+      "facilitiesJpy": 4000,
+      "transitJpy": 2000
+    },
+    "preferences": [
+      {
+        "id": "p1",
+        "subject": "BOTH",
+        "content": "カフェ",
+        "priority": "PREFER",
+        "source": "SELF_REPORT"
+      },
+      {
+        "id": "p2",
+        "subject": "BOTH",
+        "content": "美術館",
+        "priority": "PREFER",
+        "source": "SELF_REPORT"
+      }
+    ],
+    "fixedAppointments": [],
+    "autoApply": {
+      "enabled": false,
+      "acknowledgedScope": null,
+      "validUntil": null
+    },
+    "areaName": "東京駅",
+    "areaLat": 35.6812,
+    "areaLng": 139.7671,
+    "radiusMeters": 2500
+  },
+  "seedMemories": [
+    {
+      "id": "mem_eval_rest",
+      "content": "次回は座れる休憩を挟む",
+      "scope": "NEXT_DATE",
+      "bindToSession": true,
+      "type": "CARE",
+      "strength": "SOFT",
+      "planDirectives": [
+        {
+          "kind": "PREFER_SEATED_REST",
+          "categories": [],
+          "spotId": null,
+          "maxStayMinutes": null,
+          "walkHardCapMinutes": null
+        }
+      ]
+    }
+  ],
   "expected": {
     "outcome": "PLAN",
     "validationStates": [
       "PASS",
       "CONDITIONAL"
+    ],
+    "requireMemoryInfluenceIds": [
+      "mem_eval_rest"
+    ],
+    "requireMemoryInfluenceEffects": [
+      "REST_INSERT"
     ]
   }
 }

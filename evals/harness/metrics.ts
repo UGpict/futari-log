@@ -41,6 +41,12 @@ export type ObservedOutcome = {
   items: ObservedPlanItem[];
   /** True when any leg durationMinutes.value is null. */
   hasNullTravelDuration: boolean;
+  /** Count of plan.diff.timeShifts after REPLAN (0 when not replan / no base). */
+  timeShiftCount: number;
+  /** reflect_analyze action when that path ran. */
+  reflectAction: string | null;
+  memoryInfluenceEffects: Array<"PRIORITY" | "DURATION" | "REST_INSERT" | "NONE">;
+  memoryInfluenceIds: string[];
 };
 
 export function observeOutcome(
@@ -49,6 +55,8 @@ export function observeOutcome(
   opts?: {
     baseFirstSpotId?: string | null;
     fixedAppointments?: Array<{ label: string; spotId: string | null }>;
+    timeShiftCount?: number;
+    reflectAction?: string | null;
   },
 ): ObservedOutcome {
   const empty: ObservedOutcome = {
@@ -62,6 +70,10 @@ export function observeOutcome(
     assumptions: [],
     items: [],
     hasNullTravelDuration: false,
+    timeShiftCount: opts?.timeShiftCount ?? 0,
+    reflectAction: opts?.reflectAction ?? null,
+    memoryInfluenceEffects: [],
+    memoryInfluenceIds: [],
   };
 
   if (failed || !result) {
@@ -88,6 +100,9 @@ export function observeOutcome(
   const spotIds = items.map((i) => i.spotId);
   const assumptions = plan?.assumptions ?? [];
   const hasNullTravelDuration = (plan?.legs ?? []).some((leg) => leg.durationMinutes.value == null);
+  const memoryInfluences = plan?.memoryInfluences ?? [];
+  const memoryInfluenceEffects = memoryInfluences.map((row) => row.effect);
+  const memoryInfluenceIds = [...new Set(memoryInfluences.map((row) => row.memoryId))];
 
   const base = {
     issueCodes,
@@ -98,6 +113,10 @@ export function observeOutcome(
     assumptions,
     items,
     hasNullTravelDuration,
+    timeShiftCount: opts?.timeShiftCount ?? 0,
+    reflectAction: opts?.reflectAction ?? null,
+    memoryInfluenceEffects,
+    memoryInfluenceIds,
   };
 
   if (result.waitingQuestion) {
@@ -123,6 +142,10 @@ export function observeOutcome(
     assumptions,
     items,
     hasNullTravelDuration,
+    timeShiftCount: opts?.timeShiftCount ?? 0,
+    reflectAction: opts?.reflectAction ?? null,
+    memoryInfluenceEffects,
+    memoryInfluenceIds,
   };
 }
 

@@ -4,7 +4,7 @@ import {
   SCHEMA_VERSION,
   TOOL_VERSION,
 } from "@/config/settings";
-import type { Plan, PlanningInput, Run, ScenarioOverlay, Session, Spot } from "@/domain/schemas";
+import type { Memory, Plan, PlanningInput, Run, ScenarioOverlay, Session, Spot } from "@/domain/schemas";
 import { newId } from "@/lib/ids";
 import { realNowIso } from "@/lib/time";
 import {
@@ -13,7 +13,7 @@ import {
   type CoupleBundle,
 } from "@/server/repositories/types";
 import { loadCouple, putCouple } from "@/server/repositories/store";
-import type { EvalOverlaySpec } from "./schema";
+import type { EvalOverlaySpec, EvalSeedMemory } from "./schema";
 
 export type SeededWorld = {
   coupleId: string;
@@ -23,6 +23,8 @@ export type SeededWorld = {
   session: Session;
   run: Run;
   overlays: ScenarioOverlay[];
+  /** Approved memories for orchestratePlanning (filtered for session binding). */
+  memories: Memory[];
 };
 
 const TOKYO_MEET = {
@@ -141,9 +143,45 @@ function makeRun(args: {
   };
 }
 
+function buildSeedMemories(
+  specs: EvalSeedMemory[] | undefined,
+  coupleId: string,
+  sessionId: string,
+): Memory[] {
+  if (!specs?.length) return [];
+  const now = realNowIso();
+  return specs.map((spec) => {
+    const bind =
+      spec.bindToSession ?? (spec.scope === "NEXT_DATE");
+    return {
+      id: spec.id,
+      coupleId,
+      subject: "BOTH" as const,
+      type: spec.type,
+      content: spec.content,
+      sourceType: "SELF_REPORT" as const,
+      reflectionId: "ref_eval",
+      reflectionVersion: 1,
+      answerId: "ans_eval",
+      evidenceQuote: spec.content,
+      confirmation: "USER_CONFIRMED" as const,
+      approvedAt: now,
+      visibility: "PRIVATE" as const,
+      strength: spec.strength,
+      scope: spec.scope,
+      targetSessionId: bind ? sessionId : null,
+      planDirectives: spec.planDirectives,
+      active: true,
+      version: 1,
+      supersedes: null,
+    };
+  });
+}
+
 export async function seedPlanningWorld(args: {
   input: PlanningInput;
   overlaySpecs?: EvalOverlaySpec[];
+  seedMemories?: EvalSeedMemory[];
   runKind?: Run["kind"];
   instruction?: string | null;
   targetPlanItemId?: string | null;
@@ -155,6 +193,7 @@ export async function seedPlanningWorld(args: {
   const runId = newId("run");
   const now = realNowIso();
   const overlays = buildOverlays(sessionId, args.overlaySpecs, uid);
+  const memories = buildSeedMemories(args.seedMemories, coupleId, sessionId);
 
   const session: Session = {
     id: sessionId,
@@ -189,6 +228,9 @@ export async function seedPlanningWorld(args: {
     isDemo: true,
     createdAt: now,
   });
+  for (const memory of memories) {
+    couple.memories[memory.id] = memory;
+  }
   const sessionBundle = emptySessionBundle(session);
   sessionBundle.runs[runId] = run;
   for (const overlay of overlays) {
@@ -208,6 +250,7 @@ export async function seedPlanningWorld(args: {
     session,
     run,
     overlays,
+    memories,
   };
 }
 
@@ -258,5 +301,6 @@ export async function seedReplanWorld(args: {
     session,
     run,
     overlays: args.world.overlays,
+    memories: args.world.memories,
   };
 }

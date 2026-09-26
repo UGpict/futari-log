@@ -1,9 +1,7 @@
 {
   "id": "replan-time-skip",
   "family": "replan",
-  "description": "REPLAN time adjust — deferred (needs assert on timeShifts)",
-  "skip": true,
-  "skipReason": "Unskip: add expected.requireTimeShift + harness assert on plan.diff.timeShifts after replan.instruction like ゆっくり",
+  "description": "REPLAN ゆっくり過ごしたい → same places with dwell timeShifts",
   "input": {
     "dateTokyo": "2026-09-22",
     "startTime": "11:00",
@@ -55,6 +53,7 @@
     "validationStates": [
       "PASS",
       "CONDITIONAL"
-    ]
+    ],
+    "requireTimeShift": true
   }
 }

@@ -1,9 +1,64 @@
 {
   "id": "replan-protected-skip",
   "family": "replan",
-  "description": "REPLAN against protected TIME_FIXED item — deferred",
-  "skip": true,
-  "skipReason": "Unskip: seed FIXED appointment in INITIAL plan then REPLAN targeting that locked item; expect q_replan_no_change",
+  "description": "REPLAN targeting TIME_FIXED locked item → q_replan_no_change",
+  "input": {
+    "dateTokyo": "2026-09-22",
+    "startTime": "11:00",
+    "endTime": "18:00",
+    "meet": {
+      "name": "東京駅",
+      "lat": 35.6812,
+      "lng": 139.7671,
+      "spotId": "mock:tokyo-station"
+    },
+    "end": {
+      "name": "東京駅",
+      "lat": 35.6812,
+      "lng": 139.7671,
+      "spotId": "mock:tokyo-station"
+    },
+    "travelMode": "WALK",
+    "budget": {
+      "mealsJpy": 8000,
+      "facilitiesJpy": 4000,
+      "transitJpy": 2000
+    },
+    "preferences": [
+      {
+        "id": "p1",
+        "subject": "BOTH",
+        "content": "カフェ",
+        "priority": "PREFER",
+        "source": "SELF_REPORT"
+      }
+    ],
+    "fixedAppointments": [
+      {
+        "id": "fix_kitte",
+        "label": "KITTE cafe",
+        "spotId": "mock:cafe-kitte",
+        "spotNameHint": "カフェ 丸の内KITTE",
+        "startAt": "2026-09-22T14:00:00+09:00",
+        "endAt": "2026-09-22T15:00:00+09:00",
+        "kind": "TIME_FIXED"
+      }
+    ],
+    "autoApply": {
+      "enabled": false,
+      "acknowledgedScope": null,
+      "validUntil": null
+    },
+    "areaName": "東京駅",
+    "areaLat": 35.6812,
+    "areaLng": 139.7671,
+    "radiusMeters": 2500
+  },
+  "replan": {
+    "instruction": "別のカフェにして",
+    "targetFirstItem": false,
+    "targetLockedItem": true
+  },
   "expected": {
     "outcome": "WAITING_INPUT",
     "questionIds": [

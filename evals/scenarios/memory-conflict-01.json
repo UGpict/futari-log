@@ -1,10 +1,18 @@
 {
   "id": "memory-conflict-01",
   "family": "memory_conflict",
-  "description": "NOTE_CONFLICT reflect path — deferred to LLM mock harness",
-  "skip": true,
-  "skipReason": "Unskip: path reflect_analyze with ProviderCtx/LLM mock returning action NOTE_CONFLICT (wire callLLM mock in harness)",
+  "description": "NOTE_CONFLICT via analyzeReflectionNote mockOverride (MOCK stub; not LIVE callLLM E2E)",
+  "path": "reflect_analyze",
+  "stubs": {
+    "llmReflect": {
+      "action": "NOTE_CONFLICT",
+      "question": null,
+      "note": "既存の『甘いものが好き』と矛盾する記録を残す",
+      "candidates": []
+    }
+  },
   "expected": {
-    "outcome": "WAITING_INPUT"
+    "outcome": "PLAN",
+    "requireReflectAction": "NOTE_CONFLICT"
   }
 }

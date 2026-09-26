@@ -193,6 +193,11 @@ export async function analyzeReflectionNote(input: {
   approvedMemories: { id: string; content: string; sourceType: string }[];
   followUpAnswer?: string | null;
   signal?: AbortSignal;
+  /**
+   * Eval / tests: replace MOCK `mockValue` (production leaves unset).
+   * Does not claim LIVE callLLM→repair E2E — MOCK runtime still returns this stub.
+   */
+  mockOverride?: ReflectionAnalysisAction;
 }): Promise<{
   action: ReflectionAnalysisAction | null;
   llm: Awaited<ReturnType<typeof callLLM<ReflectionAnalysisAction>>>;
@@ -215,7 +220,7 @@ export async function analyzeReflectionNote(input: {
     2,
   );
 
-  const mockValue: ReflectionAnalysisAction = mockFromNote(input);
+  const mockValue: ReflectionAnalysisAction = input.mockOverride ?? mockFromNote(input);
 
   const llm = await callLLM({
     task: "reflect",

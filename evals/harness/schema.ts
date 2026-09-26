@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { planningInputSchema } from "@/contracts/planning";
+import { memoryPlanDirectiveSchema } from "@/domain/schemas";
 
 export const evalFamilySchema = z.enum([
   "smoke",
@@ -39,6 +40,17 @@ export const evalFixedAppointmentExpectSchema = z.object({
   spotId: z.string().optional(),
 });
 
+export const evalSeedMemorySchema = z.object({
+  id: z.string().min(1),
+  content: z.string().min(1),
+  scope: z.enum(["NEXT_DATE", "ONGOING"]).default("NEXT_DATE"),
+  /** When true (default for NEXT_DATE), set targetSessionId to the seeded session. */
+  bindToSession: z.boolean().optional(),
+  strength: z.enum(["SOFT", "HARD"]).default("SOFT"),
+  type: z.enum(["CARE", "PREFERENCE", "CONSTRAINT"]).default("CARE"),
+  planDirectives: z.array(memoryPlanDirectiveSchema).default([]),
+});
+
 export const evalExpectedSchema = z.object({
   outcome: evalOutcomeSchema,
   /** Exact question id, or any of questionIds. */
@@ -56,6 +68,8 @@ export const evalExpectedSchema = z.object({
   requireSpotIds: z.array(z.string()).optional(),
   /** REPLAN: first item spotId must differ from INITIAL first item. */
   replanChangedFirstSpot: z.boolean().optional(),
+  /** REPLAN: plan.diff.timeShifts must be non-empty (e.g. ゆっくり dwell bump). */
+  requireTimeShift: z.boolean().optional(),
   /** Locked TIME_FIXED item must preserve appointment time. */
   requireFixedAppointment: evalFixedAppointmentExpectSchema.optional(),
   /** No plan item whose spot.environment is OUTDOOR. */
@@ -65,6 +79,16 @@ export const evalExpectedSchema = z.object({
    * Negated wording ("直線距離では代用しない") is allowed.
    */
   forbidHaversineAssumption: z.boolean().optional(),
+  /** reflect_analyze: require this action from analyzeReflectionNote. */
+  requireReflectAction: z
+    .enum(["DONE", "ASK_ONE", "CREATE_CANDIDATES", "NOTE_CONFLICT"])
+    .optional(),
+  /** Plan.memoryInfluences must include at least one of these effects. */
+  requireMemoryInfluenceEffects: z
+    .array(z.enum(["PRIORITY", "DURATION", "REST_INSERT", "NONE"]))
+    .optional(),
+  /** Plan.memoryInfluences must reference these memory ids. */
+  requireMemoryInfluenceIds: z.array(z.string()).optional(),
 });
 
 export const evalProviderStubsSchema = z
@@ -92,6 +116,8 @@ export const evalReplanSpecSchema = z
     instruction: z.string().min(1),
     /** When true (default), target the first item of the seeded INITIAL plan. */
     targetFirstItem: z.boolean().optional(),
+    /** When true, target the first locked (TIME_FIXED) item instead of first item. */
+    targetLockedItem: z.boolean().optional(),
   })
   .optional();
 
@@ -105,14 +131,17 @@ export const evalScenarioSchema = z.object({
   /**
    * orchestrate = full planning (default).
    * reflect_schema = unit-style Zod validation only (not callLLM→repair E2E).
-   * stubs.llmReflect must fail Zod parse.
+   * reflect_analyze = analyzeReflectionNote with stubs.llmReflect as mockOverride (MOCK stub; not LIVE E2E).
+   * stubs.llmReflect must fail Zod parse for reflect_schema; must be valid NOTE_CONFLICT (etc.) for reflect_analyze.
    */
-  path: z.enum(["orchestrate", "reflect_schema"]).optional(),
+  path: z.enum(["orchestrate", "reflect_schema", "reflect_analyze"]).optional(),
   input: planningInputSchema.optional(),
   overlays: z.array(evalOverlaySpecSchema).optional(),
   stubs: evalProviderStubsSchema,
   /** When set, harness runs INITIAL_PLAN first, seeds planHistory, then REPLAN. */
   replan: evalReplanSpecSchema,
+  /** Approved memories passed into orchestratePlanning (and optionally bound to session). */
+  seedMemories: z.array(evalSeedMemorySchema).optional(),
   expected: evalExpectedSchema,
 });
 
@@ -121,3 +150,4 @@ export type EvalOutcome = z.infer<typeof evalOutcomeSchema>;
 export type EvalOverlaySpec = z.infer<typeof evalOverlaySpecSchema>;
 export type EvalExpected = z.infer<typeof evalExpectedSchema>;
 export type EvalScenario = z.infer<typeof evalScenarioSchema>;
+export type EvalSeedMemory = z.infer<typeof evalSeedMemorySchema>;

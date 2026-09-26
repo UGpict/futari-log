@@ -401,42 +401,97 @@ const scenarios: Record<string, unknown>[] = [
   {
     id: "replan-time-skip",
     family: "replan",
-    description: "REPLAN time adjust — deferred (needs assert on timeShifts)",
-    skip: true,
-    skipReason:
-      "Unskip: add expected.requireTimeShift + harness assert on plan.diff.timeShifts after replan.instruction like ゆっくり",
+    description: "REPLAN ゆっくり過ごしたい → same places with dwell timeShifts",
     input: baseInput({
       budget: { mealsJpy: 8000, facilitiesJpy: 4000, transitJpy: 2000 },
     }),
     replan: { instruction: "ゆっくり過ごしたい", targetFirstItem: false },
-    expected: { outcome: "PLAN", validationStates: ["PASS", "CONDITIONAL"] },
+    expected: {
+      outcome: "PLAN",
+      validationStates: ["PASS", "CONDITIONAL"],
+      requireTimeShift: true,
+    },
   },
   {
     id: "replan-protected-skip",
     family: "replan",
-    description: "REPLAN against protected TIME_FIXED item — deferred",
-    skip: true,
-    skipReason:
-      "Unskip: seed FIXED appointment in INITIAL plan then REPLAN targeting that locked item; expect q_replan_no_change",
+    description: "REPLAN targeting TIME_FIXED locked item → q_replan_no_change",
+    input: baseInput({
+      budget: { mealsJpy: 8000, facilitiesJpy: 4000, transitJpy: 2000 },
+      fixedAppointments: [
+        {
+          id: "fix_kitte",
+          label: "KITTE cafe",
+          spotId: "mock:cafe-kitte",
+          spotNameHint: "カフェ 丸の内KITTE",
+          startAt: "2026-09-22T14:00:00+09:00",
+          endAt: "2026-09-22T15:00:00+09:00",
+          kind: "TIME_FIXED",
+        },
+      ],
+    }),
+    replan: {
+      instruction: "別のカフェにして",
+      targetFirstItem: false,
+      targetLockedItem: true,
+    },
     expected: { outcome: "WAITING_INPUT", questionIds: ["q_replan_no_change"] },
   },
   {
     id: "memory-conflict-01",
     family: "memory_conflict",
-    description: "NOTE_CONFLICT reflect path — deferred to LLM mock harness",
-    skip: true,
-    skipReason:
-      "Unskip: path reflect_analyze with ProviderCtx/LLM mock returning action NOTE_CONFLICT (wire callLLM mock in harness)",
-    expected: { outcome: "WAITING_INPUT" },
+    description:
+      "NOTE_CONFLICT via analyzeReflectionNote mockOverride (MOCK stub; not LIVE callLLM E2E)",
+    path: "reflect_analyze",
+    stubs: {
+      llmReflect: {
+        action: "NOTE_CONFLICT",
+        question: null,
+        note: "既存の『甘いものが好き』と矛盾する記録を残す",
+        candidates: [],
+      },
+    },
+    expected: {
+      outcome: "PLAN",
+      requireReflectAction: "NOTE_CONFLICT",
+    },
   },
   {
     id: "memory-conflict-02",
     family: "memory_conflict",
-    description: "NEXT_DATE memory binding after approval — deferred",
-    skip: true,
-    skipReason:
-      "Unskip: seed approved Memory with scope NEXT_DATE + targetSessionId, run INITIAL_PLAN, assert directive binding",
-    expected: { outcome: "PLAN", validationStates: ["PASS", "CONDITIONAL"] },
+    description: "Seeded NEXT_DATE memory bound to session applies PREFER_SEATED_REST on INITIAL_PLAN",
+    input: baseInput({
+      budget: { mealsJpy: 8000, facilitiesJpy: 4000, transitJpy: 2000 },
+      preferences: [
+        { id: "p1", subject: "BOTH", content: "カフェ", priority: "PREFER", source: "SELF_REPORT" },
+        { id: "p2", subject: "BOTH", content: "美術館", priority: "PREFER", source: "SELF_REPORT" },
+      ],
+    }),
+    seedMemories: [
+      {
+        id: "mem_eval_rest",
+        content: "次回は座れる休憩を挟む",
+        scope: "NEXT_DATE",
+        bindToSession: true,
+        type: "CARE",
+        strength: "SOFT",
+        planDirectives: [
+          {
+            kind: "PREFER_SEATED_REST",
+            categories: [],
+            spotId: null,
+            maxStayMinutes: null,
+            walkHardCapMinutes: null,
+          },
+        ],
+      },
+    ],
+    expected: {
+      outcome: "PLAN",
+      validationStates: ["PASS", "CONDITIONAL"],
+      requireMemoryInfluenceIds: ["mem_eval_rest"],
+      requireMemoryInfluenceEffects: ["REST_INSERT"],
+    },
   },
 ];
 

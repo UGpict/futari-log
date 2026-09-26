@@ -2,7 +2,7 @@
 
 Deterministic planning regression under `APP_RUNTIME=MOCK` + `DATA_BACKEND=file`.
 
-**Honesty:** Phase1 is not zero product-behavior change. It adds `ProviderCtx.stubs` (eval injection through real `searchSpots` / `estimateTravel`), maps `SPOT_FULL` → `CLOSED` (full spots unavailable to planner), and `reflect_schema` fixtures validate Zod only — not full `callLLM`→repair E2E.
+**Honesty:** Phase1 is not zero product-behavior change. It adds `ProviderCtx.stubs` (eval injection through real `searchSpots` / `estimateTravel`), maps `SPOT_FULL` → `CLOSED` (full spots unavailable to planner), `reflect_schema` / `reflect_analyze` fixtures that are Zod or MOCK `mockOverride` only — not full LIVE `callLLM`→repair E2E — and lengthens dwell on REPLAN `ゆっくり` so `diff.timeShifts` is observable.
 
 ## Run
 
@@ -50,9 +50,10 @@ Fields:
 | `stubs.placeHours` | Optional `ProviderCtx.placeHours` injection |
 | `stubs.places.fail` / `empty` | Force Places search throw or empty list via real `searchSpots` (`ProviderCtx.stubs`) |
 | `stubs.routes.fail` | Force Routes UNKNOWN via real `estimateTravel` (no haversine fill) |
-| `stubs.llmReflect` | Payload for `path: reflect_schema` (Zod-only; not `callLLM`→repair E2E) |
-| `replan` | Run INITIAL first, seed `planHistory`, then REPLAN with `instruction` |
-| `path` | `orchestrate` (default) or `reflect_schema` (Zod schema validation only) |
+| `stubs.llmReflect` | Payload for `path: reflect_schema` (Zod-only) or `path: reflect_analyze` (`mockOverride` into `analyzeReflectionNote`; MOCK stub, not LIVE E2E) |
+| `replan` | Run INITIAL first, seed `planHistory`, then REPLAN with `instruction` (`targetLockedItem` targets TIME_FIXED) |
+| `seedMemories` | Approved memories for orchestrate (NEXT_DATE may `bindToSession`) |
+| `path` | `orchestrate` (default), `reflect_schema` (Zod-only), or `reflect_analyze` (MOCK `analyzeReflectionNote`) |
 | `skip` / `skipReason` | Document unfinished fixtures without failing CI |
 | `expected.outcome` | `PLAN` \| `WAITING_INPUT` \| `FAILED` |
 | `expected.questionId` / `questionIds` | Allowed waiting question ids |
@@ -60,17 +61,22 @@ Fields:
 | `expected.validationStates` | Allowed `validatePlan` states when outcome is PLAN |
 | `expected.forbidSpotIds` / `requireSpotIds` | Spot ids that must be absent / present on `built.plan.items` |
 | `expected.replanChangedFirstSpot` | First item spotId must differ from INITIAL seed |
+| `expected.requireTimeShift` | REPLAN `plan.diff.timeShifts` must be non-empty |
 | `expected.requireFixedAppointment` | Locked TIME_FIXED item (`label` / `startAtContains` / `spotId`) |
 | `expected.forbidOutdoor` | No item with `spot.environment === OUTDOOR` (rain product filter) |
 | `expected.forbidHaversineAssumption` | Assumptions must not claim haversine / 直線距離代用 fill |
+| `expected.requireReflectAction` | `reflect_analyze` action (e.g. `NOTE_CONFLICT`) |
+| `expected.requireMemoryInfluenceIds` / `Effects` | Plan `memoryInfluences` from seeded directives |
 
 ## How to unskip remaining fixtures
 
 | Family | What to do |
 |---|---|
-| `replan-time-skip` | Assert `timeShifts` after `replan.instruction` like `ゆっくり`; extend `expected` + assert |
-| `replan-protected-skip` | Seed TIME_FIXED locked item then REPLAN targeting it → `q_replan_no_change` |
-| `memory-conflict-*` | Add `path: reflect_analyze` with mocked `callLLM` (`NOTE_CONFLICT`) / seed NEXT_DATE memories |
+| ~~`replan-time-skip`~~ | Done: `requireTimeShift` + `diffPlan` observe; buildPlan lengthens dwell on ゆっくり |
+| ~~`replan-protected-skip`~~ | Done: seed TIME_FIXED + `replan.targetLockedItem` → `q_replan_no_change` |
+| ~~`memory-conflict-*`~~ | Done: `path: reflect_analyze` + `mockOverride` for NOTE_CONFLICT; `seedMemories` for NEXT_DATE directives |
+
+*(Phase 1.5: 26 fixtures, 0 skip target.)*
 
 ## Metrics (every run)
 

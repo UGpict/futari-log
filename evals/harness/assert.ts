@@ -137,5 +137,39 @@ export function assertExpected(
     }
   }
 
+  if (expected.requireTimeShift) {
+    if (observed.timeShiftCount <= 0) {
+      failures.push("requireTimeShift: plan.diff.timeShifts was empty after REPLAN");
+    }
+  }
+
+  if (expected.requireReflectAction) {
+    if (observed.reflectAction !== expected.requireReflectAction) {
+      failures.push(
+        `requireReflectAction: expected ${expected.requireReflectAction}, got ${observed.reflectAction ?? "null"}`,
+      );
+    }
+  }
+
+  if (expected.requireMemoryInfluenceEffects?.length) {
+    const missing = expected.requireMemoryInfluenceEffects.filter(
+      (effect) => !observed.memoryInfluenceEffects.includes(effect),
+    );
+    if (missing.length) {
+      failures.push(
+        `requireMemoryInfluenceEffects missing: ${missing.join(", ")} (have ${observed.memoryInfluenceEffects.join(", ") || "none"})`,
+      );
+    }
+  }
+
+  if (expected.requireMemoryInfluenceIds?.length) {
+    const missing = expected.requireMemoryInfluenceIds.filter(
+      (id) => !observed.memoryInfluenceIds.includes(id),
+    );
+    if (missing.length) {
+      failures.push(`requireMemoryInfluenceIds missing: ${missing.join(", ")}`);
+    }
+  }
+
   return { pass: failures.length === 0, failures };
 }
