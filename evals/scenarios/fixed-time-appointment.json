@@ -59,6 +59,11 @@
     "validationStates": [
       "PASS",
       "CONDITIONAL"
-    ]
+    ],
+    "requireFixedAppointment": {
+      "label": "KITTE cafe",
+      "startAtContains": "T14:00",
+      "spotId": "mock:cafe-kitte"
+    }
   }
 }

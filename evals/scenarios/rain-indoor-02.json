@@ -64,6 +64,7 @@
     "validationStates": [
       "PASS",
       "CONDITIONAL"
-    ]
+    ],
+    "forbidOutdoor": true
   }
 }

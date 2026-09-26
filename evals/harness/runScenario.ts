@@ -1,5 +1,10 @@
-import { reflectionAnalysisActionSchema } from "@/server/agent/reflectAnalyze";
+import { diffPlan } from "@/domain/plan/diffPlan";
+import {
+  analyzeReflectionNote,
+  reflectionAnalysisActionSchema,
+} from "@/server/agent/reflectAnalyze";
 import { orchestratePlanning, type OrchestratedPlan } from "@/server/agent/orchestrate";
+import type { Plan } from "@/domain/schemas";
 import type { ProviderCtx, ProviderStubs } from "@/server/providers";
 import type { PlaceHoursRule, SpotOpeningHours } from "@/server/providers/placeFacts";
 import { assertExpected } from "./assert";
@@ -65,22 +70,117 @@ function buildCtx(args: {
   };
 }
 
+function emptyObserved(partial: Partial<ObservedOutcome> = {}): ObservedOutcome {
+  return {
+    outcome: "FAILED",
+    questionId: null,
+    issueCodes: [],
+    validationState: null,
+    spotIds: [],
+    firstSpotId: null,
+    baseFirstSpotId: null,
+    assumptions: [],
+    items: [],
+    hasNullTravelDuration: false,
+    timeShiftCount: 0,
+    reflectAction: null,
+    memoryInfluenceEffects: [],
+    memoryInfluenceIds: [],
+    ...partial,
+  };
+}
+
 async function runReflectSchema(scenario: EvalScenario): Promise<ScenarioResult> {
   const started = Date.now();
   const payload = scenario.stubs?.llmReflect;
   const parsed = reflectionAnalysisActionSchema.safeParse(payload);
-  const observed: ObservedOutcome = {
+  const observed = emptyObserved({
     outcome: parsed.success ? "PLAN" : "FAILED",
-    questionId: null,
     issueCodes: parsed.success ? [] : ["LLM_BAD_JSON"],
-    validationState: null,
-  };
+    reflectAction: parsed.success ? parsed.data.action : null,
+  });
   const metrics = computeMetrics({
     observed,
     expected: scenario.expected,
     apiCallsByProvider: {},
     latencyMs: Date.now() - started,
     cost: { llmJpy: 0, llmUsd: 0, apiJpy: 0 },
+    validation: null,
+  });
+  const asserted = assertExpected(scenario.expected, observed, metrics);
+  return {
+    id: scenario.id,
+    family: scenario.family,
+    status: asserted.pass ? "pass" : "fail",
+    observed,
+    metrics,
+    failures: asserted.failures,
+  };
+}
+
+/**
+ * MOCK stub path: analyzeReflectionNote with stubs.llmReflect as mockOverride.
+ * Not LIVE callLLM→repair E2E — documents NOTE_CONFLICT (etc.) handling under MOCK.
+ */
+async function runReflectAnalyze(scenario: EvalScenario): Promise<ScenarioResult> {
+  const started = Date.now();
+  const payload = scenario.stubs?.llmReflect;
+  const parsed = reflectionAnalysisActionSchema.safeParse(payload);
+  if (!parsed.success) {
+    const observed = emptyObserved({
+      outcome: "FAILED",
+      issueCodes: ["LLM_BAD_JSON"],
+    });
+    const metrics = computeMetrics({
+      observed,
+      expected: scenario.expected,
+      apiCallsByProvider: {},
+      latencyMs: Date.now() - started,
+      cost: { llmJpy: 0, llmUsd: 0, apiJpy: 0 },
+      validation: null,
+    });
+    const asserted = assertExpected(scenario.expected, observed, metrics);
+    asserted.failures.push("reflect_analyze requires valid stubs.llmReflect mockOverride");
+    asserted.pass = false;
+    return {
+      id: scenario.id,
+      family: scenario.family,
+      status: "fail",
+      observed,
+      metrics,
+      failures: asserted.failures,
+    };
+  }
+
+  const { action, llm } = await analyzeReflectionNote({
+    runId: "run_eval_reflect",
+    maskedNote: "以前はカフェが好きと言っていたが、今回は甘いものが苦手だった",
+    title: "eval conflict",
+    mood: "tired",
+    visits: [],
+    planSummary: "カフェ",
+    approvedMemories: [{ id: "mem_prior", content: "甘いものが好き", sourceType: "SELF_REPORT" }],
+    followUpAnswer: null,
+    mockOverride: parsed.data,
+  });
+
+  // Design: NOTE_CONFLICT / DONE → SUCCEEDED (mapped to PLAN for eval outcomes).
+  const observed = emptyObserved({
+    outcome: action && llm.ok ? "PLAN" : "FAILED",
+    issueCodes: llm.ok ? [] : ["LLM_BAD_JSON"],
+    reflectAction: action?.action ?? null,
+  });
+  const metrics = computeMetrics({
+    observed,
+    expected: scenario.expected,
+    apiCallsByProvider: {},
+    latencyMs: Date.now() - started,
+    cost: {
+      llmJpy: llm.costJpy ?? 0,
+      llmUsd: llm.costUsd ?? 0,
+      apiJpy: 0,
+    },
+    validation: null,
   });
   const asserted = assertExpected(scenario.expected, observed, metrics);
   return {
@@ -114,7 +214,7 @@ async function orchestrateOnce(args: {
     couple: args.world.couple,
     session: args.world.session,
     run: args.world.run,
-    memories: [],
+    memories: args.world.memories,
   });
 }
 
@@ -128,8 +228,12 @@ export async function runScenario(scenario: EvalScenario): Promise<ScenarioResul
     };
   }
 
-  if ((scenario.path ?? "orchestrate") === "reflect_schema") {
+  const path = scenario.path ?? "orchestrate";
+  if (path === "reflect_schema") {
     return runReflectSchema(scenario);
+  }
+  if (path === "reflect_analyze") {
+    return runReflectAnalyze(scenario);
   }
 
   if (!scenario.input) {
@@ -145,12 +249,16 @@ export async function runScenario(scenario: EvalScenario): Promise<ScenarioResul
   const input = defaultPlanningInput(scenario.input);
   let result: OrchestratedPlan | null = null;
   let error: string | undefined;
+  let baseFirstSpotId: string | null = null;
+  let basePlan: Plan | null = null;
+  let timeShiftCount = 0;
   const started = Date.now();
 
   try {
     let world = await seedPlanningWorld({
       input,
       overlaySpecs: scenario.overlays,
+      seedMemories: scenario.seedMemories,
     });
 
     if (scenario.replan) {
@@ -160,8 +268,18 @@ export async function runScenario(scenario: EvalScenario): Promise<ScenarioResul
           `replan seed failed: INITIAL_PLAN waiting=${initial.waitingQuestion?.id ?? "none"}`,
         );
       }
-      const targetFirst = scenario.replan.targetFirstItem !== false;
-      const targetPlanItemId = targetFirst ? (initial.built.plan.items[0]?.id ?? null) : null;
+      basePlan = initial.built.plan;
+      baseFirstSpotId = initial.built.plan.items[0]?.spotId ?? null;
+      let targetPlanItemId: string | null = null;
+      if (scenario.replan.targetLockedItem) {
+        const locked = initial.built.plan.items.find((item) => item.locked);
+        if (!locked) {
+          throw new Error("replan targetLockedItem: INITIAL plan has no locked item");
+        }
+        targetPlanItemId = locked.id;
+      } else if (scenario.replan.targetFirstItem !== false) {
+        targetPlanItemId = initial.built.plan.items[0]?.id ?? null;
+      }
       world = await seedReplanWorld({
         world,
         plan: initial.built.plan,
@@ -172,12 +290,22 @@ export async function runScenario(scenario: EvalScenario): Promise<ScenarioResul
     }
 
     result = await orchestrateOnce({ world, scenario, counters });
+    if (scenario.replan && basePlan && result.built) {
+      timeShiftCount = diffPlan(basePlan, result.built.plan).timeShifts.length;
+    }
   } catch (err) {
     error = err instanceof Error ? err.message : String(err);
   }
 
   const latencyMs = Date.now() - started;
-  const observed = observeOutcome(result, Boolean(error));
+  const observed = observeOutcome(result, Boolean(error), {
+    baseFirstSpotId,
+    timeShiftCount,
+    fixedAppointments: input.fixedAppointments.map((a) => ({
+      label: a.label,
+      spotId: a.spotId ?? null,
+    })),
+  });
   const metrics = computeMetrics({
     observed,
     expected: scenario.expected,
@@ -188,6 +316,7 @@ export async function runScenario(scenario: EvalScenario): Promise<ScenarioResul
       llmUsd: result?.llm.costUsd ?? 0,
       apiJpy: 0,
     },
+    validation: result?.built?.plan.validation ?? null,
   });
 
   const asserted = assertExpected(scenario.expected, observed, metrics);

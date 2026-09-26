@@ -48,12 +48,17 @@ export async function buildPlan(input: {
   ctx: ProviderCtx;
   dataMode: Plan["dataMode"];
   previousItems?: PlanItem[];
+  /** REPLAN instruction (e.g. ゆっくり) — lengthens dwell when rest-oriented. */
+  instruction?: string | null;
 }): Promise<BuiltPlan> {
   const evidence: Evidence[] = [];
   const spots = { ...input.spots };
   const start = tokyoDateTime(input.input.dateTokyo, input.input.startTime);
   const effects = collectDirectiveEffects(input.memories);
   const restCare = effects.preferSeatedRest.length > 0;
+  const preferRest =
+    Boolean(input.instruction && /ゆっくり|休憩|のんびり/.test(input.instruction)) ||
+    input.input.preferences.some((pref) => /ゆっくり|休憩|のんびり/.test(pref.content));
 
   const detailsNeeded = input.orderedSpotIds.filter((id) => !spots[id]);
   for (const id of detailsNeeded.slice(0, 6)) {
@@ -94,14 +99,21 @@ export async function buildPlan(input: {
   const influences: Plan["memoryInfluences"] = [];
   const prevBySpot = new Map((input.previousItems ?? []).map((i) => [i.spotId, i]));
 
+  function applyPreferRestStay(spot: Spot, stay: number): number {
+    if (!preferRest) return stay;
+    // Same-place replan “ゆっくり”: linger longer, especially at easy-rest spots.
+    if (spot.restEase.value === "EASY") return Math.max(stay + 20, 70);
+    return stay + 15;
+  }
+
   function baseStay(spot: Spot): number {
-    return stayMinutesForSpot(spot, effects, 50).stay;
+    return applyPreferRestStay(spot, stayMinutesForSpot(spot, effects, 50).stay);
   }
 
   function stayAndMemory(spot: Spot): { stay: number; memIds: string[] } {
     const { stay, influences: inf } = stayMinutesForSpot(spot, effects, 50);
     for (const row of inf) influences.push(row);
-    return { stay, memIds: [...new Set(inf.map((i) => i.memoryId))] };
+    return { stay: applyPreferRestStay(spot, stay), memIds: [...new Set(inf.map((i) => i.memoryId))] };
   }
 
   function makeItem(

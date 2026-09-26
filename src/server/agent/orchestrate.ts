@@ -503,6 +503,7 @@ export async function orchestratePlanning(input: {
     ctx: input.ctx,
     dataMode: overlays.length ? "LIVE_SCENARIO" : env.runtime === "MOCK" ? "LIVE" : "LIVE",
     previousItems: current?.items,
+    instruction: input.run.instruction,
   });
   if (input.run.instruction) {
     built.plan.assumptions = [
@@ -597,6 +598,7 @@ export async function orchestratePlanning(input: {
       ctx: input.ctx,
       dataMode: built.plan.dataMode,
       previousItems: current?.items,
+      instruction: input.run.instruction,
     });
     if (input.run.instruction) {
       built.plan.assumptions = [

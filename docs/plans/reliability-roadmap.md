@@ -29,29 +29,31 @@ Design: [`docs/design/reliability-roadmap.md`](../design/reliability-roadmap.md)
 ### 1.2 メトリクス
 
 - [x] `plan_success` / `constraint_violation` / `unnecessary_confirmation` / `api_calls` / `latency_ms` / `cost`
-- [x] expected との assert（questionId / forbidIssueCodes / maxApiCalls）
+- [x] expected との assert（questionId / forbidIssueCodes / maxApiCalls / forbidSpotIds / replanChangedFirstSpot / requireTimeShift / requireFixedAppointment / forbidOutdoor / forbidHaversineAssumption / requireReflectAction / memoryInfluences）
 - [x] サマリ表（family 別 pass rate）
+- [x] `constraint_violation` は domain `isConstraintIssue`（ERROR/UNKNOWN）/ `hasConstraintViolation` を真源に
 
 ### 1.3 最小 24 fixtures
 
-各族 2〜3。stubs は決定論。現状 **26 fixtures**（**22 pass / 0 fail / 4 skip**）。
+各族 2〜3。stubs は決定論。現状 **26 fixtures**（**26 pass / 0 fail / 0 skip** 目標）。
 
-- [x] rain ×2
-- [x] full（満席/代替）×2 — `SPOT_FULL` → CLOSED inject + self-correct
+- [x] rain ×2 — `forbidOutdoor`
+- [x] full（満席/代替）×2 — `SPOT_FULL` → CLOSED inject + `forbidSpotIds`
 - [x] long_walk ×3
 - [x] hours（営業時間外）×2
 - [x] must（競合・未達）×3
-- [x] replan ×1 実行中（`replan-replace-cafe`）。time / protected は skip（README に Unskip 手順）
-- [x] fixed（固定予約）×2
-- [x] api_fail（Places/Routes）×3 — `ProviderCtx.stubs.places|routes`
+- [x] replan ×3 — replace + time (`requireTimeShift` / ゆっくり dwell) + protected (`targetLockedItem` → `q_replan_no_change`)
+- [x] fixed（固定予約）×2 — `requireFixedAppointment`
+- [x] api_fail（Places/Routes）×3 — Routes は `forbidHaversineAssumption` + `TRAVEL_UNKNOWN`
 - [x] reflect_schema（旧称 llm_bad_json）×2 — Zod schema 検証のみ。`callLLM`→repair の E2E ではない
-- [ ] memory_conflict ×2 — skip（reflect LLM mock / NEXT_DATE seed 未接続）
+- [x] memory_conflict ×2 — `reflect_analyze` NOTE_CONFLICT mockOverride / NEXT_DATE `seedMemories` + influence assert
 
 ### 1.4 CI・ドキュメント
 
 - [x] `.github/workflows/ci.yml` に `npm run eval`（MOCK）
 - [x] README に「改善の測り方」節を短く追記
 - [ ] PR: Eval harness + 明示した製品セマンティクス修正（下記 Honesty）
+- [x] Follow-up: stronger assert semantics（`feat/eval-assert-semantics`）
 
 ### Honesty（製品挙動に触れる変更）
 
@@ -60,13 +62,16 @@ Phase1 は「eval 専用」に見えても、次は本番コード経路に載�
 - `ProviderCtx.stubs` — eval 注入のため実 `searchSpots` / `estimateTravel` を経由
 - `SPOT_FULL` overlay → `CLOSED`（満席スポットを planner が使えないようにする製品セマンティクス修正）
 - `reflect_schema` fixtures — Zod schema 検証のみ（LLM bad-JSON resilience E2E ではない）
+- `reflect_analyze` — `analyzeReflectionNote({ mockOverride })` の MOCK stub（LIVE `callLLM`→repair E2E ではない）
+- REPLAN `ゆっくり` — `buildPlan` が滞在を延ばし `diff.timeShifts` を出す（preferRest と整合）
 
 ### 1.5 拡張（Phase1 完了後でも可）
 
-- [ ] 24 → 40〜50 に増やす（残り skip 4 本の Unskip + 新規族）
+- [ ] 24 → 40〜50 に増やす（新規族）
 - [ ] REPLAY モード接続（任意）
-- [ ] replan time / protected の assert 強化
-- [ ] memory_conflict を reflect harness に接続
+- [x] replan time / protected の assert 強化
+- [x] memory_conflict を reflect harness に接続（MOCK `mockOverride` / seedMemories。LIVE callLLM E2E ではない）
+- [x] 優先シナリオの強い assert（replan / full / fixed / rain / api_fail routes）
 
 **Exit criteria:** CI で eval 緑。ローカルで指標 JSON が出る。
 
