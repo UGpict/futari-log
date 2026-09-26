@@ -1,0 +1,17 @@
+{
+  "id": "reflect-schema-02",
+  "family": "reflect_schema",
+  "description": "Reflect schema validation: unknown action enum fails Zod (not callLLM→repair E2E)",
+  "path": "reflect_schema",
+  "stubs": {
+    "llmReflect": {
+      "action": "HACK_THE_PLANET",
+      "question": null,
+      "note": null,
+      "candidates": []
+    }
+  },
+  "expected": {
+    "outcome": "FAILED"
+  }
+}

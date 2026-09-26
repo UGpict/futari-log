@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint",
     "test": "tsx scripts/run-mock-tests.ts && tsx scripts/check-boundaries.ts",
+    "eval": "tsx scripts/run-evals.ts",
     "check:boundaries": "tsx scripts/check-boundaries.ts",
     "ownership": "tsx scripts/ownership.ts",
     "test:emulator": "USE_FIREBASE_EMULATOR=true firebase emulators:exec --only auth,firestore --project demo-futari-log \"tsx --test tests/firebase.test.ts\"",

@@ -53,7 +53,7 @@ export {
   parsePlacesPriceBand,
 };
 
-export type { ProviderCtx } from "./types";
+export type { ProviderCtx, ProviderStubs } from "./types";
 
 function evidence(partial: Omit<Evidence, "id"> & { id?: string }): Evidence {
   return { id: partial.id ?? newId("ev"), ...partial };
@@ -168,7 +168,28 @@ export async function searchSpots(
     cacheSet(ctx, key, result);
     return result;
   }
+  if (ctx.stubs?.places?.fail) {
+    return counted(ctx, "mock-places", async () => {
+      throw new Error("stub: places search failed");
+    });
+  }
   const result = await counted(ctx, "mock-places", async () => {
+    if (ctx.stubs?.places?.empty) {
+      return {
+        spots: [],
+        evidence: [
+          evidence({
+            kind: "UNKNOWN",
+            provider: "mock-places",
+            sourceRef: args.category,
+            sourceField: "search",
+            fetchedAt: realNowIso(),
+            validFor: null,
+            note: "stub: empty Places search",
+          }),
+        ],
+      };
+    }
     const found = searchCatalog(args.category, args.area, args.radiusMeters, args.includedTypes).slice(0, 20);
     const evidenceList = [
       evidence({
@@ -436,6 +457,30 @@ export async function estimateTravel(
       }),
     };
   }
+  if (ctx.stubs?.routes?.fail) {
+    await counted(ctx, "mock-routes", async () => undefined);
+    return {
+      durationMinutes: null,
+      distanceMeters: null,
+      walkMinutesWithin: null,
+      bufferMinutes: travelBufferMinutes(args.mode),
+      kind: "UNKNOWN",
+      failure: "NETWORK",
+      cached: false,
+      attempts: [],
+      ...driveDepartureFields(args.mode, args.departureAt),
+      delayMinutes: 0,
+      evidence: evidence({
+        kind: "UNKNOWN",
+        provider: "mock-routes",
+        sourceRef: "stub:routes.fail",
+        sourceField: "duration",
+        fetchedAt: realNowIso(),
+        validFor: null,
+        note: "stub: Routes failure. 直線距離では代用しない",
+      }),
+    };
+  }
   const fromCatalog = isCatalogBackedSpotId(args.from.spotId ?? "");
   const toCatalog = isCatalogBackedSpotId(args.to.spotId ?? "");
   // Catalog endpoints are not Google placeIds; keep LIVE demo legs deterministic without Routes.
@@ -619,7 +664,9 @@ export async function checkOpen(
     };
   });
   if (full) {
-    result.state = result.state === "CLOSED" ? "CLOSED" : result.state;
+    // SPOT_FULL = inject unavailable capacity; treat as CLOSED so planner/self-correct can substitute.
+    result.state = "CLOSED";
+    result.evidenceIds = [`full-${args.spotId}`, ...result.evidenceIds];
   }
   cacheSet(ctx, key, result);
   return result;

@@ -1,0 +1,59 @@
+{
+  "id": "long-walk-shinjuku-end",
+  "family": "long_walk",
+  "description": "Meet Tokyo / end Shinjuku → q_long_walk",
+  "input": {
+    "dateTokyo": "2026-09-21",
+    "startTime": "13:00",
+    "endTime": "18:00",
+    "meet": {
+      "name": "東京駅",
+      "lat": 35.681236,
+      "lng": 139.767125,
+      "spotId": null
+    },
+    "end": {
+      "name": "新宿駅",
+      "lat": 35.689487,
+      "lng": 139.691706,
+      "spotId": null
+    },
+    "travelMode": "WALK",
+    "budget": {
+      "mealsJpy": 8000,
+      "facilitiesJpy": 4000,
+      "transitJpy": 2000
+    },
+    "preferences": [
+      {
+        "id": "pref_self",
+        "subject": "SELF",
+        "content": "カフェ",
+        "priority": "PREFER",
+        "source": "SELF_REPORT"
+      },
+      {
+        "id": "pref_partner",
+        "subject": "PARTNER",
+        "content": "甘いもの",
+        "priority": "MUST",
+        "source": "PARTNER_STATEMENT_REPORTED"
+      }
+    ],
+    "fixedAppointments": [],
+    "autoApply": {
+      "enabled": false,
+      "acknowledgedScope": null,
+      "validUntil": null
+    },
+    "areaName": "東京駅周辺",
+    "areaLat": 35.681236,
+    "areaLng": 139.767125,
+    "radiusMeters": 1500,
+    "tokyoAreaAcknowledged": true
+  },
+  "expected": {
+    "outcome": "WAITING_INPUT",
+    "questionId": "q_long_walk"
+  }
+}

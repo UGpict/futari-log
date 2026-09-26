@@ -10,6 +10,7 @@
 
 # testing
 /coverage
+evals/out/
 
 # next.js
 /.next/

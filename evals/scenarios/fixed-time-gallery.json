@@ -1,0 +1,64 @@
+{
+  "id": "fixed-time-gallery",
+  "family": "fixed",
+  "description": "TIME_FIXED gallery stop with cafe prefer",
+  "input": {
+    "dateTokyo": "2026-09-22",
+    "startTime": "10:30",
+    "endTime": "17:00",
+    "meet": {
+      "name": "東京駅",
+      "lat": 35.6812,
+      "lng": 139.7671,
+      "spotId": "mock:tokyo-station"
+    },
+    "end": {
+      "name": "東京駅",
+      "lat": 35.6812,
+      "lng": 139.7671,
+      "spotId": "mock:tokyo-station"
+    },
+    "travelMode": "WALK",
+    "budget": {
+      "mealsJpy": 5000,
+      "facilitiesJpy": 3000,
+      "transitJpy": 1000
+    },
+    "preferences": [
+      {
+        "id": "p1",
+        "subject": "BOTH",
+        "content": "カフェ",
+        "priority": "PREFER",
+        "source": "SELF_REPORT"
+      }
+    ],
+    "fixedAppointments": [
+      {
+        "id": "fix_gallery",
+        "label": "Station Gallery",
+        "spotId": "mock:tokyo-station-gallery",
+        "spotNameHint": "東京ステーションギャラリー",
+        "startAt": "2026-09-22T11:00:00+09:00",
+        "endAt": "2026-09-22T12:30:00+09:00",
+        "kind": "TIME_FIXED"
+      }
+    ],
+    "autoApply": {
+      "enabled": false,
+      "acknowledgedScope": null,
+      "validUntil": null
+    },
+    "areaName": "東京駅",
+    "areaLat": 35.6812,
+    "areaLng": 139.7671,
+    "radiusMeters": 2500
+  },
+  "expected": {
+    "outcome": "PLAN",
+    "validationStates": [
+      "PASS",
+      "CONDITIONAL"
+    ]
+  }
+}

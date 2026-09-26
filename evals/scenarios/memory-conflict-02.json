@@ -1,0 +1,14 @@
+{
+  "id": "memory-conflict-02",
+  "family": "memory_conflict",
+  "description": "NEXT_DATE memory binding after approval — deferred",
+  "skip": true,
+  "skipReason": "Unskip: seed approved Memory with scope NEXT_DATE + targetSessionId, run INITIAL_PLAN, assert directive binding",
+  "expected": {
+    "outcome": "PLAN",
+    "validationStates": [
+      "PASS",
+      "CONDITIONAL"
+    ]
+  }
+}

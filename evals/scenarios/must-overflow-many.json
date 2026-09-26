@@ -1,0 +1,100 @@
+{
+  "id": "must-overflow-many",
+  "family": "must",
+  "description": "Too many MUST facets → overflow/unmet/search_range",
+  "input": {
+    "dateTokyo": "2026-09-22",
+    "startTime": "12:00",
+    "endTime": "14:00",
+    "meet": {
+      "name": "東京駅",
+      "lat": 35.6812,
+      "lng": 139.7671,
+      "spotId": "mock:tokyo-station"
+    },
+    "end": {
+      "name": "東京駅",
+      "lat": 35.6812,
+      "lng": 139.7671,
+      "spotId": "mock:tokyo-station"
+    },
+    "travelMode": "WALK",
+    "budget": {
+      "mealsJpy": 8000,
+      "facilitiesJpy": 4000,
+      "transitJpy": 2000
+    },
+    "preferences": [
+      {
+        "id": "p1",
+        "subject": "BOTH",
+        "content": "カフェ",
+        "priority": "MUST",
+        "source": "SELF_REPORT"
+      },
+      {
+        "id": "p2",
+        "subject": "BOTH",
+        "content": "美術館",
+        "priority": "MUST",
+        "source": "SELF_REPORT"
+      },
+      {
+        "id": "p3",
+        "subject": "BOTH",
+        "content": "書店",
+        "priority": "MUST",
+        "source": "SELF_REPORT"
+      },
+      {
+        "id": "p4",
+        "subject": "BOTH",
+        "content": "水族館",
+        "priority": "MUST",
+        "source": "SELF_REPORT"
+      },
+      {
+        "id": "p5",
+        "subject": "BOTH",
+        "content": "動物園",
+        "priority": "MUST",
+        "source": "SELF_REPORT"
+      },
+      {
+        "id": "p6",
+        "subject": "BOTH",
+        "content": "ボウリング",
+        "priority": "MUST",
+        "source": "SELF_REPORT"
+      },
+      {
+        "id": "p7",
+        "subject": "BOTH",
+        "content": "レストラン",
+        "priority": "MUST",
+        "source": "SELF_REPORT"
+      }
+    ],
+    "fixedAppointments": [],
+    "autoApply": {
+      "enabled": false,
+      "acknowledgedScope": null,
+      "validUntil": null
+    },
+    "areaName": "東京駅",
+    "areaLat": 35.6812,
+    "areaLng": 139.7671,
+    "radiusMeters": 2500
+  },
+  "expected": {
+    "outcome": "WAITING_INPUT",
+    "questionIds": [
+      "q_must_overflow",
+      "q_must_unmet",
+      "q_no_candidates",
+      "q_search_range",
+      "q_plan_unmet",
+      "q_long_walk"
+    ]
+  }
+}

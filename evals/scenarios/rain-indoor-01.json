@@ -1,0 +1,62 @@
+{
+  "id": "rain-indoor-01",
+  "family": "rain",
+  "description": "WEATHER overlay rain with cafe PREFER",
+  "input": {
+    "dateTokyo": "2026-09-22",
+    "startTime": "11:00",
+    "endTime": "18:00",
+    "meet": {
+      "name": "東京駅",
+      "lat": 35.6812,
+      "lng": 139.7671,
+      "spotId": "mock:tokyo-station"
+    },
+    "end": {
+      "name": "東京駅",
+      "lat": 35.6812,
+      "lng": 139.7671,
+      "spotId": "mock:tokyo-station"
+    },
+    "travelMode": "WALK",
+    "budget": {
+      "mealsJpy": 8000,
+      "facilitiesJpy": 4000,
+      "transitJpy": 2000
+    },
+    "preferences": [
+      {
+        "id": "p1",
+        "subject": "BOTH",
+        "content": "カフェ",
+        "priority": "PREFER",
+        "source": "SELF_REPORT"
+      }
+    ],
+    "fixedAppointments": [],
+    "autoApply": {
+      "enabled": false,
+      "acknowledgedScope": null,
+      "validUntil": null
+    },
+    "areaName": "東京駅",
+    "areaLat": 35.6812,
+    "areaLng": 139.7671,
+    "radiusMeters": 2500
+  },
+  "overlays": [
+    {
+      "kind": "WEATHER",
+      "overlay": {
+        "precipitationMm": 8
+      }
+    }
+  ],
+  "expected": {
+    "outcome": "PLAN",
+    "validationStates": [
+      "PASS",
+      "CONDITIONAL"
+    ]
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "id": "full-spot-alt",
+  "family": "full",
+  "description": "SPOT_FULL on both nearby cafes → unmet / plan unmet",
+  "input": {
+    "dateTokyo": "2026-09-22",
+    "startTime": "11:00",
+    "endTime": "18:00",
+    "meet": {
+      "name": "東京駅",
+      "lat": 35.6812,
+      "lng": 139.7671,
+      "spotId": "mock:tokyo-station"
+    },
+    "end": {
+      "name": "東京駅",
+      "lat": 35.6812,
+      "lng": 139.7671,
+      "spotId": "mock:tokyo-station"
+    },
+    "travelMode": "WALK",
+    "budget": {
+      "mealsJpy": 8000,
+      "facilitiesJpy": 4000,
+      "transitJpy": 2000
+    },
+    "preferences": [
+      {
+        "id": "p1",
+        "subject": "BOTH",
+        "content": "カフェ",
+        "priority": "MUST",
+        "source": "SELF_REPORT"
+      }
+    ],
+    "fixedAppointments": [],
+    "autoApply": {
+      "enabled": false,
+      "acknowledgedScope": null,
+      "validUntil": null
+    },
+    "areaName": "東京駅",
+    "areaLat": 35.6812,
+    "areaLng": 139.7671,
+    "radiusMeters": 1200,
+    "searchExpandAcknowledged": true
+  },
+  "overlays": [
+    {
+      "kind": "SPOT_FULL",
+      "target": {
+        "spotId": "mock:cafe-kitte"
+      },
+      "overlay": {}
+    },
+    {
+      "kind": "SPOT_FULL",
+      "target": {
+        "spotId": "mock:cafe-gransta"
+      },
+      "overlay": {}
+    }
+  ],
+  "expected": {
+    "outcome": "WAITING_INPUT",
+    "questionIds": [
+      "q_plan_unmet",
+      "q_must_unmet",
+      "q_no_candidates"
+    ]
+  }
+}

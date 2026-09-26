@@ -1,0 +1,13 @@
+{
+  "id": "replan-protected-skip",
+  "family": "replan",
+  "description": "REPLAN against protected TIME_FIXED item — deferred",
+  "skip": true,
+  "skipReason": "Unskip: seed FIXED appointment in INITIAL plan then REPLAN targeting that locked item; expect q_replan_no_change",
+  "expected": {
+    "outcome": "WAITING_INPUT",
+    "questionIds": [
+      "q_replan_no_change"
+    ]
+  }
+}
