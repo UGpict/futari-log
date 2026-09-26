@@ -56,6 +56,30 @@ export const API_BUDGETS = {
 
 export type ApiBudgetKind = keyof typeof API_BUDGETS;
 
+/**
+ * Process-local circuit breaker (Phase 2b).
+ * Shared multi-instance state is a follow-up — see docs/ops/monitoring.md.
+ */
+export const CIRCUIT_BREAKER = {
+  /** Consecutive provider failures in CLOSED before OPEN. */
+  failureThreshold: 5,
+  /** Consecutive successes in HALF_OPEN before CLOSED. */
+  successThreshold: 2,
+  /** Cool-down before OPEN → HALF_OPEN probe (ms). */
+  openMs: 60_000,
+} as const;
+
+export type BreakerProvider = "places" | "routes" | "orcarouter";
+
+/** Phase 1 fixture ids used by POST /api/internal/synthetic/plan-smoke (MOCK). */
+export const SYNTHETIC_PLAN_SMOKE_IDS = [
+  "smoke-cafe-tokyo",
+  "rain-indoor-01",
+  "hours-ok-catalog",
+  "fixed-time-gallery",
+  "outside-tokyo-nagoya",
+] as const;
+
 export const DEADLINES_MS = {
   INITIAL_PLAN: 60_000,
   REPLAN: 30_000,

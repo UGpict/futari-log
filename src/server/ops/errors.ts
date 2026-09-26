@@ -1,6 +1,6 @@
 /** Explicit ops-guard failures — never silent MOCK fallback. */
 
-export type OpsErrorCode = "RATE_LIMITED" | "API_BUDGET_EXCEEDED";
+export type OpsErrorCode = "RATE_LIMITED" | "API_BUDGET_EXCEEDED" | "CIRCUIT_OPEN";
 
 export class OpsGuardError extends Error {
   readonly code: OpsErrorCode;
@@ -35,5 +35,14 @@ export function budgetExceededError(kind: string): OpsGuardError {
     status: 503,
     message: `API budget exceeded: ${kind}`,
     detail: kind,
+  });
+}
+
+export function circuitOpenError(provider: string): OpsGuardError {
+  return new OpsGuardError({
+    code: "CIRCUIT_OPEN",
+    status: 503,
+    message: `circuit breaker open: ${provider}`,
+    detail: provider,
   });
 }

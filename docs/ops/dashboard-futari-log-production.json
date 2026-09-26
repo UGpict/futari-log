@@ -1,0 +1,75 @@
+{
+  "displayName": "futari-log production",
+  "description": "Sketch of widgets based on Phase 2a/2b Cloud Logging JSON metrics. Not a drop-in Monitoring Dashboard API resource — create log-based metrics first, then map widget metricFilter names.",
+  "widgets": [
+    {
+      "title": "External calls / min by provider",
+      "type": "XY_LINE",
+      "sourceMetric": "futari_external_calls",
+      "groupBy": ["provider"],
+      "alignment": "ALIGN_RATE"
+    },
+    {
+      "title": "External errors / min by provider",
+      "type": "XY_LINE",
+      "sourceMetric": "futari_external_errors",
+      "groupBy": ["provider"],
+      "alignment": "ALIGN_RATE"
+    },
+    {
+      "title": "LLM cost USD (distribution)",
+      "type": "XY_LINE",
+      "sourceMetric": "futari_llm_cost_usd",
+      "groupBy": ["kind"],
+      "alignment": "ALIGN_DELTA"
+    },
+    {
+      "title": "Rate limited",
+      "type": "SCORECARD",
+      "sourceMetric": "futari_rate_limited",
+      "alignment": "ALIGN_DELTA"
+    },
+    {
+      "title": "Budget exceeded",
+      "type": "SCORECARD",
+      "sourceMetric": "futari_budget_exceeded",
+      "alignment": "ALIGN_DELTA"
+    },
+    {
+      "title": "Breaker OPEN events",
+      "type": "XY_LINE",
+      "sourceMetric": "futari_breaker_open",
+      "groupBy": ["provider"],
+      "alignment": "ALIGN_DELTA"
+    },
+    {
+      "title": "Synthetic plan-smoke failures",
+      "type": "SCORECARD",
+      "sourceMetric": "futari_synthetic_fail",
+      "alignment": "ALIGN_DELTA"
+    }
+  ],
+  "alertPolicySketches": [
+    {
+      "displayName": "futari budget exceeded",
+      "condition": "futari_budget_exceeded > 0 in 5m",
+      "severity": "WARNING"
+    },
+    {
+      "displayName": "futari external error rate",
+      "condition": "errors/calls > 0.2 over 10m when calls >= 20",
+      "severity": "WARNING"
+    },
+    {
+      "displayName": "futari synthetic plan-smoke fail",
+      "condition": "futari_synthetic_fail >= 1 in 15m OR HTTP 502 on /api/internal/synthetic/plan-smoke",
+      "severity": "CRITICAL"
+    },
+    {
+      "displayName": "futari breaker OPEN sustained",
+      "condition": "futari_breaker_open for same provider in consecutive 5m windows (N=5 minutes)",
+      "severity": "CRITICAL",
+      "note": "Process-local breaker; multi-instance shared state is follow-up"
+    }
+  ]
+}

@@ -180,6 +180,17 @@ export function getEnv() {
         ? `${read("PUBLIC_BASE_URL")!.replace(/\/$/, "")}/api/internal/catalog/ingest`
         : null),
     ingestOidcServiceAccount: read("INGEST_OIDC_SERVICE_ACCOUNT"),
+    /**
+     * Synthetic plan-smoke OIDC (Cloud Scheduler). Falls back to ingest SA when unset.
+     * Audience defaults to PUBLIC_BASE_URL + /api/internal/synthetic/plan-smoke.
+     */
+    syntheticOidcAudience:
+      read("SYNTHETIC_OIDC_AUDIENCE") ??
+      (read("PUBLIC_BASE_URL")
+        ? `${read("PUBLIC_BASE_URL")!.replace(/\/$/, "")}/api/internal/synthetic/plan-smoke`
+        : null),
+    syntheticOidcServiceAccount:
+      read("SYNTHETIC_OIDC_SERVICE_ACCOUNT") ?? read("INGEST_OIDC_SERVICE_ACCOUNT"),
     workerConcurrency: Math.max(1, readNumber("WORKER_CONCURRENCY", 1)),
     planOrchestrator: read("PLAN_ORCHESTRATOR") === "workflows" ? ("workflows" as const) : ("worker" as const),
     workflowName: read("WORKFLOW_NAME") ?? "futari-propose",
