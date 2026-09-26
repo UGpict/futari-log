@@ -1,0 +1,10 @@
+{
+  "id": "memory-conflict-01",
+  "family": "memory_conflict",
+  "description": "NOTE_CONFLICT reflect path — deferred to LLM mock harness",
+  "skip": true,
+  "skipReason": "Unskip: path reflect_analyze with ProviderCtx/LLM mock returning action NOTE_CONFLICT (wire callLLM mock in harness)",
+  "expected": {
+    "outcome": "WAITING_INPUT"
+  }
+}

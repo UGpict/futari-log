@@ -1,0 +1,56 @@
+{
+  "id": "hours-closed-monday-gallery",
+  "family": "hours",
+  "description": "Monday + MUST gallery (closed Mon) → waiting",
+  "input": {
+    "dateTokyo": "2026-09-21",
+    "startTime": "11:00",
+    "endTime": "16:00",
+    "meet": {
+      "name": "東京駅",
+      "lat": 35.6812,
+      "lng": 139.7671,
+      "spotId": "mock:tokyo-station"
+    },
+    "end": {
+      "name": "東京駅",
+      "lat": 35.6812,
+      "lng": 139.7671,
+      "spotId": "mock:tokyo-station"
+    },
+    "travelMode": "WALK",
+    "budget": {
+      "mealsJpy": 5000,
+      "facilitiesJpy": 2000,
+      "transitJpy": 1000
+    },
+    "preferences": [
+      {
+        "id": "p1",
+        "subject": "BOTH",
+        "content": "美術館",
+        "priority": "MUST",
+        "source": "SELF_REPORT"
+      }
+    ],
+    "fixedAppointments": [],
+    "autoApply": {
+      "enabled": false,
+      "acknowledgedScope": null,
+      "validUntil": null
+    },
+    "areaName": "東京駅",
+    "areaLat": 35.6812,
+    "areaLng": 139.7671,
+    "radiusMeters": 1200,
+    "searchExpandAcknowledged": true
+  },
+  "expected": {
+    "outcome": "WAITING_INPUT",
+    "questionIds": [
+      "q_plan_unmet",
+      "q_must_unmet",
+      "q_no_candidates"
+    ]
+  }
+}

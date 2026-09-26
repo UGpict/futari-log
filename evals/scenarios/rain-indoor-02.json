@@ -1,0 +1,69 @@
+{
+  "id": "rain-indoor-02",
+  "family": "rain",
+  "description": "Heavy rain with park+cafe PREFER — outdoor filtered",
+  "input": {
+    "dateTokyo": "2026-09-22",
+    "startTime": "12:00",
+    "endTime": "17:00",
+    "meet": {
+      "name": "東京駅",
+      "lat": 35.6812,
+      "lng": 139.7671,
+      "spotId": "mock:tokyo-station"
+    },
+    "end": {
+      "name": "東京駅",
+      "lat": 35.6812,
+      "lng": 139.7671,
+      "spotId": "mock:tokyo-station"
+    },
+    "travelMode": "WALK",
+    "budget": {
+      "mealsJpy": 6000,
+      "facilitiesJpy": 2000,
+      "transitJpy": 1000
+    },
+    "preferences": [
+      {
+        "id": "p1",
+        "subject": "BOTH",
+        "content": "公園",
+        "priority": "PREFER",
+        "source": "SELF_REPORT"
+      },
+      {
+        "id": "p2",
+        "subject": "BOTH",
+        "content": "カフェ",
+        "priority": "PREFER",
+        "source": "SELF_REPORT"
+      }
+    ],
+    "fixedAppointments": [],
+    "autoApply": {
+      "enabled": false,
+      "acknowledgedScope": null,
+      "validUntil": null
+    },
+    "areaName": "東京駅",
+    "areaLat": 35.6812,
+    "areaLng": 139.7671,
+    "radiusMeters": 2500
+  },
+  "overlays": [
+    {
+      "kind": "WEATHER",
+      "overlay": {
+        "precipitationMm": 15
+      }
+    }
+  ],
+  "expected": {
+    "outcome": "PLAN",
+    "validationStates": [
+      "PASS",
+      "CONDITIONAL"
+    ]
+  }
+}

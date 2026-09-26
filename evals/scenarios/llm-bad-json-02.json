@@ -1,0 +1,17 @@
+{
+  "id": "llm-bad-json-02",
+  "family": "llm_bad_json",
+  "description": "Reflect payload with unknown action enum fails schema",
+  "path": "reflect_schema",
+  "stubs": {
+    "llmReflect": {
+      "action": "HACK_THE_PLANET",
+      "question": null,
+      "note": null,
+      "candidates": []
+    }
+  },
+  "expected": {
+    "outcome": "FAILED"
+  }
+}

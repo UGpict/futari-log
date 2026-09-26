@@ -87,7 +87,11 @@ Cloud Run では `PLAN_ORCHESTRATOR=workflows`。ローカルは worker。
 | LLM 失敗の種類分け（JSON / schema）・NOTICE 観測・1回の repair | [`src/server/llm/index.ts`](src/server/llm/index.ts) |
 | 呼び出し側 signal とタイムアウトの合成（`AbortSignal.any`） | [`src/lib/abort.ts`](src/lib/abort.ts) |
 | 解析失敗イベントに振り返り本文・LLM 本文プレビューを載せない | [`src/server/llm/index.ts`](src/server/llm/index.ts)（`LlmParseFailureEventPayload`） |
-| CI（typecheck / boundaries / MOCK 単体） | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) |
+| CI（typecheck / boundaries / MOCK 単体 / Eval harness） | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) |
+
+## 改善の測り方
+
+計画経路の回帰は **Eval harness**（`npm run eval`）で測る。`APP_RUNTIME=MOCK` + 一時 `STORE_DIR` で `evals/scenarios/*.json` を回し、合否と `plan_success` / `api_calls` / `latency_ms` などを `evals/out/latest.json` に出す。詳細は [`evals/README.md`](evals/README.md) と信頼性ロードマップ（[`docs/specs/reliability-roadmap.md`](docs/specs/reliability-roadmap.md)）。
 
 ## 既知の制約
 
@@ -113,6 +117,7 @@ http://localhost:3000
 npm run typecheck
 npm run lint
 npm test                 # MOCK / ファイルストア前提の単体 + 境界
+npm run eval             # Eval harness（MOCK シナリオ回帰）
 npm run test:emulator    # 匿名 Auth と Firestore Emulator
 npm run build
 npm run doctor           # 設定の PASS / FAIL / BLOCKED（秘密は出さない）

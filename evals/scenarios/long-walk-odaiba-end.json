@@ -1,0 +1,52 @@
+{
+  "id": "long-walk-odaiba-end",
+  "family": "long_walk",
+  "description": "End at Odaiba from Tokyo Station walk → q_long_walk",
+  "input": {
+    "dateTokyo": "2026-09-22",
+    "startTime": "11:00",
+    "endTime": "18:00",
+    "meet": {
+      "name": "東京駅",
+      "lat": 35.6812,
+      "lng": 139.7671,
+      "spotId": "mock:tokyo-station"
+    },
+    "end": {
+      "name": "お台場",
+      "lat": 35.627019,
+      "lng": 139.779984,
+      "spotId": null
+    },
+    "travelMode": "WALK",
+    "budget": {
+      "mealsJpy": 5000,
+      "facilitiesJpy": 2000,
+      "transitJpy": 1000
+    },
+    "preferences": [
+      {
+        "id": "p1",
+        "subject": "BOTH",
+        "content": "カフェ",
+        "priority": "PREFER",
+        "source": "SELF_REPORT"
+      }
+    ],
+    "fixedAppointments": [],
+    "autoApply": {
+      "enabled": false,
+      "acknowledgedScope": null,
+      "validUntil": null
+    },
+    "areaName": "東京駅",
+    "areaLat": 35.6812,
+    "areaLng": 139.7671,
+    "radiusMeters": 2500,
+    "tokyoAreaAcknowledged": true
+  },
+  "expected": {
+    "outcome": "WAITING_INPUT",
+    "questionId": "q_long_walk"
+  }
+}

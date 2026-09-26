@@ -35,3 +35,6 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+      - name: Eval harness
+        run: npm run eval

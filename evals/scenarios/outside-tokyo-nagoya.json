@@ -1,0 +1,51 @@
+{
+  "id": "outside-tokyo-nagoya",
+  "family": "smoke",
+  "description": "Meet/end in Nagoya → q_outside_tokyo",
+  "input": {
+    "dateTokyo": "2026-09-22",
+    "startTime": "11:00",
+    "endTime": "18:00",
+    "meet": {
+      "name": "名古屋駅",
+      "lat": 35.170915,
+      "lng": 136.881537,
+      "spotId": "mock:nagoya-station"
+    },
+    "end": {
+      "name": "名古屋駅",
+      "lat": 35.170915,
+      "lng": 136.881537,
+      "spotId": "mock:nagoya-station"
+    },
+    "travelMode": "WALK",
+    "budget": {
+      "mealsJpy": 5000,
+      "facilitiesJpy": 2000,
+      "transitJpy": 1000
+    },
+    "preferences": [
+      {
+        "id": "p1",
+        "subject": "BOTH",
+        "content": "カフェ",
+        "priority": "PREFER",
+        "source": "SELF_REPORT"
+      }
+    ],
+    "fixedAppointments": [],
+    "autoApply": {
+      "enabled": false,
+      "acknowledgedScope": null,
+      "validUntil": null
+    },
+    "areaName": "名古屋駅",
+    "areaLat": 35.170915,
+    "areaLng": 136.881537,
+    "radiusMeters": 2500
+  },
+  "expected": {
+    "outcome": "WAITING_INPUT",
+    "questionId": "q_outside_tokyo"
+  }
+}
