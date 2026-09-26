@@ -88,21 +88,21 @@ Phase1 は「eval 専用」に見えても、次は本番コード経路に載�
 
 - [x] uid/IP rate limit（places_search / session_create / run_start / reflect）→ 超過時 **429 RATE_LIMITED**
 - [x] API 別日次 budget（places / routes / llm_mundane / llm_hard / llm_search）→ 超過時 **503 API_BUDGET_EXCEEDED**（黙って MOCK に落とさない）
-- [ ] Places / Routes / Orca の circuit breaker（Phase 2b）
+- [x] Places / Routes / Orca の circuit breaker（Phase 2b・プロセス局所。OPEN → **503 CIRCUIT_OPEN**）
 
 ### 2.3 Synthetic + 監視
 
-- [ ] Cloud Scheduler API 有効化（イベント ingest とは別ジョブ）
-- [ ] `/api/internal/synthetic/...` + OIDC
-- [ ] Phase1 fixture のうち 3〜5 本を synthetic に流用
-- [ ] Dashboard `futari-log production`（Phase 2b）
-- [ ] Alert: budget / error rate / synthetic fail / breaker OPEN
+- [ ] Cloud Scheduler API 有効化（イベント ingest とは別ジョブ）— **手順は docs/cloud-run.md。ジョブ本体は未プロビジョン**
+- [x] `/api/internal/synthetic/plan-smoke` + OIDC（ingest 同型）
+- [x] Phase1 fixture のうち 5 本を synthetic に流用（MOCK / eval harness）
+- [x] Dashboard `futari-log production` の **ウィジェット定義・docs**（GCP 実体は未作成）→ `docs/ops/monitoring.md`
+- [x] Alert: budget / error rate / synthetic fail / breaker OPEN の **方針ドキュメント**（ポリシー実体は未作成）
 
 ### 2.4 検証
 
 - [ ] staging または本番で意図的に rate/budget を踏んで応答を確認
-- [x] docs/cloud-run.md に Phase 2a ops スタブを追記（dashboard/alert は 2b）
-
+- [x] docs/cloud-run.md に Phase 2a/2b ops（breaker / synthetic / Scheduler 手順）を追記
+- [x] docs/ops/monitoring.md + dashboard JSON スケッチ
 **Exit criteria:** 一画面で Places/Routes/LLM が見える。alert が鳴る経路を1回実証。
 
 ---

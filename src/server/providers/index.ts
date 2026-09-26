@@ -19,6 +19,10 @@ import { includedTypesForCategory, placeTypeList } from "@/contracts/spotKinds";
 import { consumeApiBudget } from "@/server/ops/budget";
 import { isOpsGuardError } from "@/server/ops/errors";
 import { emitExternalCall } from "@/server/ops/metrics";
+import {
+  runWithBreaker,
+  type BreakerProvider,
+} from "@/server/ops/breaker";
 import { getCatalogSpot, MOCK_CATALOG, searchCatalog, searchCatalogByName, type CatalogSpot } from "./catalog";
 import { applyPhotoMeta, firstPhotoRef, resolvePhotoMedia } from "./placePhotos";
 import {
@@ -26,6 +30,7 @@ import {
   scheduleDriveDeparture,
   travelBufferMinutes,
   type RouteEstimate,
+  type RouteFailure,
 } from "./routes";
 import { getEvent, getVenue } from "@/server/catalog/repo";
 import { catalogEventToSpot, venueHours } from "@/server/catalog/toSpot";
@@ -113,42 +118,68 @@ async function counted<T>(
   ctx: ProviderCtx,
   provider: string,
   fn: () => Promise<T>,
-  opts?: { budgetKind?: ApiBudgetKind },
+  opts?: {
+    budgetKind?: ApiBudgetKind;
+    /** Live Places / Routes only — mock providers skip the breaker. */
+    breaker?: BreakerProvider;
+    classify?: (result: T) => "success" | "failure" | "ignore";
+  },
 ): Promise<T> {
   if (opts?.budgetKind) {
     const gate = await consumeApiBudget(opts.budgetKind);
     if (!gate.ok) throw gate.error;
   }
-  ctx.httpAttempts += 1;
-  const started = Date.now();
-  try {
-    const result = await fn();
-    const latencyMs = Date.now() - started;
-    await ctx.onHttp({
-      provider,
-      cacheHit: false,
-      attempt: ctx.httpAttempts,
-      latencyMs,
-      ok: true,
-    });
-    emitExternalCall({ provider, latency_ms: latencyMs, ok: true });
-    return result;
-  } catch (error) {
-    const latencyMs = Date.now() - started;
+  const run = async (): Promise<T> => {
+    ctx.httpAttempts += 1;
+    const started = Date.now();
     try {
+      const result = await fn();
+      const latencyMs = Date.now() - started;
       await ctx.onHttp({
         provider,
         cacheHit: false,
         attempt: ctx.httpAttempts,
         latencyMs,
-        ok: false,
+        ok: true,
       });
-    } catch {
-      // event write must not mask the original failure
+      emitExternalCall({ provider, latency_ms: latencyMs, ok: true });
+      return result;
+    } catch (error) {
+      const latencyMs = Date.now() - started;
+      try {
+        await ctx.onHttp({
+          provider,
+          cacheHit: false,
+          attempt: ctx.httpAttempts,
+          latencyMs,
+          ok: false,
+        });
+      } catch {
+        // event write must not mask the original failure
+      }
+      emitExternalCall({ provider, latency_ms: latencyMs, ok: false });
+      throw error;
     }
-    emitExternalCall({ provider, latency_ms: latencyMs, ok: false });
-    throw error;
+  };
+  if (opts?.breaker) {
+    return runWithBreaker(opts.breaker, run, { classify: opts.classify });
   }
+  return run();
+}
+
+/** Infrastructure-ish Routes failures that should trip the breaker (not NO_ROUTE geo misses). */
+const ROUTES_BREAKER_FAILURES = new Set<RouteFailure>([
+  "TIMEOUT",
+  "NETWORK",
+  "QUOTA",
+  "PERMISSION",
+  "API_DISABLED",
+]);
+
+function classifyRouteBreaker(result: RouteEstimate): "success" | "failure" | "ignore" {
+  if (result.failure && ROUTES_BREAKER_FAILURES.has(result.failure)) return "failure";
+  if (result.durationMinutes != null && result.kind === "API") return "success";
+  return "ignore";
 }
 
 function toSpot(c: CatalogSpot): Spot {
@@ -202,6 +233,7 @@ export async function searchSpots(
   if (env.runtime === "LIVE" && env.googleMapsApiKey) {
     const result = await counted(ctx, "places", () => liveSearch(env.googleMapsApiKey!, args), {
       budgetKind: "places",
+      breaker: "places",
     });
     cacheSet(ctx, key, result);
     return result;
@@ -289,6 +321,7 @@ export async function getSpotDetails(
   if (env.runtime === "LIVE" && env.googleMapsApiKey && !args.spotId.startsWith("mock:") && !args.spotId.startsWith("demo:")) {
     const result = await counted(ctx, "places", () => liveDetails(ctx, env.googleMapsApiKey!, args.spotId), {
       budgetKind: "places",
+      breaker: "places",
     });
     cacheSet(ctx, key, result);
     return result;
@@ -599,7 +632,7 @@ export async function estimateTravel(
               mode: args.mode,
               departureAt: args.departureAt,
             }),
-          { budgetKind: "routes" },
+          { budgetKind: "routes", breaker: "routes", classify: classifyRouteBreaker },
         );
       }
     } else {
@@ -984,66 +1017,70 @@ export async function searchPlacesByText(args: {
   if (env.runtime === "LIVE" && env.googleMapsApiKey) {
     const gate = await consumeApiBudget("places");
     if (!gate.ok) throw gate.error;
-    const started = Date.now();
-    try {
-      const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Goog-Api-Key": env.googleMapsApiKey,
-          "X-Goog-FieldMask": PLACES_FIELD_MASK_TEXT,
-        },
-        body: JSON.stringify({
-          textQuery: q,
-          languageCode: "ja",
-          maxResultCount: 8,
-          ...(args.lat != null && args.lng != null
-            ? {
-                locationBias: {
-                  circle: {
-                    center: { latitude: args.lat, longitude: args.lng },
-                    radius: 30000,
+    return runWithBreaker("places", async () => {
+      const started = Date.now();
+      try {
+        const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": env.googleMapsApiKey!,
+            "X-Goog-FieldMask": PLACES_FIELD_MASK_TEXT,
+          },
+          body: JSON.stringify({
+            textQuery: q,
+            languageCode: "ja",
+            maxResultCount: 8,
+            ...(args.lat != null && args.lng != null
+              ? {
+                  locationBias: {
+                    circle: {
+                      center: { latitude: args.lat, longitude: args.lng },
+                      radius: 30000,
+                    },
                   },
-                },
-              }
-            : {}),
-        }),
-        signal: AbortSignal.timeout(10000),
-      });
-      const latencyMs = Date.now() - started;
-      if (!res.ok) {
-        emitExternalCall({ provider: "places", latency_ms: latencyMs, ok: false });
-        return { query: q, state: "failed", places: [], error: `places searchText ${res.status}` };
+                }
+              : {}),
+          }),
+          signal: AbortSignal.timeout(10000),
+        });
+        const latencyMs = Date.now() - started;
+        if (!res.ok) {
+          emitExternalCall({ provider: "places", latency_ms: latencyMs, ok: false });
+          return { query: q, state: "failed" as const, places: [], error: `places searchText ${res.status}` };
+        }
+        const data = (await res.json()) as {
+          places?: {
+            id: string;
+            displayName?: { text: string };
+            formattedAddress?: string;
+            location?: { latitude: number; longitude: number };
+          }[];
+        };
+        const places = (data.places ?? [])
+          .filter((p) => p.location?.latitude != null && p.location?.longitude != null)
+          .map((p) => ({
+            id: p.id,
+            name: p.displayName?.text ?? p.id,
+            lat: p.location!.latitude,
+            lng: p.location!.longitude,
+            address: p.formattedAddress ?? null,
+          }));
+        emitExternalCall({ provider: "places", latency_ms: latencyMs, ok: true });
+        return { query: q, state: (places.length ? "ok" : "empty") as "ok" | "empty", places, error: null };
+      } catch (error) {
+        emitExternalCall({ provider: "places", latency_ms: Date.now() - started, ok: false });
+        if (isOpsGuardError(error)) throw error;
+        return {
+          query: q,
+          state: "failed" as const,
+          places: [],
+          error: error instanceof Error ? error.message : "search failed",
+        };
       }
-      const data = (await res.json()) as {
-        places?: {
-          id: string;
-          displayName?: { text: string };
-          formattedAddress?: string;
-          location?: { latitude: number; longitude: number };
-        }[];
-      };
-      const places = (data.places ?? [])
-        .filter((p) => p.location?.latitude != null && p.location?.longitude != null)
-        .map((p) => ({
-          id: p.id,
-          name: p.displayName?.text ?? p.id,
-          lat: p.location!.latitude,
-          lng: p.location!.longitude,
-          address: p.formattedAddress ?? null,
-        }));
-      emitExternalCall({ provider: "places", latency_ms: latencyMs, ok: true });
-      return { query: q, state: places.length ? "ok" : "empty", places, error: null };
-    } catch (error) {
-      emitExternalCall({ provider: "places", latency_ms: Date.now() - started, ok: false });
-      if (isOpsGuardError(error)) throw error;
-      return {
-        query: q,
-        state: "failed",
-        places: [],
-        error: error instanceof Error ? error.message : "search failed",
-      };
-    }
+    }, {
+      classify: (result) => (result.state === "failed" ? "failure" : "success"),
+    });
   }
   const places = searchCatalogByName(q).map((s) => ({
     id: s.id,

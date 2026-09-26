@@ -8,6 +8,8 @@
  * - futari/llm_cost_usd
  * - futari/rate_limited
  * - futari/budget_exceeded
+ * - futari/breaker_state
+ * - futari/synthetic_plan_smoke
  */
 
 export type ExternalMetricProvider = string;
@@ -21,6 +23,9 @@ export type MetricLabels = {
   cost_usd?: number | null;
   error?: string | null;
   subject?: string;
+  state?: string;
+  passed?: number;
+  failed?: number;
 };
 
 function emit(metric: string, labels: MetricLabels, severity: "INFO" | "WARNING" | "ERROR" = "INFO") {
@@ -93,4 +98,27 @@ export function emitRateLimited(labels: { bucket: string; subject: string }) {
 
 export function emitBudgetExceeded(labels: { kind: string }) {
   emit("futari/budget_exceeded", { kind: labels.kind, ok: false }, "WARNING");
+}
+
+export function emitBreakerState(labels: { provider: string; state: string }) {
+  const severity = labels.state === "OPEN" ? "WARNING" : "INFO";
+  emit("futari/breaker_state", { provider: labels.provider, state: labels.state }, severity);
+}
+
+export function emitSyntheticPlanSmoke(labels: {
+  ok: boolean;
+  passed: number;
+  failed: number;
+  latency_ms: number;
+}) {
+  emit(
+    "futari/synthetic_plan_smoke",
+    {
+      ok: labels.ok,
+      passed: labels.passed,
+      failed: labels.failed,
+      latency_ms: labels.latency_ms,
+    },
+    labels.ok ? "INFO" : "ERROR",
+  );
 }

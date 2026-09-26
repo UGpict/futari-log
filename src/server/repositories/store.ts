@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync, existsSync, unlinkSync, openSync, closeSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { getEnv } from "@/config/env";
+import { getEnv, getStoreDir } from "@/config/env";
 import type { Approval, AppEvent, Memory, Run, Session } from "@/domain/schemas";
 import { DEADLINES_MS, MODEL_SETTINGS_VERSION, PROMPT_VERSION, SCHEMA_VERSION, TOOL_VERSION } from "@/config/settings";
 import { newId } from "@/lib/ids";
@@ -31,10 +31,9 @@ export type {
   SessionBundle,
 } from "./types";
 
-/** File backend root. Tests set STORE_DIR to a temp dir so they never touch live `.data/`. */
+/** File backend root. ALS scope / STORE_DIR / `.data` — see `getStoreDir`. */
 function storeDir() {
-  const override = process.env.STORE_DIR?.trim();
-  return override && override.length > 0 ? override : join(process.cwd(), ".data");
+  return getStoreDir();
 }
 
 function storePath() {

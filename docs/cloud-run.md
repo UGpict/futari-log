@@ -78,9 +78,9 @@ gcloud builds submit --config cloudbuild.yaml \
 
 Secret と IAM が未作成だとこのコマンド単体は失敗します。そのときは `npm run deploy:cloudrun` を使ってください。
 
-## Ops guardrails（Phase 2a）
+## Ops guardrails（Phase 2a / 2b）
 
-本番破壊を防ぐための最小ガード。**ダッシュボード / alert / circuit breaker / synthetic は Phase 2b。**
+本番破壊を防ぐためのガード。ダッシュボード / alert の **GCP 実体作成** は [`docs/ops/monitoring.md`](ops/monitoring.md) を参照（このリポジトリだけでは未配線）。
 
 ### 構造化メトリクス（Cloud Logging）
 
@@ -93,16 +93,68 @@ Secret と IAM が未作成だとこのコマンド単体は失敗します。�
 | `futari/llm_cost_usd` | `provider`, `kind` (pool), `cost_usd` |
 | `futari/rate_limited` | `bucket`, `subject` |
 | `futari/budget_exceeded` | `kind` |
+| `futari/breaker_state` | `provider`, `state` |
+| `futari/synthetic_plan_smoke` | `ok`, `passed`, `failed`, `latency_ms` |
 
-Places / Routes は `ProviderCtx.onHttp` 経路、LLM は `src/server/llm` から emit。Monitoring ダッシュボードへの配線は 2b。
+Places / Routes は `ProviderCtx.onHttp` 経路、LLM は `src/server/llm`、breaker 遷移と synthetic 結果も同スキーマで emit。
 
-### Rate limit / API budget
+### Rate limit / API budget（2a）
 
 - **Rate limit**（HTTP 端）: uid 優先、なければ IP。分次 + 日次。対象 `places_search` / `session_create` / `run_start` / `reflect`。超過 → **429** `{ error, code: "RATE_LIMITED" }`
 - **API budget**（provider / LLM 呼び出し）: Tokyo 日次。`places` / `routes` / `llm_mundane` / `llm_hard` / `llm_search`。超過 → **503** `{ error, code: "API_BUDGET_EXCEEDED" }`。**黙って MOCK に落とさない**
 - 既定値は `src/config/settings.ts`（`RATE_LIMITS` / `API_BUDGETS`）。上書きは env（例: `RATE_LIMIT_PLACES_SEARCH_PER_MINUTE`, `API_BUDGET_PLACES_PER_DAY`）
 - カウンタ: `DATA_BACKEND=firestore` なら Firestore `opsCounters`、file なら `STORE_DIR/ops-counters.json`。テストは `OPS_COUNTER_BACKEND=memory`
 - 既存の couple 単位 `LIMITS.maxRunsPerCouplePerDay`（store daily cap）はそのまま。API budget とは別枠
+
+### Circuit breaker（2b・コード実装済み）
+
+- 対象: Places Nearby/Text、Routes `computeRoutes`、OrcaRouter（`fetchOrcaWithRetry`）
+- 状態: CLOSED / OPEN / HALF_OPEN（プロセス局所。複数 Cloud Run instance では共有されない → follow-up）
+- HALF_OPEN は **同時 probe 1 本のみ**。他の呼び出しは OPEN 同様 **503 `CIRCUIT_OPEN`**
+- OPEN 時: **503** `{ error, code: "CIRCUIT_OPEN" }`（MOCK フォールバックなし）
+- 閾値: `CIRCUIT_BREAKER` in `src/config/settings.ts`
+
+### Synthetic plan-smoke（2b）
+
+エンドポイント: `POST /api/internal/synthetic/plan-smoke`
+
+- 認証: Google ID トークン（OIDC）。ingest と同型（`verifyGoogleIdToken`）
+- env:
+  - `SYNTHETIC_OIDC_AUDIENCE`（未設定時は `PUBLIC_BASE_URL/api/internal/synthetic/plan-smoke`）
+  - `SYNTHETIC_OIDC_SERVICE_ACCOUNT`（未設定時は `INGEST_OIDC_SERVICE_ACCOUNT`）
+- 中身: Phase 1 fixture 5 本を **MOCK** で `evals/harness/runScenario` 再利用（LIVE 課金なし）
+  - `smoke-cafe-tokyo`, `rain-indoor-01`, `hours-ok-catalog`, `fixed-time-gallery`, `outside-tokyo-nagoya`
+  - **`process.env` は書き換えない**。`runWithEnvScopeAsync({ runtime: "MOCK", dataBackend: "file", storeDir })` でリクエストスコープ注入（本番 LIVE リクエストと並走してもグローバル設定を汚さない）
+- 成功 200 / いずれか fail で 502。メトリクス `futari/synthetic_plan_smoke`
+
+#### Cloud Scheduler（手動・gcloud 例）
+
+プロジェクト権限と Secret が揃っている前提の **手順メモ**。このリポジトリはジョブ定義を自動プロビジョンしない。
+
+```bash
+# 1) Scheduler API
+gcloud services enable cloudscheduler.googleapis.com --project="$PROJECT_ID"
+
+# 2) 呼び出し用 SA（例）。Cloud Run invoker + 必要ならトークン作成権限
+# gcloud iam service-accounts create futari-synthetic --display-name="Futari synthetic"
+
+# 3) ジョブ（OIDC）。AUDIENCE は SYNTHETIC_OIDC_AUDIENCE と一致させる
+export REGION=asia-northeast1
+export SERVICE_URL="https://YOUR-CLOUD-RUN-URL"
+export SA_EMAIL="futari-synthetic@${PROJECT_ID}.iam.gserviceaccount.com"
+
+gcloud scheduler jobs create http futari-plan-smoke \
+  --location="$REGION" \
+  --schedule="*/30 * * * *" \
+  --time-zone="Asia/Tokyo" \
+  --uri="${SERVICE_URL}/api/internal/synthetic/plan-smoke" \
+  --http-method=POST \
+  --oidc-service-account-email="$SA_EMAIL" \
+  --oidc-token-audience="${SERVICE_URL}/api/internal/synthetic/plan-smoke"
+```
+
+Cloud Run 側 env に `PUBLIC_BASE_URL` / `SYNTHETIC_OIDC_*`（または ingest SA 流用）を設定すること。  
+イベント catalog ingest 用 Scheduler とは **別ジョブ**。
 
 ## Cloud Agent ではやらないこと
 

@@ -1,3 +1,5 @@
+import { runWithBreaker } from "@/server/ops/breaker";
+
 /** Max wait for 429 Retry-After before skipping retry (ms). */
 export const ORCA_RETRY_AFTER_MAX_MS = 8_000;
 
@@ -56,31 +58,46 @@ export type OrcaFetchWithRetryResult = {
 /**
  * One automatic retry for transient OrcaRouter failures.
  * Honors the caller AbortSignal (typically withTimeout) for the whole operation including backoff.
+ * Phase 2b: process-local circuit breaker — OPEN fails fast with CIRCUIT_OPEN (no silent MOCK).
  */
 export async function fetchOrcaWithRetry(
   url: RequestInfo | URL,
   init: RequestInit,
 ): Promise<OrcaFetchWithRetryResult> {
-  const signal = init.signal ?? undefined;
-  let retries = 0;
-  let response = await fetch(url, init);
-  let lastStatus: number | null = response.status;
+  return runWithBreaker(
+    "orcarouter",
+    async () => {
+      const signal = init.signal ?? undefined;
+      let retries = 0;
+      let response = await fetch(url, init);
+      let lastStatus: number | null = response.status;
 
-  if (
-    !response.ok &&
-    retries < 1 &&
-    response.status !== 400 &&
-    response.status !== 401 &&
-    response.status !== 403
-  ) {
-    const delay = retryDelayMsForStatus(response.status, response.headers.get("Retry-After"));
-    if (delay != null) {
-      await sleepMs(delay, signal);
-      retries = 1;
-      response = await fetch(url, init);
-      lastStatus = response.status;
-    }
-  }
+      if (
+        !response.ok &&
+        retries < 1 &&
+        response.status !== 400 &&
+        response.status !== 401 &&
+        response.status !== 403
+      ) {
+        const delay = retryDelayMsForStatus(response.status, response.headers.get("Retry-After"));
+        if (delay != null) {
+          await sleepMs(delay, signal);
+          retries = 1;
+          response = await fetch(url, init);
+          lastStatus = response.status;
+        }
+      }
 
-  return { response, retries, lastStatus };
+      return { response, retries, lastStatus };
+    },
+    {
+      classify: (result) => {
+        // Auth / client errors are not provider outages.
+        const status = result.response.status;
+        if (result.response.ok) return "success";
+        if (status === 400 || status === 401 || status === 403) return "ignore";
+        return "failure";
+      },
+    },
+  );
 }
